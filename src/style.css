@@ -1,0 +1,63 @@
+:root {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #111;
+  background: #fff;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --line: #d9d9d9;
+  --muted: #606060;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+a { color: inherit; }
+button, input { font: inherit; }
+.site-header { height: 64px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid var(--line); }
+.wordmark { color: inherit; font-size: 13px; font-weight: 800; letter-spacing: .16em; text-decoration: none; }
+main { width: min(100% - 48px, 960px); margin: 48px 24px 80px; }
+.product { display: grid; gap: 24px; }
+.bird-figure { margin: 0; }
+.bird-image { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #f3f3f3; }
+figcaption { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+figcaption a { text-underline-offset: 2px; }
+.product-details h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: -.04em; }
+.price { margin: 12px 0; font-size: 18px; font-weight: 700; }
+.description { margin: 0 0 20px; color: #444; line-height: 1.5; }
+.cart { margin: 0 0 20px; padding: 16px; border: 1px solid var(--line); }
+.cart h2 { margin: 0 0 14px; font-size: 16px; }
+.cart-line { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
+.quantity-control { display: inline-flex; align-items: center; gap: 14px; margin-top: 14px; }
+.quantity-button { width: 36px; height: 36px; border: 1px solid #111; border-radius: 0; background: #fff; color: #111; font-size: 20px; line-height: 1; cursor: pointer; }
+.quantity-button:hover:not(:disabled) { background: #f1f1f1; }
+.quantity-button:disabled { opacity: .45; cursor: not-allowed; }
+.cart-total { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 700; }
+.buy-button { width: 100%; border: 1px solid #111; border-radius: 0; padding: 15px 18px; background: #111; color: #fff; font-weight: 700; cursor: pointer; }
+.buy-button:hover { background: #333; }
+.buy-button:disabled { opacity: .55; cursor: wait; }
+.fine-print { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.checkout { margin-top: 36px; padding-top: 26px; border-top: 1px solid var(--line); }
+.checkout[hidden] { display: none; }
+.checkout h2 { margin: 0 0 8px; font-size: 24px; }
+.checkout-total { margin: 0 0 24px; color: #333; font-size: 14px; }
+.checkout-actions { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.checkout-actions .fine-print { margin-top: 10px; }
+.text-button { border: 0; padding: 8px 0; background: none; color: #111; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.confirmation { max-width: 560px; }
+.confirmation h1 { margin: 0 0 12px; font-size: 32px; line-height: 1.1; letter-spacing: -.04em; }
+.confirmation-lede { margin: 0 0 28px; color: #444; line-height: 1.5; }
+.confirmation-loading { color: var(--muted); }
+.order-summary { display: grid; grid-template-columns: max-content 1fr; gap: 12px 24px; margin: 0 0 20px; padding: 20px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 14px; }
+.order-summary dt { color: var(--muted); }
+.order-summary dd { margin: 0; font-weight: 700; }
+.ship-to span { display: block; font-weight: 400; line-height: 1.5; }
+.ship-to span:first-child { font-weight: 700; }
+.confirmation .fine-print { margin: 0 0 28px; font-size: 14px; }
+.text-link { display: inline-block; font-weight: 700; text-underline-offset: 3px; }
+#payment-form label { display: block; margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+#payment-form input { display: block; width: 100%; padding: 13px; border: 1px solid #999; margin-bottom: 22px; }
+#payment-element { margin: 22px 0; }
+#payment-message { min-height: 24px; margin-bottom: 8px; color: #a11; font-size: 14px; }
+@media (max-width: 520px) {
+  main { width: min(100% - 32px, 960px); margin: 24px 16px 80px; }
+  .product-details h1 { font-size: 28px; }
+}

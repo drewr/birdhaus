@@ -1,0 +1,13 @@
+package:
+  name: birdhaus-store
+  dependencies:
+    - aff
+    - effect
+    - halogen
+    - halogen-vdom
+    - maybe
+    - prelude
+workspace:
+  packageSet:
+    registry: 63.3.0
+  extraPackages: {}

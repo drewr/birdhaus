@@ -1,0 +1,20 @@
+node_modules/
+.cache/
+.spago/
+output/
+dist/
+
+# Secrets: only the placeholder example is tracked.
+.env
+.env.*
+!.env.example
+
+# Written by `datumctl compute deploy`; run.hs is the source of truth.
+workload.yaml
+
+# Local Compute image outputs from `datumctl compute build --output`.
+*.tar
+compute-image/
+
+*.log
+.DS_Store

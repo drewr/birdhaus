@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.git
+.cache
+.spago
+node_modules
+output
+src
+scripts
+dist/**/*.map
