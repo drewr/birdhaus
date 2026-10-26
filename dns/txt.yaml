@@ -1,0 +1,30 @@
+apiVersion: dns.networking.miloapis.com/v1alpha1
+kind: DNSRecordSet
+metadata:
+  name: birdhaus-store-txt
+  namespace: default
+spec:
+  dnsZoneRef:
+    name: birdhaus-store-1kamnr
+  recordType: TXT
+  records:
+  # Stripe: proves we own the domain
+  - name: '@'
+    ttl: 300
+    txt:
+      content: '"stripe-verification=c7e282b5aae31a03c66d87a947eb89e361021b395501e0f416dd7e1f5684260b"'
+  # Mailgun SPF
+  - name: '@'
+    ttl: 300
+    txt:
+      content: '"v=spf1 include:mailgun.org ~all"'
+  # DMARC: monitor only; reports also go to info@
+  - name: _dmarc
+    ttl: 300
+    txt:
+      content: '"v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:32a1088@dmarc.mailgun.org,mailto:7a82e45f@inbox.ondmarc.com,mailto:info@birdhaus.store; ruf=mailto:32a1088@dmarc.mailgun.org,mailto:7a82e45f@inbox.ondmarc.com;"'
+  # Mailgun DKIM
+  - name: smtp._domainkey
+    ttl: 300
+    txt:
+      content: '"k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDL/LkJSJbjqT1uJXKV+DHbFyAdmf0oZPyE7+2LALrQEqt1YoqMdVLDoYmS2Jiy93qjmm29dseOAplYrJ1Vv20ajxX9WV9pWiKGryw3X0pgOBZU8rk27FMavCk0xQeIGPd8EsdGZ9/9le0BzGfwczrfgGhE0YPQt+VXXGJqOWgMUQIDAQAB"'

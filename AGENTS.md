@@ -24,6 +24,8 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 
 - Brand images in `public/` are generated from `brand/` by `scripts/brand-assets.sh`; edit the script or sources, not the outputs.
 
+- DNS records we write by hand live in `dns/` and are the source of truth; apply them with `datumctl apply -f dns/ --project <project>`.
+
 ## Secrets and safety
 
 - `.env` holds Stripe **test** keys. `.env.production` holds **live** keys. Do not read, copy, or create cloud secrets from live keys unless the user explicitly says so.

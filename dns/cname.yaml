@@ -1,0 +1,38 @@
+apiVersion: dns.networking.miloapis.com/v1alpha1
+kind: DNSRecordSet
+metadata:
+  name: birdhaus-store-cname
+  namespace: default
+spec:
+  dnsZoneRef:
+    name: birdhaus-store-1kamnr
+  recordType: CNAME
+  records:
+  - name: hex6svw3fbdaah3hgkrg7fuyxnwcpj5b._domainkey
+    ttl: 300
+    cname:
+      content: hex6svw3fbdaah3hgkrg7fuyxnwcpj5b.dkim.custom-email-domain.stripe.com.
+  - name: iy2ppgmwtr7yerrytfz3urifps6wclvl._domainkey
+    ttl: 300
+    cname:
+      content: iy2ppgmwtr7yerrytfz3urifps6wclvl.dkim.custom-email-domain.stripe.com.
+  - name: qb73cdjogzj6s4a2dqx3dgvgh7bynluq._domainkey
+    ttl: 300
+    cname:
+      content: qb73cdjogzj6s4a2dqx3dgvgh7bynluq.dkim.custom-email-domain.stripe.com.
+  - name: ve367jye6fmiwwbjf5sl4p4p7p7reoyz._domainkey
+    ttl: 300
+    cname:
+      content: ve367jye6fmiwwbjf5sl4p4p7p7reoyz.dkim.custom-email-domain.stripe.com.
+  - name: juce72qxnwrsgd6ir7qocw4pzf6qiphe._domainkey
+    ttl: 300
+    cname:
+      content: juce72qxnwrsgd6ir7qocw4pzf6qiphe.dkim.custom-email-domain.stripe.com.
+  - name: zhbd3ug43r4bolm4tnjihsur6gbmkhyc._domainkey
+    ttl: 300
+    cname:
+      content: zhbd3ug43r4bolm4tnjihsur6gbmkhyc.dkim.custom-email-domain.stripe.com.
+  - name: bounce
+    ttl: 300
+    cname:
+      content: custom-email-domain.stripe.com.
