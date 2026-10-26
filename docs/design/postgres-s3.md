@@ -1,6 +1,6 @@
 # Design: S3-backed PostgreSQL on Datum Compute
 
-Status: proposed. Nothing described here is built yet.
+Status: proposed; the platform spike (below) passed. Nothing else is built yet.
 
 ## Problem
 
@@ -21,7 +21,7 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 - `general-purpose` offers no durable disks and no snapshots: storage lives and dies with the instance. S3 is the only durability.
 - Instances sit on the project's private IPv6 network. There is no service discovery, so consumers connect to an IPv6 address. A network interface with `reclaimPolicy: Retain` keeps its address when the instance is replaced.
 - Instances have no cloud IAM role, so S3 access needs a static access key stored in a Datum secret.
-- Interfaces are IPv6-only unless dual-stack is requested, so S3 must be reached through its dual-stack endpoint. This is unproven and is the first thing to test.
+- Interfaces are IPv6-only, but the instance's DNS64/NAT64 makes IPv4-only hosts such as S3 reachable (see the spike results).
 
 ## Architecture
 
@@ -48,7 +48,7 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 
 - `runtime.class: general-purpose`, instance type `datumcloud-d1-standard-2`, in the same location as the consumers and the bucket.
 - `reclaimPolicy: Retain` on `eth0`, so consumers keep a stable `PGHOST`.
-- The extra Linux capabilities a stock Postgres container needs (CHOWN, FOWNER, DAC_OVERRIDE, SETUID, SETGID, KILL, and similar), trimmed to the minimum after testing.
+- `drop: [ALL]` plus `add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]`, which the spike showed is enough for the stock Postgres image.
 - Configuration through two secrets: AWS credentials, bucket and prefix (as environment), and role passwords (mounted as a volume).
 - Optionally, an interface `networkPolicy` that admits only the consumers' addresses.
 
@@ -57,7 +57,7 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 - One bucket per environment, named `birdhaus-pg-<account-id>-<region>`: public access blocked, SSE-S3 encryption, versioning on, a lifecycle rule that expires noncurrent versions and incomplete multipart uploads after 14 days.
 - One prefix per cluster (for example `birdhaus-db/`), so one bucket can serve several deployments.
 - A dedicated IAM user whose policy allows only `s3:ListBucket` (limited to the prefix) and Get, Put and Delete on objects under it. Its access key lives in a Datum secret and never in git.
-- WAL-G uses the S3 dual-stack endpoint (`https://s3.dualstack.<region>.amazonaws.com`), with path-style addressing if needed.
+- WAL-G can use the default regional S3 endpoint; NAT64 handles the IPv4-only address. The dual-stack endpoint (`s3.dualstack.<region>.amazonaws.com`) also works and avoids NAT64, so prefer it.
 
 ### Consumers
 
@@ -73,9 +73,20 @@ One cluster, one database and role per consumer (for example `umami` and `birdha
 - `postgres/aws/bootstrap.sh`: an idempotent script that creates the bucket, lifecycle rules, IAM user and policy, and the Datum secrets, without writing keys into the repository.
 - `postgres/README.md`: operations, including connecting with `datumctl compute exec`, the restore drill, key rotation and teardown.
 
+## Spike results (2026-10-26)
+
+A throwaway `general-purpose` workload in us-east-1 (`datumcloud-d1-standard-2`), since destroyed, showed:
+
+- **S3 is reachable over IPv6.** The dual-stack endpoint answers on native IPv6 (about 20 ms for a request), and the default endpoint answers through NAT64 (`64:ff9b::/96`, about 15 ms). A request to an existing bucket returned 403, which proves S3 answered. Instances use Google DNS64 resolvers. Real PUT and GET throughput was not measured, since the spike had no credentials.
+- **Stock Postgres 17 runs with five capabilities** (`CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID`), listening on IPv4 and IPv6. A client reached it over the instance's private IPv6 address and was asked for a password.
+- **A restart replaces the instance and loses local data.** After `datumctl compute restart`, the new instance's Postgres had a fresh start time and the table was gone. This is the failure the S3 design recovers from. The replacement was available in about 7 seconds, so most restore time will be fetching and replaying from S3.
+- **The address survived replacement** even with `reclaimPolicy: Delete`, because the instance slot persisted. Keep `Retain` anyway, since it also covers destroy and recreate.
+- **Disk:** the root filesystem reports 1.7 TB, but it is a host-level overlay (59 GB already used), so the figure says nothing about the instance's quota. Find the real limit before relying on size. The instance shows 3.9 GB of memory, more than the 2 GiB instance type name suggests.
+- **Operating note:** `datumctl compute exec <instance> -- psql -U …` failed with "no project set". Wrapping the command as `-- sh -c "psql …"` worked.
+
 ## Build order
 
-1. **Spike (go/no-go):** deploy a throwaway `general-purpose` workload. Confirm it can reach the S3 dual-stack endpoint over IPv6, that the Postgres image starts with the trimmed capabilities, and how much local disk it has. If S3 is unreachable over IPv6, stop and rethink (for example a dual-stack interface) before building more.
+1. **Spike: done** (see above). Still open: the instance's real disk limit and S3 throughput with credentials.
 2. Create the bucket, IAM user and policy, and the Datum secrets.
 3. Build the image and entrypoint. Test locally for init, restore and the SIGTERM path.
 4. Write `deploy.hs` and deploy.
@@ -93,8 +104,7 @@ One cluster, one database and role per consumer (for example `umami` and `birdha
 
 ## Risks
 
-- **S3 over IPv6 is unproven.** The spike comes first for this reason.
-- **Local disk size** caps the database. The spike reports it; beyond that, use a larger instance type or keep cold data elsewhere.
+- **Local disk size** caps the database and the real limit is still unknown (the spike could not tell). Find it before storing anything large; beyond it, use a larger instance type or keep cold data elsewhere.
 - **Replacement downtime:** a restore takes minutes, and consumers see connection errors meanwhile. Clients need retries, and the unikernel app must not crash-loop on a missing database.
 - **Not highly available**, by choice.
 - **A static key in a secret** is the only credential path available. Limit its policy to one prefix and document rotation.
