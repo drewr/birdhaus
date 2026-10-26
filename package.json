@@ -6,7 +6,7 @@
     "dev": "npm run build:purs && concurrently \"npm:dev:web\" \"npm:dev:server\"",
     "dev:web": "vite",
     "dev:server": "node server/index.js",
-    "build:purs": "node scripts/spago-local-cache.mjs build",
+    "build:purs": "./scripts/spago-local-cache.hs build",
     "build": "npm run build:purs && vite build",
     "start": "node server/index.js"
   },

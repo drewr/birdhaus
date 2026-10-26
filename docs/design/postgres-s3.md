@@ -63,11 +63,11 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
   - `ListBucket` and `ListBucketMultipartUploads` on the bucket, only when `s3:prefix` matches `${aws:PrincipalTag/deployment}/*`
   - `GetObject`, `PutObject`, `DeleteObject`, `AbortMultipartUpload` and `ListMultipartUploadParts` on `<bucket>/${aws:PrincipalTag/deployment}/*`
   - an explicit `Deny` on all of S3 when the tag is missing
-- **Credentials:** instances have no cloud IAM role, so each deployment gets one static access key, stored in the Datum secret `<deployment>-aws` along with `AWS_REGION` and `WALG_S3_PREFIX`. The secret is created with `datumctl create`, not `apply`, because `apply` copies the secret's contents into a plaintext `last-applied-configuration` annotation. Keys rotate with `bootstrap.sh rotate`, which creates the new key before deleting the old one.
+- **Credentials:** instances have no cloud IAM role, so each deployment gets one static access key, stored in the Datum secret `<deployment>-aws` along with `AWS_REGION` and `WALG_S3_PREFIX`. The secret is created with `datumctl create`, not `apply`, because `apply` copies the secret's contents into a plaintext `last-applied-configuration` annotation. Keys rotate with `bootstrap.hs rotate`, which creates the new key before deleting the old one.
 - **What an operator can still do:** whoever has `iam:TagUser` or `iam:AttachUserPolicy` in the AWS account (the admin) can break isolation by retagging. That is acceptable because that person already controls the bucket. For a stronger boundary, give each deployment its own bucket, or enable WAL-G client-side encryption (`WALG_LIBSODIUM_KEY`) with a key held only in the deployment's secret.
 - **WAL-G endpoint:** WAL-G can use the default regional S3 endpoint, with NAT64 handling the IPv4-only address. The dual-stack endpoint (`s3.dualstack.<region>.amazonaws.com`) also works and avoids NAT64, so prefer it.
 
-`postgres/aws/bootstrap.sh` implements this (`bucket`, `deployment`, `rotate`, `destroy`). `destroy` removes the user and key but keeps the data. `test-isolation` creates throwaway deployments and proves the boundary with real credentials, then deletes them. It checks that a deployment can use its own prefix and is denied on:
+`postgres/aws/bootstrap.hs` implements this (`bucket`, `deployment`, `rotate`, `destroy`). `destroy` removes the user and key but keeps the data. `test-isolation` creates throwaway deployments and proves the boundary with real credentials, then deletes them. It checks that a deployment can use its own prefix and is denied on:
 
 - another deployment's objects (get, put, delete and list)
 - a whole-bucket list
@@ -85,9 +85,9 @@ One cluster, one database and role per consumer (for example `umami` and `birdha
 
 ## Planned files
 
-- `postgres/Dockerfile`, `entrypoint.sh`, `postgresql.conf.tmpl`, `pg_hba.conf`
+- `postgres/Dockerfile`, `entrypoint.sh` (the only shell script, since it runs inside the container image), `postgresql.conf.tmpl`, `pg_hba.conf`
 - `postgres/deploy.hs`: a turtle script in the style of `run.hs` that builds, pushes and deploys the workload. All names, the bucket, prefix, databases and instance size are parameters.
-- `postgres/aws/bootstrap.sh` (written): bucket and shared policy, per-deployment IAM user and Datum secret, rotation, and the isolation test. It never writes keys to disk.
+- `postgres/aws/bootstrap.hs` (written): bucket and shared policy, per-deployment IAM user and Datum secret, rotation, and the isolation test. It never writes keys to disk.
 - `postgres/README.md`: operations, including connecting with `datumctl compute exec`, the restore drill, key rotation and teardown.
 
 ## Spike results (2026-10-26)
@@ -104,7 +104,7 @@ A throwaway `general-purpose` workload in us-east-1 (`datumcloud-d1-standard-2`)
 ## Build order
 
 1. **Spike: done** (see above). Still open: the instance's real disk limit and S3 throughput with credentials.
-2. **Bucket and shared policy: done**, and `test-isolation` passes. Per-deployment users and secrets are created on demand with `bootstrap.sh deployment`.
+2. **Bucket and shared policy: done**, and `test-isolation` passes. Per-deployment users and secrets are created on demand with `bootstrap.hs deployment`.
 3. Build the image and entrypoint. Test locally for init, restore and the SIGTERM path.
 4. Write `deploy.hs` and deploy.
 5. Run the drills below.

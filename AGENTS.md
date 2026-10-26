@@ -15,6 +15,8 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 
 ## Conventions
 
+- Every script is a self-contained Haskell (turtle) script with a `nix-shell` shebang, like `run.hs`: executable, with its tools named in the shebang and run from the repository root. Do not add bash or node scripts. The one exception is a script that runs inside a container image (for example the Postgres entrypoint), where Nix is not available.
+
 - The server sets prices. Never accept an amount from the browser; the price lives in `server/index.js` and is mirrored for display in `formatTotal` in `Main.purs`. Change both together.
 - `/api/order/:id` must keep requiring the matching `client_secret` and `Cache-Control: no-store`; it returns buyer PII.
 - The secret key is server-side only. Never expose it through a `VITE_` variable or the client bundle.
@@ -22,7 +24,7 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 - Add PureScript dependencies in `spago.yaml`; `spago.lock` is generated and committed.
 - Match the existing style: terse comments that explain why, no dead code.
 
-- Brand images in `public/` are generated from `brand/` by `scripts/brand-assets.sh`; edit the script or sources, not the outputs.
+- Brand images in `public/` are generated from `brand/` by `scripts/brand-assets.hs`; edit the script or sources, not the outputs.
 
 - DNS records we write by hand live in `dns/` and are the source of truth; apply them with `datumctl apply -f dns/ --project <project>`.
 
