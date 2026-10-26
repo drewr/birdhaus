@@ -26,6 +26,8 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 
 - DNS records we write by hand live in `dns/` and are the source of truth; apply them with `datumctl apply -f dns/ --project <project>`.
 
+- Design docs live in `docs/design/`. The Postgres-on-S3 design is proposed, not built.
+
 ## Secrets and safety
 
 - `.env` holds Stripe **test** keys. `.env.production` holds **live** keys. Do not read, copy, or create cloud secrets from live keys unless the user explicitly says so.
