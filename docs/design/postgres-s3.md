@@ -1,6 +1,6 @@
 # Design: S3-backed PostgreSQL on Datum Compute
 
-Status: proposed; the platform spike (below) passed. Nothing else is built yet.
+Status: the platform spike, the AWS bootstrap, and the image and entrypoint are built and tested locally against real S3. `deploy.hs` and the Datum deployment are not built yet.
 
 ## Problem
 
@@ -40,7 +40,7 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 
 1. If `PGDATA` is empty and S3 holds a backup: `wal-g backup-fetch LATEST`, create `recovery.signal`, and set `restore_command='wal-g wal-fetch %f %p'` and `recovery_target_timeline=latest`.
 2. If `PGDATA` is empty and S3 has no backup: `initdb`, then create each database and role listed in the configuration.
-3. Write configuration overrides: `archive_mode=on`, `archive_command='wal-g wal-push %p'`, `archive_timeout=60`, `wal_level=replica`, `listen_addresses='*'`, `password_encryption=scram-sha-256`. `pg_hba.conf` accepts only scram-sha-256 on the private network.
+3. Write configuration overrides: `archive_mode=on`, `archive_command='wal-g wal-push %p'`, `archive_timeout=60`, `wal_level=replica`, `listen_addresses='*'`, `password_encryption=scram-sha-256`. `pg_hba.conf` accepts only scram-sha-256 on the private network, and the `postgres` superuser is reachable only over the local socket (it has no password). Each boot reconciles databases, roles and passwords, so adding a database or rotating a password is a secret change plus a restart.
 4. Run Postgres under tini. A background loop runs `wal-g backup-push` daily (and once shortly after first start) and `wal-g delete retain FULL 7 --confirm`.
 5. On SIGTERM: `pg_switch_wal()`, wait for the archive to drain, then a fast shutdown.
 
@@ -85,7 +85,7 @@ One cluster, one database and role per consumer (for example `umami` and `birdha
 
 ## Planned files
 
-- `postgres/Dockerfile`, `entrypoint.sh` (the only shell script, since it runs inside the container image), `postgresql.conf.tmpl`, `pg_hba.conf`
+- `postgres/Dockerfile`, `entrypoint.sh` (the only shell script, since it runs inside the container image), `birdhaus.conf` (settings included from `postgresql.conf`), `pg_hba.conf` (all written)
 - `postgres/deploy.hs`: a turtle script in the style of `run.hs` that builds, pushes and deploys the workload. All names, the bucket, prefix, databases and instance size are parameters.
 - `postgres/aws/bootstrap.hs` (written): bucket and shared policy, per-deployment IAM user and Datum secret, rotation, and the isolation test. It never writes keys to disk.
 - `postgres/README.md`: operations, including connecting with `datumctl compute exec`, the restore drill, key rotation and teardown.
@@ -105,10 +105,21 @@ A throwaway `general-purpose` workload in us-east-1 (`datumcloud-d1-standard-2`)
 
 1. **Spike: done** (see above). Still open: the instance's real disk limit and S3 throughput with credentials.
 2. **Bucket and shared policy: done**, and `test-isolation` passes. Per-deployment users and secrets are created on demand with `bootstrap.hs deployment`.
-3. Build the image and entrypoint. Test locally for init, restore and the SIGTERM path.
+3. **Image and entrypoint: done**, and tested (see below).
 4. Write `deploy.hs` and deploy.
 5. Run the drills below.
 6. Connect a consumer, then build the Umami and order-record work.
+
+## Image test results (2026-10-26)
+
+Run under colima with temporary admin credentials and a throwaway prefix in the real bucket (since deleted):
+
+- **Fresh boot:** no backups, so `initdb`, then a base backup about 15 s after start, and the `birdhaus` and `umami` databases and roles created.
+- **Restore after a clean stop:** SIGTERM (`pg_switch_wal()` then a fast shutdown), then a new container with an empty disk. It fetched the base backup in 2 s, replayed WAL, and all 1000 rows were back, including rows written after the base backup.
+- **Restore after a hard kill:** 100 rows written and archived by `archive_timeout`, then 100 more, then `kill -KILL`. The restore had the first 100 and lost the second 100, which is the expected loss window. It came up on timeline 2 and took a fresh base backup.
+- **Isolation:** the `umami` role is refused (`no CONNECT privilege`) on the `birdhaus` database, and the `postgres` superuser is rejected over TCP.
+- **Safety:** if `wal-g backup-list` fails, the entrypoint exits instead of running `initdb`, so a transient S3 error cannot fork the cluster's history.
+- The WAL-G v3.0.9 download is checksum-verified for amd64 and arm64. Only arm64 was run (colima); amd64 is what Datum will run and has not been exercised.
 
 ## Verification
 
