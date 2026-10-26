@@ -15,6 +15,10 @@ The server requires `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`. `VITE_STRI
 
 Spago's macOS cache is redirected to `.cache/spago-home/Library/Caches/spago-nodejs`, which is ignored by Git. Halogen and the rest of the PureScript dependencies are resolved through Spago.
 
+## Brand assets
+
+The pencil sketches in `brand/` are the source. `scripts/brand-assets.sh` (needs Nix) levels the scanned paper to pure white and regenerates everything in `public/`: the hero `logo.png`, `mark-512.png`, `apple-touch-icon.png`, `favicon.ico` and PNG favicons, and the `og-image.png` link preview. Vite copies `public/` into `dist/`. To brand Stripe's receipt emails, upload `public/mark-512.png` as the icon and `public/logo.png` as the logo in Dashboard → Settings → Branding.
+
 ## Order confirmation
 
 After payment Stripe redirects to `/?payment=complete&payment_intent=…&payment_intent_client_secret=…`. The page calls `GET /api/order/:id?client_secret=…`, which looks the PaymentIntent up in Stripe and returns only when the client secret matches, so order details are visible only to the buyer. The page shows the order number, date, items, total, shipping address and receipt email, and has separate states for processing, declined and unavailable orders. Stripe sends receipt emails only in live mode, and only if receipts are enabled in the Dashboard.

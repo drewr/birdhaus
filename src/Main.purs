@@ -60,7 +60,11 @@ render :: State -> H.ComponentHTML Action () Aff
 render state =
   HH.div_
     [ HH.header [ HP.classes [ HH.ClassName "site-header" ] ]
-        [ HH.a [ HP.classes [ HH.ClassName "wordmark" ], HP.href "/" ] [ HH.text "BIRDHAUS" ] ]
+        [ HH.a [ HP.classes [ HH.ClassName "wordmark" ], HP.href "/" ]
+            [ HH.img [ HP.classes [ HH.ClassName "wordmark-mark" ], HP.src "/favicon-48.png", HP.alt "" ]
+            , HH.text "BIRDHAUS"
+            ]
+        ]
     , HH.main_
         [ if state.paymentComplete then paymentCompleteView state.order else storefront state ]
     ]
@@ -69,19 +73,10 @@ storefront :: State -> H.ComponentHTML Action () Aff
 storefront state =
   HH.div_
     [ HH.section [ HP.classes [ HH.ClassName "product" ], HP.attr (HH.AttrName "aria-labelledby") "product-title" ]
-        [ HH.figure [ HP.classes [ HH.ClassName "bird-figure" ] ]
-            [ HH.img
-                [ HP.classes [ HH.ClassName "bird-image" ]
-                , HP.src "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Bluebird_House_20-10-08_013.jpg/1920px-Bluebird_House_20-10-08_013.jpg"
-                , HP.alt "Weathered wooden bluebird house on a post at the edge of an autumn meadow"
-                ]
-            , HH.figcaption_
-                [ HH.a [ HP.href "https://commons.wikimedia.org/wiki/File:Bluebird_House_20-10-08_013.jpg" ]
-                    [ HH.text "Photo by Chris Light" ]
-                , HH.text " · "
-                , HH.a [ HP.href "https://creativecommons.org/licenses/by-sa/4.0/" ] [ HH.text "CC BY-SA 4.0" ]
-                , HH.text " · Wikimedia Commons"
-                ]
+        [ HH.img
+            [ HP.classes [ HH.ClassName "hero-image" ]
+            , HP.src "/logo.png"
+            , HP.alt "Pencil sketch of a bluebird house above the word birdhaus"
             ]
         , HH.div [ HP.classes [ HH.ClassName "product-details" ] ]
             [ HH.h1 [ HP.id "product-title" ] [ HH.text "Bluebird House" ]

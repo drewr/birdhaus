@@ -22,6 +22,8 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 - Add PureScript dependencies in `spago.yaml`; `spago.lock` is generated and committed.
 - Match the existing style: terse comments that explain why, no dead code.
 
+- Brand images in `public/` are generated from `brand/` by `scripts/brand-assets.sh`; edit the script or sources, not the outputs.
+
 ## Secrets and safety
 
 - `.env` holds Stripe **test** keys. `.env.production` holds **live** keys. Do not read, copy, or create cloud secrets from live keys unless the user explicitly says so.
