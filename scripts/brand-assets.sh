@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 clean() { magick "$1" -colorspace Gray -level 35%,90% "${@:2}"; }
 
-# Wide logo: trimmed, with a little air, for the page hero and link previews.
+# Wide logo: trimmed, with a little air, for Stripe branding and link previews.
 clean brand/logo-source.png \
   -fill white -draw "rectangle 1320,760 1360,800" \
   -fuzz 12% -trim +repage -bordercolor white -border 40 -strip public/logo.png

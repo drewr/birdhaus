@@ -73,12 +73,7 @@ storefront :: State -> H.ComponentHTML Action () Aff
 storefront state =
   HH.div_
     [ HH.section [ HP.classes [ HH.ClassName "product" ], HP.attr (HH.AttrName "aria-labelledby") "product-title" ]
-        [ HH.img
-            [ HP.classes [ HH.ClassName "hero-image" ]
-            , HP.src "/logo.png"
-            , HP.alt "Pencil sketch of a bluebird house above the word birdhaus"
-            ]
-        , HH.div [ HP.classes [ HH.ClassName "product-details" ] ]
+        [ HH.div [ HP.classes [ HH.ClassName "product-details" ] ]
             [ HH.h1 [ HP.id "product-title" ] [ HH.text "Bluebird House" ]
             , HH.p [ HP.classes [ HH.ClassName "price" ] ] [ HH.text "$40.00 USD each" ]
             , HH.p [ HP.classes [ HH.ClassName "description" ] ] [ HH.text "A simple home for backyard bluebirds." ]
