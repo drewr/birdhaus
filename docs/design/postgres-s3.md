@@ -54,10 +54,27 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 
 ### S3 and IAM
 
-- One bucket per environment, named `birdhaus-pg-<account-id>-<region>`: public access blocked, SSE-S3 encryption, versioning on, a lifecycle rule that expires noncurrent versions and incomplete multipart uploads after 14 days.
-- One prefix per cluster (for example `birdhaus-db/`), so one bucket can serve several deployments.
-- A dedicated IAM user whose policy allows only `s3:ListBucket` (limited to the prefix) and Get, Put and Delete on objects under it. Its access key lives in a Datum secret and never in git.
-- WAL-G can use the default regional S3 endpoint; NAT64 handles the IPv4-only address. The dual-stack endpoint (`s3.dualstack.<region>.amazonaws.com`) also works and avoids NAT64, so prefer it.
+**Isolation model: one shared bucket, one prefix per deployment, one IAM user per deployment, one shared policy.** A deployment is one Postgres cluster (for example `birdhaus-db`). Deployments cannot see each other's backups or WAL.
+
+- **Bucket** (`birdhaus-pg-<account-id>-<region>`): public access blocked, owner-enforced ownership (no ACLs), SSE-S3 default encryption, versioning on, HTTPS required by bucket policy, and a lifecycle rule that expires noncurrent versions after 14 days and aborts incomplete multipart uploads after 7. Versioning means a mistaken `wal-g delete` is recoverable for 14 days.
+- **Prefix**: `s3://<bucket>/<deployment>/`. Deployment names match `^[a-z0-9][a-z0-9-]{1,40}$`, and every grant ends in `/`, so `app` cannot reach `app-2/`.
+- **IAM user** `birdhaus-pg-<deployment>` under the path `/birdhaus-pg/`, tagged `deployment=<deployment>`. It has no IAM permissions, so it cannot change its own tag or policy.
+- **One shared managed policy** (`birdhaus-pg-deployment`) uses the user's tag as a policy variable, so adding a deployment never means writing or editing a policy:
+  - `ListBucket` and `ListBucketMultipartUploads` on the bucket, only when `s3:prefix` matches `${aws:PrincipalTag/deployment}/*`
+  - `GetObject`, `PutObject`, `DeleteObject`, `AbortMultipartUpload` and `ListMultipartUploadParts` on `<bucket>/${aws:PrincipalTag/deployment}/*`
+  - an explicit `Deny` on all of S3 when the tag is missing
+- **Credentials:** instances have no cloud IAM role, so each deployment gets one static access key, stored in the Datum secret `<deployment>-aws` along with `AWS_REGION` and `WALG_S3_PREFIX`. The secret is created with `datumctl create`, not `apply`, because `apply` copies the secret's contents into a plaintext `last-applied-configuration` annotation. Keys rotate with `bootstrap.sh rotate`, which creates the new key before deleting the old one.
+- **What an operator can still do:** whoever has `iam:TagUser` or `iam:AttachUserPolicy` in the AWS account (the admin) can break isolation by retagging. That is acceptable because that person already controls the bucket. For a stronger boundary, give each deployment its own bucket, or enable WAL-G client-side encryption (`WALG_LIBSODIUM_KEY`) with a key held only in the deployment's secret.
+- **WAL-G endpoint:** WAL-G can use the default regional S3 endpoint, with NAT64 handling the IPv4-only address. The dual-stack endpoint (`s3.dualstack.<region>.amazonaws.com`) also works and avoids NAT64, so prefer it.
+
+`postgres/aws/bootstrap.sh` implements this (`bucket`, `deployment`, `rotate`, `destroy`). `destroy` removes the user and key but keeps the data. `test-isolation` creates throwaway deployments and proves the boundary with real credentials, then deletes them. It checks that a deployment can use its own prefix and is denied on:
+
+- another deployment's objects (get, put, delete and list)
+- a whole-bucket list
+- a prefix-confusion list (`x` against `x-2`)
+- an untagged user
+- retagging itself, attaching an admin policy and changing the bucket policy
+- plain HTTP
 
 ### Consumers
 
@@ -70,7 +87,7 @@ One cluster, one database and role per consumer (for example `umami` and `birdha
 
 - `postgres/Dockerfile`, `entrypoint.sh`, `postgresql.conf.tmpl`, `pg_hba.conf`
 - `postgres/deploy.hs`: a turtle script in the style of `run.hs` that builds, pushes and deploys the workload. All names, the bucket, prefix, databases and instance size are parameters.
-- `postgres/aws/bootstrap.sh`: an idempotent script that creates the bucket, lifecycle rules, IAM user and policy, and the Datum secrets, without writing keys into the repository.
+- `postgres/aws/bootstrap.sh` (written): bucket and shared policy, per-deployment IAM user and Datum secret, rotation, and the isolation test. It never writes keys to disk.
 - `postgres/README.md`: operations, including connecting with `datumctl compute exec`, the restore drill, key rotation and teardown.
 
 ## Spike results (2026-10-26)
@@ -87,7 +104,7 @@ A throwaway `general-purpose` workload in us-east-1 (`datumcloud-d1-standard-2`)
 ## Build order
 
 1. **Spike: done** (see above). Still open: the instance's real disk limit and S3 throughput with credentials.
-2. Create the bucket, IAM user and policy, and the Datum secrets.
+2. **Bucket and shared policy: done**, and `test-isolation` passes. Per-deployment users and secrets are created on demand with `bootstrap.sh deployment`.
 3. Build the image and entrypoint. Test locally for init, restore and the SIGTERM path.
 4. Write `deploy.hs` and deploy.
 5. Run the drills below.
