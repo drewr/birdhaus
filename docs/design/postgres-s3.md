@@ -56,7 +56,7 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 
 **Isolation model: one shared bucket, one prefix per deployment, one IAM user per deployment, one shared policy.** A deployment is one Postgres cluster (for example `birdhaus-db`). Deployments cannot see each other's backups or WAL.
 
-- **Bucket** (`birdhaus-pg-<account-id>-<region>`): public access blocked, owner-enforced ownership (no ACLs), SSE-S3 default encryption, versioning on, HTTPS required by bucket policy, and a lifecycle rule that expires noncurrent versions after 14 days and aborts incomplete multipart uploads after 7. Versioning means a mistaken `wal-g delete` is recoverable for 14 days.
+- **Bucket** (`birdhaus-pg-<account-id>-<region code>` (for example `use1`)): public access blocked, owner-enforced ownership (no ACLs), SSE-S3 default encryption, versioning on, HTTPS required by bucket policy, and a lifecycle rule that expires noncurrent versions after 14 days and aborts incomplete multipart uploads after 7. Versioning means a mistaken `wal-g delete` is recoverable for 14 days.
 - **Prefix**: `s3://<bucket>/<deployment>/`. Deployment names match `^[a-z0-9][a-z0-9-]{1,40}$`, and every grant ends in `/`, so `app` cannot reach `app-2/`.
 - **IAM user** `birdhaus-pg-<deployment>` under the path `/birdhaus-pg/`, tagged `deployment=<deployment>`. It has no IAM permissions, so it cannot change its own tag or policy.
 - **One shared managed policy** (`birdhaus-pg-deployment`) uses the user's tag as a policy variable, so adding a deployment never means writing or editing a policy:
@@ -67,7 +67,7 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 - **What an operator can still do:** whoever has `iam:TagUser` or `iam:AttachUserPolicy` in the AWS account (the admin) can break isolation by retagging. That is acceptable because that person already controls the bucket. For a stronger boundary, give each deployment its own bucket, or enable WAL-G client-side encryption (`WALG_LIBSODIUM_KEY`) with a key held only in the deployment's secret.
 - **WAL-G endpoint:** WAL-G can use the default regional S3 endpoint, with NAT64 handling the IPv4-only address. The dual-stack endpoint (`s3.dualstack.<region>.amazonaws.com`) also works and avoids NAT64, so prefer it.
 
-`postgres/aws/bootstrap.hs` implements this (`bucket`, `deployment`, `rotate`, `destroy`). `destroy` removes the user and key but keeps the data. `test-isolation` creates throwaway deployments and proves the boundary with real credentials, then deletes them. It checks that a deployment can use its own prefix and is denied on:
+`postgres/aws/bootstrap.hs` implements this. The bucket is `--bucket`, else `$BUCKET`, else the derived name for the active AWS account and region. (`bucket`, `deployment`, `rotate`, `destroy`). `destroy` removes the user and key but keeps the data. `test-isolation` creates throwaway deployments and proves the boundary with real credentials, then deletes them. It checks that a deployment can use its own prefix and is denied on:
 
 - another deployment's objects (get, put, delete and list)
 - a whole-bucket list

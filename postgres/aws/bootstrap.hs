@@ -6,11 +6,14 @@
 -- Uses whatever AWS credentials the environment provides (AWS_PROFILE, SSO);
 -- datumctl must be on PATH for the commands that touch Datum secrets.
 --
---   ./bootstrap.hs --bucket B bucket
---   ./bootstrap.hs --bucket B deployment NAME DATUM_PROJECT
---   ./bootstrap.hs --bucket B rotate NAME DATUM_PROJECT
---   ./bootstrap.hs --bucket B destroy NAME
---   ./bootstrap.hs --bucket B test-isolation
+--   ./bootstrap.hs bucket
+--   ./bootstrap.hs deployment NAME DATUM_PROJECT
+--   ./bootstrap.hs rotate NAME DATUM_PROJECT
+--   ./bootstrap.hs destroy NAME
+--   ./bootstrap.hs test-isolation
+--
+-- The bucket is --bucket, else $BUCKET, else birdhaus-pg-<account id>-<region
+-- code> (for example birdhaus-pg-123456789012-use1) from the active account.
 --
 -- Isolation model: one shared bucket, one prefix per deployment, one IAM user
 -- per deployment tagged deployment=NAME. A single shared managed policy grants
@@ -60,10 +63,13 @@ main = do
   (mBucket, reg, cmd) <-
     options "Provision S3 storage and per-deployment IAM for Postgres backups" $
       (,,)
-        <$> optional (optText "bucket" 'b' "Bucket name (default: $BUCKET)")
+        <$> optional (optText "bucket" 'b' "Bucket name (default: $BUCKET, else birdhaus-pg-<account>-<region code>)")
         <*> (optText "region" 'r' "AWS region (default: us-east-1)" <|> pure "us-east-1")
         <*> cmdParser
-  b <- maybe (need "BUCKET" >>= maybe (die "Pass --bucket or set BUCKET") pure) pure mBucket
+  fromEnv <- need "BUCKET"
+  b <- case mBucket <|> fromEnv of
+    Just named -> pure named
+    Nothing -> defaultBucket reg
   let c = Ctx b reg
   case cmd of
     Bucket -> cmdBucket c
@@ -71,6 +77,24 @@ main = do
     Rotate n p -> cmdRotate c n p
     Destroy n -> cmdDestroy c n
     TestIsolation -> cmdTestIsolation c
+
+-- birdhaus-pg-<account id>-<short region>, e.g. birdhaus-pg-123456789012-use1.
+-- Bucket names are global, so the account id keeps the default unique per account.
+defaultBucket :: Text -> IO Text
+defaultBucket reg = do
+  acct <- awsText (Ctx "" reg) ["sts", "get-caller-identity", "--query", "Account", "--output", "text"]
+  pure ("birdhaus-pg-" <> acct <> "-" <> regionCode reg)
+
+-- us-east-1 -> use1, eu-central-1 -> euc1, ap-southeast-2 -> apse2. Regions that
+-- do not fit the pattern (such as us-gov-west-1) keep their full name.
+regionCode :: Text -> Text
+regionCode reg = case T.splitOn "-" reg of
+  [geo, dir, n] | Just d <- lookup dir directions -> geo <> d <> n
+  _ -> reg
+  where
+    directions =
+      [ ("north", "n"), ("south", "s"), ("east", "e"), ("west", "w"), ("central", "c")
+      , ("northeast", "ne"), ("northwest", "nw"), ("southeast", "se"), ("southwest", "sw") ]
 
 cmdParser :: Parser Cmd
 cmdParser =
