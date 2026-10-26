@@ -11,7 +11,8 @@ clean() { magick "$1" -colorspace Gray -level 35%,90% "${@:2}"; }
 clean brand/logo-source.png \
   -fill white -draw "rectangle 1320,760 1360,800" \
   -fuzz 12% -trim +repage -bordercolor white -border 40 -strip public/logo.png
-magick public/logo.png -resize 1200x -strip public/logo.png
+cp public/logo.png /tmp/logo-full.png
+magick /tmp/logo-full.png -resize 1200x -strip public/logo.png
 
 # Square mark: trimmed, centred on a white square.
 clean brand/mark-source.png -fuzz 12% -trim +repage \
@@ -26,7 +27,15 @@ for size in 16 32 48; do
     -level 0%,85% -strip public/favicon-$size.png
 done
 magick public/favicon-16.png public/favicon-32.png public/favicon-48.png public/favicon.ico
-rm /tmp/mark-full.png
+
+# Large exports (upscaled; the sketches are ~1200px native), each under 512 KB.
+# Not served; they are for print, signage and uploads that want more pixels.
+magick /tmp/logo-full.png -filter Lanczos -resize 2400x -colors 128 -depth 8 -strip PNG8:brand/logo-large.png
+magick /tmp/mark-full.png -filter Lanczos -resize 2048x2048 -colors 128 -depth 8 -strip PNG8:brand/mark-large.png
+for f in brand/logo-large.png brand/mark-large.png; do
+  [ "$(wc -c < "$f")" -lt 524288 ] || { echo "$f is over 512 KB" >&2; exit 1; }
+done
+rm /tmp/mark-full.png /tmp/logo-full.png
 
 # 1200x630 social preview.
 magick -size 1200x630 xc:white \( public/logo.png -resize x540 \) -gravity center -composite \
