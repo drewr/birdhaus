@@ -31,6 +31,7 @@ data Opts = Opts
   , project :: Text
   , location :: Text
   , workload :: Text
+  , network :: Text
   , imageName :: Text
   , stripeSecret :: Text
   , pullSecret :: Text
@@ -45,6 +46,7 @@ parser =
     <*> optText "project" 'p' "Datum Cloud project"
     <*> opt "location" 'l' "us-east-1" "Compute location"
     <*> opt "workload" 'w' "birdhaus-store" "Workload name"
+    <*> opt "network" 'N' "birdhaus" "Datum Network (VPC) to attach"
     <*> opt "image-name" 'i' "birdhaus-store" "GHCR package name"
     <*> opt "stripe-secret" 'k' "birdhaus-stripe" "Secret holding the Stripe keys"
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
@@ -171,7 +173,7 @@ workloadManifest o image =
     , "        ipFamilies:"
     , "        - IPv6"
     , "        network:"
-    , "          name: default"
+    , "          name: " <> network o
     , "        reclaimPolicy: Delete"
     , "      runtime:"
     , "        class: unikernel"

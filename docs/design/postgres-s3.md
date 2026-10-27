@@ -128,6 +128,13 @@ Run under colima with temporary admin credentials and a throwaway prefix in the 
 - **Restore drill:** 500 rows written, `pg_switch_wal()`, `datumctl compute restart`. The new instance fetched the base backup in 1 s, replayed WAL, and had all 500 rows about 8 s after the restart. The address (`fd20:0:1:1:0:4::`) did not change.
 - **Disk:** `df` still shows a 1.8 TB host overlay, so the instance's real quota is unknown.
 
+## Moving to the birdhaus VPC (2026-10-27)
+
+The `birdhaus` Network (`network/birdhaus.yaml`, `fd20:0:4a::/48`) now holds the store and the database. Moving the database was a test of the design: the workload was recreated on the new network, and the new instance restored from S3 in about 5 s with the same databases and roles. Its address changed (`fd20:0:4a::1:0:0`), so consumers need the new `PGHOST`.
+
+- **Platform gotcha:** changing a workload's network does not work in place for a workload with `reclaimPolicy: Retain`. The retained interface stays bound to the old network, and the instance fails with `NetworkMismatch` even after the interface and workload are deleted, because the instance name (`<workload>-default-<location>-0`) keeps pointing at the stale holder. Instances cannot be deleted by a project user. The workaround was a new workload name (`birdhaus-pg`), which gets a new interface name. The store has `reclaimPolicy: Delete` and moved in place with no problem.
+- The store (`fd20:0:4a::2:0:0`) and database share the network, but the store has no database client yet, so that path is untested. From inside the database instance, a scram login as `birdhaus` over its own VPC address works.
+
 ## Verification
 
 - **Archiving works:** the workload logs show archiving, `pg_stat_archiver.failed_count` is 0, and `wal-g backup-list` shows a base backup.

@@ -20,7 +20,7 @@ import qualified Data.Aeson.Key as K
 import Data.Aeson ((.=))
 import qualified Data.ByteString.Lazy as BL
 import Data.Foldable (for_)
-import Data.Maybe (isNothing)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Optional (Optional (Specific))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -35,6 +35,8 @@ data Opts = Opts
   , project :: Text
   , location :: Text
   , name :: Text
+  , network :: Text
+  , workloadName :: Maybe Text
   , databases :: [Text]
   , instanceType :: Text
   , pullSecret :: Text
@@ -48,6 +50,8 @@ parser =
     <*> optText "project" 'p' "Datum Cloud project"
     <*> opt "location" 'l' "us-east-1" "Compute location"
     <*> opt "name" 'n' "birdhaus-db" "Deployment name (workload, image and secret prefix)"
+    <*> opt "network" 'N' "birdhaus" "Datum Network (VPC) to attach"
+    <*> optional (optText "workload" 'w' "Workload name (default: the deployment name)")
     <*> (T.words <$> opt "databases" 'd' "birdhaus umami" "Space-separated databases to create")
     <*> opt "instance-type" 'i' "datumcloud-d1-standard-2" "Compute instance type"
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
@@ -144,6 +148,9 @@ timestamp = T.pack . formatTime defaultTimeLocale "%Y%m%d%H%M%S" <$> getCurrentT
 for' :: [a] -> (a -> IO b) -> IO [b]
 for' = flip mapM
 
+workload :: Opts -> Text
+workload o = fromMaybe (name o) (workloadName o)
+
 -- general-purpose (a VM running a normal container), because Postgres needs a
 -- writable disk. Retain keeps the instance's IPv6 address across destroy and
 -- recreate, so consumers can hold it in configuration.
@@ -153,7 +160,7 @@ workloadManifest o image =
     [ "apiVersion: compute.datumapis.com/v1alpha"
     , "kind: Workload"
     , "metadata:"
-    , "  name: " <> name o
+    , "  name: " <> workload o
     , "spec:"
     , "  placements:"
     , "  - name: default"
@@ -169,7 +176,7 @@ workloadManifest o image =
     , "        ipFamilies:"
     , "        - IPv6"
     , "        network:"
-    , "          name: default"
+    , "          name: " <> network o
     , "        reclaimPolicy: Retain"
     , "      runtime:"
     , "        class: general-purpose"

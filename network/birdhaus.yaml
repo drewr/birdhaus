@@ -1,0 +1,13 @@
+# The Birdhaus VPC: the store and its database run here, isolated from other
+# workloads in the project. Apply with:
+#   datumctl apply -f network/ --project <project>
+apiVersion: networking.datumapis.com/v1alpha
+kind: Network
+metadata:
+  name: birdhaus
+spec:
+  ipFamilies:
+  - IPv6
+  ipam:
+    mode: Auto
+  mtu: 1440
