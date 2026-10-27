@@ -1,0 +1,17 @@
+apiVersion: dns.networking.miloapis.com/v1alpha1
+kind: DNSRecordSet
+metadata:
+  name: birdhaus-store-aaaa
+  namespace: default
+spec:
+  dnsZoneRef:
+    name: birdhaus-store-1kamnr
+  recordType: AAAA
+  records:
+  # The Postgres instance's private address in the birdhaus Network. Only
+  # reachable from inside that Network; published so clients can use a name
+  # (some drivers cannot parse an IPv6 literal) and survive address changes.
+  - name: db
+    ttl: 300
+    aaaa:
+      content: fd20:0:4a::1:0:0

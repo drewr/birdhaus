@@ -21,7 +21,7 @@ The sandbox deployment runs as workload `birdhaus-pg` with deployment name `bird
 
 ## Connect
 
-The instance's IPv6 address is `PGHOST` and is stable (`reclaimPolicy: Retain`):
+Connect to `db.birdhaus.store`, an AAAA record (`dns/aaaa.yaml`) for the instance's private address. Update that record if the address changes. The address is stable across restarts (`reclaimPolicy: Retain`) but not across recreating the workload:
 
 ```sh
 datumctl get instances | grep birdhaus-pg

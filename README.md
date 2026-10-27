@@ -43,6 +43,10 @@ Production caching: hashed files under `/assets` are immutable for a year; `inde
 
 Stripe test mode is enabled by supplying test keys. Before launch, add live keys in the deployment environment and configure Stripe's payment methods in the Dashboard. The current checkout charges $40 USD and collects an email and shipping address. Shipping cost and tax are not added to the amount yet. A production fulfillment process should rely on verified Stripe webhooks (such as `payment_intent.succeeded`) rather than the browser return page.
 
+## Analytics
+
+Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`umami/README.md`](umami/README.md).
+
 ## Design docs
 
 - [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md) : persistence for orders and analytics. Deployed; operations in [`postgres/README.md`](postgres/README.md).

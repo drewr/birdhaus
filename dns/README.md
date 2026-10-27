@@ -7,6 +7,7 @@ Hand-written records for the `birdhaus-store-1kamnr` zone (birdhaus.store) on Da
 | `txt.yaml` | Stripe domain verification, Mailgun SPF, DMARC, Mailgun DKIM |
 | `cname.yaml` | Stripe custom email domain: six DKIM CNAMEs and `bounce` |
 | `mx.yaml` | Mailgun inbound mail |
+| `aaaa.yaml` | `db.birdhaus.store`: the Postgres instance's private address (see `postgres/README.md`) |
 
 Apply with the project as an argument:
 
