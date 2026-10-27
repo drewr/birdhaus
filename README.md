@@ -45,4 +45,4 @@ Stripe test mode is enabled by supplying test keys. Before launch, add live keys
 
 ## Design docs
 
-- [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md) (proposed): persistence for orders and analytics.
+- [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md) : persistence for orders and analytics. Deployed; operations in [`postgres/README.md`](postgres/README.md).

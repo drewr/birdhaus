@@ -1,6 +1,6 @@
 # Design: S3-backed PostgreSQL on Datum Compute
 
-Status: the platform spike, the AWS bootstrap, and the image and entrypoint are built and tested locally against real S3. `deploy.hs` and the Datum deployment are not built yet.
+Status: built and deployed as `birdhaus-db` in the sandbox project (us-east-1). Consumers are not connected yet.
 
 ## Problem
 
@@ -106,8 +106,8 @@ A throwaway `general-purpose` workload in us-east-1 (`datumcloud-d1-standard-2`)
 1. **Spike: done** (see above). Still open: the instance's real disk limit and S3 throughput with credentials.
 2. **Bucket and shared policy: done**, and `test-isolation` passes. Per-deployment users and secrets are created on demand with `bootstrap.hs deployment`.
 3. **Image and entrypoint: done**, and tested (see below).
-4. Write `deploy.hs` and deploy.
-5. Run the drills below.
+4. **`deploy.hs` and the deploy: done.**
+5. **Restore drill on Datum: done** (see below). The loss-bound and consumer-path drills have not been run on Datum.
 6. Connect a consumer, then build the Umami and order-record work.
 
 ## Image test results (2026-10-26)
@@ -120,6 +120,13 @@ Run under colima with temporary admin credentials and a throwaway prefix in the 
 - **Isolation:** the `umami` role is refused (`no CONNECT privilege`) on the `birdhaus` database, and the `postgres` superuser is rejected over TCP.
 - **Safety:** if `wal-g backup-list` fails, the entrypoint exits instead of running `initdb`, so a transient S3 error cannot fork the cluster's history.
 - The WAL-G v3.0.9 download is checksum-verified for amd64 and arm64. Only arm64 was run (colima); amd64 is what Datum will run and has not been exercised.
+
+## Deployment results (2026-10-27)
+
+- **Image type:** `datumctl compute build` produces a unikernel image (`os: kraftcloud`), which a general-purpose workload cannot pull (`ImageUnavailable`). `deploy.hs` builds an ordinary amd64 image with nerdctl in colima and pushes it to GHCR.
+- **Boot:** the five capabilities were enough. With the per-deployment IAM key, the instance initialised, took a base backup 5 s after start, and `pg_stat_archiver.failed_count` stayed 0, over the dual-stack S3 endpoint.
+- **Restore drill:** 500 rows written, `pg_switch_wal()`, `datumctl compute restart`. The new instance fetched the base backup in 1 s, replayed WAL, and had all 500 rows about 8 s after the restart. The address (`fd20:0:1:1:0:4::`) did not change.
+- **Disk:** `df` still shows a 1.8 TB host overlay, so the instance's real quota is unknown.
 
 ## Verification
 

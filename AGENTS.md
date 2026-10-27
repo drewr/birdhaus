@@ -28,7 +28,7 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 
 - DNS records we write by hand live in `dns/` and are the source of truth; apply them with `datumctl apply -f dns/ --project <project>`.
 
-- Design docs live in `docs/design/`. The Postgres-on-S3 design is proposed, not built.
+- Design docs live in `docs/design/`. Postgres on S3 is built and deployed as `birdhaus-db` (see `postgres/README.md`); consumers are not connected yet. `datumctl compute build` makes unikernel images only, so general-purpose workloads are built with nerdctl.
 
 ## Secrets and safety
 
