@@ -153,6 +153,9 @@ workloadManifest o =
     , "              value: /api/t"
     , "            - name: DISABLE_TELEMETRY"
     , "              value: \"1\""
+    -- Otherwise every dashboard load calls api.umami.is for update checks.
+    , "            - name: DISABLE_UPDATES"
+    , "              value: \"1\""
     , "            envFrom:"
     , "            - secretRef:"
     , "                name: " <> workload o
