@@ -63,7 +63,7 @@ parser =
     <*> opt "domain" 'd' "birdhaus.store" "Public hostname"
     <*> optional (optText "tag" 't' "Image tag (default: UTC timestamp)")
     <*> opt "batch" 'B' "xmas-2026" "Pre-order batch ID"
-    <*> optional (optText "cap" 'c' "Units the batch can sell (default: no cap)")
+    <*> (Just <$> opt "cap" 'c' "20" "Units the batch can sell")
     <*> opt "closes" 'C' "2026-12-01" "Last day of pre-orders, YYYY-MM-DD (US Central)"
     <*> opt "ship-by" 'S' "2026-12-15" "Ship-by date promised at checkout, YYYY-MM-DD"
   where

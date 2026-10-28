@@ -36,7 +36,7 @@ After payment Stripe redirects to `/?payment=complete&payment_intent=…&payment
 - `--pull-secret` names an existing image-pull secret in the project holding a GHCR token that can read the image.
 - The Stripe keys come from a secret in the project (default `birdhaus-stripe`, override with `--stripe-secret`), exposed to the workload as environment variables. Create it from test keys, never from `.env.production`.
 - The database and webhook settings come from a second secret (default `birdhaus-store-db`, override with `--db-secret`), created once by `./scripts/store-db-secret.hs --project <project>`.
-- The pre-order batch is set with `--batch` (default `xmas-2026`), `--cap` (default none), `--closes` (default `2026-12-01`) and `--ship-by` (default `2026-12-15`).
+- The pre-order batch is set with `--batch` (default `xmas-2026`), `--cap` (default `20`, the Christmas 2026 batch), `--closes` (default `2026-12-01`) and `--ship-by` (default `2026-12-15`).
 - Other options (`--location`, `--workload`, `--image-name`, `--domain`, `--tag`, `--session`) have defaults; run `./run.hs --help`.
 - Image builds use `datumctl compute build` against BuildKit in a colima VM, which the script starts if needed. Stop it afterwards with `colima stop`.
 - Every run replaces the running instance with the new image digest; expect a few seconds of rollout.
