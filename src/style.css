@@ -19,6 +19,15 @@ main { width: min(100% - 48px, 960px); margin: 48px 24px 80px; }
 .product { display: grid; gap: 24px; }
 .product-details h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: -.04em; }
 .price { margin: 12px 0; font-size: 18px; font-weight: 700; }
+.preorder-note { display: inline-block; margin: 0 0 16px; padding: 4px 10px; border: 1px solid #111; font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+.stock-note { margin: 0 0 12px; color: #a11; font-size: 14px; font-weight: 700; }
+.sold-out h2 { margin: 0 0 8px; font-size: 20px; }
+.waitlist-inline { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.waitlist-form label { display: block; margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+.waitlist-form input { display: block; width: 100%; padding: 12px; border: 1px solid #999; margin-bottom: 16px; }
+.waitlist-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.waitlist-error { margin: 0 0 12px; color: #a11; font-size: 14px; }
+.waitlist-joined { margin: 0; padding: 16px; border: 1px solid var(--line); line-height: 1.5; }
 .description { margin: 0 0 20px; color: #444; line-height: 1.5; }
 .cart { margin: 0 0 20px; padding: 16px; border: 1px solid var(--line); }
 .cart h2 { margin: 0 0 14px; font-size: 16px; }

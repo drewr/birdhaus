@@ -9,8 +9,10 @@
             "effect",
             "halogen",
             "halogen-vdom",
+            "integers",
             "maybe",
-            "prelude"
+            "prelude",
+            "web-events"
           ]
         },
         "test": {

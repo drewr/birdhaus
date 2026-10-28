@@ -4,7 +4,60 @@ const params = new URLSearchParams(window.location.search);
 
 export const isPaymentComplete = params.get("payment") === "complete";
 
-const emptyOrder = { status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [] };
+const emptyOrder = { status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "" };
+
+// Umami custom events. The tracker loads deferred and may be blocked, so this
+// never throws and silently does nothing without it.
+function track(name, data) {
+  try {
+    window.umami?.track(name, data);
+  } catch {
+    // analytics must never break the store
+  }
+}
+
+// Wraps a promise-returning function as an EffectFnAff that always succeeds.
+const effectFnAff = (run) => (_onError, onSuccess) => {
+  const controller = new AbortController();
+  run(controller.signal).then(onSuccess);
+  return (_cancelError, _onCancelerError, onCancelerSuccess) => {
+    controller.abort();
+    onCancelerSuccess();
+  };
+};
+
+// If the batch can't be loaded, show the store as open; the server still
+// enforces the cap when checkout starts.
+const openBatch = { open: true, reason: "open", shipBy: "", remaining: -1 };
+
+export const fetchBatch = effectFnAff(async (signal) => {
+  try {
+    const response = await fetch("/api/batch", { signal });
+    if (!response.ok) return openBatch;
+    const batch = await response.json();
+    if (!batch.open) track("sold-out-view", { reason: batch.reason });
+    return { open: batch.open, reason: batch.reason, shipBy: batch.shipBy ?? "", remaining: batch.remaining ?? -1 };
+  } catch {
+    return openBatch;
+  }
+});
+
+export const joinWaitlist = (email) => (quantity) => (postalCode) => effectFnAff(async (signal) => {
+  try {
+    const response = await fetch("/api/waitlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, quantity, postalCode }),
+      signal
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) return result.error || "We could not save your spot. Please try again.";
+    track("waitlist-join", { quantity });
+    return "";
+  } catch {
+    return "We could not save your spot. Please try again.";
+  }
+});
 
 // EffectFnAff: resolves to an order summary formatted for display. Failures
 // resolve too, as status "error", so the page can still say something useful.
@@ -19,7 +72,9 @@ export const fetchOrder = (_onError, onSuccess) => {
       signal: controller.signal
     });
     if (!response.ok) return emptyOrder;
-    return formatOrder(await response.json());
+    const order = formatOrder(await response.json());
+    trackPaidOnce(id, order);
+    return order;
   })().then(onSuccess, () => onSuccess(emptyOrder));
 
   return (_cancelError, _onCancelerError, onCancelerSuccess) => {
@@ -27,6 +82,19 @@ export const fetchOrder = (_onError, onSuccess) => {
     onCancelerSuccess();
   };
 };
+
+// Reloading the confirmation page must not count the sale twice.
+function trackPaidOnce(id, order) {
+  if (order.status !== "succeeded") return;
+  try {
+    const key = `tracked:${id}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // storage unavailable: count it anyway
+  }
+  track("preorder-paid", { quantity: order.quantity });
+}
 
 function formatOrder(order) {
   const status =
@@ -44,7 +112,9 @@ function formatOrder(order) {
     items: `${order.quantity} × Bluebird House`,
     total: `${money.format(order.amount / 100)} ${order.currency.toUpperCase()}`,
     email: order.email ?? "",
-    shipTo: [order.shipping?.name, address.line1, address.line2, cityLine, address.country].filter(Boolean)
+    shipTo: [order.shipping?.name, address.line1, address.line2, cityLine, address.country].filter(Boolean),
+    shipBy: order.shipBy ?? "",
+    quantity: order.quantity
   };
 }
 
@@ -64,6 +134,7 @@ async function initializeCheckout(quantity) {
   if (!form || form.dataset.initialized === "true") return;
   form.dataset.initialized = "true";
   if (buyButton) buyButton.disabled = true;
+  track("checkout-start", { quantity });
 
   try {
     const response = await fetch("/api/create-payment-intent", {

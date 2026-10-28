@@ -7,16 +7,20 @@
 --
 -- Prerequisites: datumctl is on PATH (it is not in nixpkgs); gh is logged in
 -- with write:packages; the project has a
--- Secret with STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY (--stripe-secret)
--- and a dockerconfigjson Secret that can pull from GHCR (--pull-secret); the
--- domain's DNSZone is verified and delegated to Datum.
+-- Secret with STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY (--stripe-secret),
+-- the database and webhook Secret from scripts/store-db-secret.hs
+-- (--db-secret), and a dockerconfigjson Secret that can pull from GHCR
+-- (--pull-secret); the domain's DNSZone is verified and delegated to Datum.
+--
+-- The pre-order batch is set here: --cap, --closes and --ship-by. Raising the
+-- cap or moving a date is a redeploy.
 
 {-# LANGUAGE OverloadedStrings #-}
 
 import qualified Control.Foldl as Fold
 import qualified Data.ByteString.Base64 as Base64
 import Data.Foldable (for_)
-import Data.Maybe (isNothing, listToMaybe)
+import Data.Maybe (fromMaybe, isNothing, listToMaybe)
 import Data.Optional (Optional (Specific))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -34,9 +38,14 @@ data Opts = Opts
   , network :: Text
   , imageName :: Text
   , stripeSecret :: Text
+  , dbSecret :: Text
   , pullSecret :: Text
   , domain :: Text
   , imageTag :: Maybe Text
+  , batch :: Text
+  , cap :: Maybe Text
+  , closes :: Text
+  , shipBy :: Text
   }
 
 parser :: Parser Opts
@@ -49,9 +58,14 @@ parser =
     <*> opt "network" 'N' "birdhaus" "Datum Network (VPC) to attach"
     <*> opt "image-name" 'i' "birdhaus-store" "GHCR package name"
     <*> opt "stripe-secret" 'k' "birdhaus-stripe" "Secret holding the Stripe keys"
+    <*> opt "db-secret" 'b' "birdhaus-store-db" "Secret with PG* settings and STRIPE_WEBHOOK_SECRET (scripts/store-db-secret.hs)"
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
     <*> opt "domain" 'd' "birdhaus.store" "Public hostname"
     <*> optional (optText "tag" 't' "Image tag (default: UTC timestamp)")
+    <*> opt "batch" 'B' "xmas-2026" "Pre-order batch ID"
+    <*> optional (optText "cap" 'c' "Units the batch can sell (default: no cap)")
+    <*> opt "closes" 'C' "2026-12-01" "Last day of pre-orders, YYYY-MM-DD (US Central)"
+    <*> opt "ship-by" 'S' "2026-12-15" "Ship-by date promised at checkout, YYYY-MM-DD"
   where
     opt name short def help =
       optText name short (Specific (HelpMessage (help <> " (default: " <> def <> ")"))) <|> pure def
@@ -73,7 +87,9 @@ main = do
   unless (ghCode == ExitSuccess) $
     die "Authenticate gh with write:packages: gh auth login --hostname github.com --scopes write:packages"
   procs datumctl (["whoami"] <> maybe [] (\s -> ["--session", s]) (session o)) empty
-  for_ [stripeSecret o, pullSecret o] $ \s -> do
+  for_ (cap o) $ \c ->
+    unless (T.all (`elem` ['0' .. '9']) c && not (T.null c)) $ die ("--cap must be a whole number, not " <> c)
+  for_ [stripeSecret o, dbSecret o, pullSecret o] $ \s -> do
     ok <- dcQuiet ["get", "secret", s]
     unless ok $ die ("Secret " <> s <> " not found in project " <> project o)
 
@@ -185,9 +201,20 @@ workloadManifest o image =
     , "          containers:"
     , "          - name: app"
     , "            image: " <> image
+    , "            env:"
+    , "            - name: BATCH_ID"
+    , "              value: \"" <> batch o <> "\""
+    , "            - name: BATCH_CAP"
+    , "              value: \"" <> fromMaybe "" (cap o) <> "\""
+    , "            - name: BATCH_CLOSES_AT"
+    , "              value: \"" <> closes o <> "\""
+    , "            - name: BATCH_SHIP_BY"
+    , "              value: \"" <> shipBy o <> "\""
     , "            envFrom:"
     , "            - secretRef:"
     , "                name: " <> stripeSecret o
+    , "            - secretRef:"
+    , "                name: " <> dbSecret o
     , "            ports:"
     , "            - name: http"
     , "              port: 8080"

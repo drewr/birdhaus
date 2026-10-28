@@ -5,8 +5,10 @@ package:
     - effect
     - halogen
     - halogen-vdom
+    - integers
     - maybe
     - prelude
+    - web-events
 workspace:
   packageSet:
     registry: 63.3.0

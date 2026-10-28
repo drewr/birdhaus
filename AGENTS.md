@@ -43,4 +43,5 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 - Workload `birdhaus-store` runs in `us-east-1` on the unikernel runtime and listens on 8080. `run.hs` also applies a NetworkService and HTTPProxy for the domain `birdhaus.store`.
 - The `datumctl compute deploy -f` flag cannot be combined with `--http-port`, which is why networking is applied separately.
 - Building needs a BuildKit daemon; the script uses colima's socket (`~/.colima/default/buildkitd.sock`).
-- Fulfilment should be driven by verified Stripe webhooks, not the browser return page (not implemented yet).
+- Orders are recorded only from the signature-verified Stripe webhook (`/api/stripe-webhook`), never from the browser return page. The webhook must stay idempotent (PaymentIntent ID as key) and return 500 on database errors so Stripe retries.
+- The store must keep selling when Postgres is down: database calls fail open for checkout and are retried by Stripe for records. Schema changes are new numbered files in `server/migrations/`; never edit an applied one.
