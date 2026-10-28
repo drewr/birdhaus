@@ -36,3 +36,16 @@ spec:
     ttl: 300
     cname:
       content: custom-email-domain.stripe.com.
+  # Amazon SES DKIM, for birdhaus-watch alert email (ops/watch).
+  - name: aoe6vgqmc3qh3q2pheujsnvheykud2tp._domainkey
+    ttl: 300
+    cname:
+      content: aoe6vgqmc3qh3q2pheujsnvheykud2tp.dkim.amazonses.com.
+  - name: jyfaqraanj7wsc7m5hvcavhq2lgihlcs._domainkey
+    ttl: 300
+    cname:
+      content: jyfaqraanj7wsc7m5hvcavhq2lgihlcs.dkim.amazonses.com.
+  - name: zfngobupx2hf23ihz7x5244r6smwxedo._domainkey
+    ttl: 300
+    cname:
+      content: zfngobupx2hf23ihz7x5244r6smwxedo.dkim.amazonses.com.
