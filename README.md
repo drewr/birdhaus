@@ -64,6 +64,10 @@ Stripe test mode is enabled by supplying test keys. Before launch, add live keys
 
 Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`umami/README.md`](umami/README.md).
 
+## Operator alerts
+
+`ops/watch/` is a small heartbeat and probe monitor in AWS that emails the operator when Postgres stops archiving or backing up, or when the store, checkout or Umami stop answering. See [`ops/watch/README.md`](ops/watch/README.md).
+
 ## Design docs
 
 - [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md) : persistence for orders and analytics. Deployed; operations in [`postgres/README.md`](postgres/README.md).

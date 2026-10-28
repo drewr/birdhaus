@@ -146,6 +146,8 @@ The `birdhaus` Network (`network/birdhaus.yaml`, `fd20:0:4a::/48`) now holds the
 
 ## Risks
 
+- **Silent failure** (archiving stops while Postgres keeps serving) is now watched: the entrypoint reports to birdhaus-watch (`ops/watch/`), which emails the operator. Tested by revoking the database user's S3 access, which was detected in 4.5 minutes.
+
 - **Local disk size** caps the database and the real limit is still unknown (the spike could not tell). Find it before storing anything large; beyond it, use a larger instance type or keep cold data elsewhere.
 - **Replacement downtime:** a restore takes minutes, and consumers see connection errors meanwhile. Clients need retries, and the unikernel app must not crash-loop on a missing database.
 - **Not highly available**, by choice.

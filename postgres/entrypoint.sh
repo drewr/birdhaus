@@ -12,6 +12,8 @@
 #   AWS_ENDPOINT   default the S3 dual-stack endpoint for AWS_REGION
 #   BACKUP_INTERVAL_HOURS  default 24
 #   BACKUP_RETAIN          full backups to keep, default 7
+#   WATCH_URL, WATCH_CHECK, WATCH_TOKEN  optional: report health to
+#                  birdhaus-watch every 5 minutes (ops/watch/README.md)
 set -euo pipefail
 
 : "${WALG_S3_PREFIX:?}" "${AWS_ACCESS_KEY_ID:?}" "${AWS_SECRET_ACCESS_KEY:?}" "${AWS_REGION:?}"
@@ -116,11 +118,61 @@ backup_loop() {
   done
 }
 
+# Every 5 minutes: ping birdhaus-watch when healthy, or report every problem
+# found. Silence is itself an alert, so a dead instance is caught too. Runs
+# without set -e: a failing check must be reported, not end the loop.
+watch_loop() {
+  set +e
+  local started problems now rec failing failed_wal ready latest age used
+  started=$(date +%s)
+  printf 'Authorization: Bearer %s\n' "$WATCH_TOKEN" >"$STATE_DIR/watch-header"
+  chmod 600 "$STATE_DIR/watch-header"
+  sleep 60
+  while true; do
+    problems=()
+    now=$(date +%s)
+    if ! as_pg pg_isready -q -h "$PGHOST"; then
+      problems+=("Postgres is not accepting connections.")
+    else
+      rec=$(psql_pg -c 'select pg_is_in_recovery()' 2>/dev/null)
+      if [ "$rec" = t ]; then
+        [ $((now - started)) -gt 900 ] && problems+=("Postgres is still in recovery $(( (now - started) / 60 )) minutes after boot.")
+      elif [ "$rec" = f ]; then
+        # The most recent archive attempt failed: WAL is not reaching S3.
+        IFS='|' read -r failing failed_wal <<<"$(psql_pg -c "select coalesce(last_failed_time > coalesce(last_archived_time, 'epoch'), false), coalesce(last_failed_wal, '') from pg_stat_archiver" 2>/dev/null)"
+        [ "$failing" = t ] && problems+=("WAL archiving to S3 is failing (last failed segment $failed_wal). Writes since then are not durable.")
+        ready=$(find "$PGDATA/pg_wal/archive_status" -name '*.ready' 2>/dev/null | wc -l)
+        [ "$ready" -gt 3 ] && problems+=("$ready WAL segments are waiting to be archived.")
+        if latest=$(as_pg wal-g backup-list --json 2>/dev/null | grep -o '"time":"[^"]*"' | cut -d'"' -f4 | sort | tail -1) && [ -n "$latest" ]; then
+          age=$(( (now - $(date -d "$latest" +%s)) / 3600 ))
+          [ "$age" -ge 26 ] && problems+=("The newest base backup is $age hours old.")
+        elif [ $((now - started)) -gt 3600 ]; then
+          problems+=("No base backup could be listed in $WALG_S3_PREFIX.")
+        fi
+      else
+        problems+=("Postgres did not answer a query.")
+      fi
+    fi
+    used=$(df -P "$PGDATA" | awk 'NR == 2 { sub("%", "", $5); print $5 }')
+    [ "${used:-0}" -gt 85 ] && problems+=("The data disk is ${used}% full.")
+
+    if [ ${#problems[@]} -eq 0 ]; then
+      curl -fsS -m 10 -X POST -H @"$STATE_DIR/watch-header" "$WATCH_URL/ping/$WATCH_CHECK" >/dev/null || log "watch ping failed"
+    else
+      log "health problems: ${problems[*]}"
+      printf '%s\n' "${problems[@]}" | curl -fsS -m 10 -X POST -H @"$STATE_DIR/watch-header" --data-binary @- "$WATCH_URL/fail/$WATCH_CHECK" >/dev/null || log "watch report failed"
+    fi
+    sleep 300
+  done
+}
+
 PG_PID=""
 LOOP_PID=""
+WATCH_PID=""
 stop() {
   log "stopping"
   [ -n "$LOOP_PID" ] && kill "$LOOP_PID" 2>/dev/null || true
+  [ -n "$WATCH_PID" ] && kill "$WATCH_PID" 2>/dev/null || true
   if [ -n "$PG_PID" ]; then
     # Close the current WAL segment so it is archived before exit; the
     # archiver drains everything pending during a fast shutdown.
@@ -137,9 +189,17 @@ PG_PID=$!
 ( wait_ready && reconcile ) &
 backup_loop &
 LOOP_PID=$!
+if [ -n "${WATCH_URL:-}" ] && [ -n "${WATCH_TOKEN:-}" ]; then
+  WATCH_CHECK="${WATCH_CHECK:-postgres}"
+  watch_loop &
+  WATCH_PID=$!
+else
+  log "WATCH_URL is not set; health reporting is off"
+fi
 
 # Return when Postgres exits for any reason other than our own stop().
 wait "$PG_PID" && rc=0 || rc=$?
 log "postgres exited with status $rc"
 kill "$LOOP_PID" 2>/dev/null || true
+[ -n "$WATCH_PID" ] && kill "$WATCH_PID" 2>/dev/null || true
 exit "$rc"

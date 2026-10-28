@@ -37,6 +37,8 @@ datumctl compute exec birdhaus-pg-default-us-east-1-0 -- sh -c "gosu postgres ps
 
 ## Operate
 
+- **Alerts:** with the Secret `birdhaus-db-watch` present, the entrypoint reports health to birdhaus-watch every 5 minutes: archive failures and backlog, base backup age, recovery, and disk. See `ops/watch/README.md`.
+
 - **Logs:** `datumctl compute logs birdhaus-pg`. Look for `[entrypoint]` lines, and check `select failed_count from pg_stat_archiver` is 0.
 - **Backups:** one base backup shortly after every boot and then daily, keeping 7. List them with `wal-g backup-list` inside the instance.
 - **Restore drill:** `datumctl compute restart birdhaus-pg`. The new instance has an empty disk and restores in seconds for a small database.

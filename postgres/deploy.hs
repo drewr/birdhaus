@@ -83,6 +83,9 @@ main = do
     ok <- exists "secret" s
     unless ok $ die ("Secret " <> s <> " not found in project " <> project o <> if s == awsSecret then "; run postgres/aws/bootstrap.hs deployment" else "")
 
+  -- Optional: health reporting to birdhaus-watch (ops/watch/deploy.hs creates it).
+  haveWatch <- exists "secret" (name o <> "-watch")
+  unless haveWatch $ echo "No Secret NAME-watch: deploying without health reporting."
   haveDb <- exists "secret" dbSecret
   if haveDb
     then do
@@ -129,7 +132,7 @@ main = do
   tmp <- getTemporaryDirectory
   with (mktempdir tmp "birdhaus") $ \dir -> do
     let workloadFile = dir </> "workload.yaml"
-    T.writeFile workloadFile (workloadManifest o digestRef)
+    T.writeFile workloadFile (workloadManifest o haveWatch digestRef)
     printf ("Deploying " % s % " to " % s % " in " % s % "...\n") digestRef (location o) (project o)
     dc ["compute", "deploy", "-f", T.pack workloadFile, "--yes"]
 
@@ -154,9 +157,9 @@ workload o = fromMaybe (name o) (workloadName o)
 -- general-purpose (a VM running a normal container), because Postgres needs a
 -- writable disk. Retain keeps the instance's IPv6 address across destroy and
 -- recreate, so consumers can hold it in configuration.
-workloadManifest :: Opts -> Text -> Text
-workloadManifest o image =
-  T.unlines
+workloadManifest :: Opts -> Bool -> Text -> Text
+workloadManifest o watch image =
+  T.unlines $
     [ "apiVersion: compute.datumapis.com/v1alpha"
     , "kind: Workload"
     , "metadata:"
@@ -194,7 +197,9 @@ workloadManifest o image =
     , "            envFrom:"
     , "            - secretRef:"
     , "                name: " <> name o <> "-aws"
-    , "            ports:"
+    ]
+    <> (if watch then ["            - secretRef:", "                name: " <> name o <> "-watch"] else [])
+    <> [ "            ports:"
     , "            - name: postgres"
     , "              port: 5432"
     , "              protocol: TCP"

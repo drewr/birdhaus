@@ -13,6 +13,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const batch = currentBatch();
 db.migrateInBackground();
 
+// When the webhook last failed to write to the database; /api/health reports it.
+let lastWebhookFailure = 0;
+
 // Paid units in the batch, or null when there is no database or it is down.
 async function paidUnits() {
   if (!db.isConfigured()) return null;
@@ -50,12 +53,32 @@ app.post("/api/stripe-webhook", express.raw({ type: "application/json" }), async
     }
     response.json({ received: true });
   } catch (error) {
+    lastWebhookFailure = Date.now();
     console.error(`Could not record ${event.type} ${event.id}:`, error.message);
     response.status(500).json({ error: "Could not record the event." });
   }
 });
 
 app.use(express.json());
+
+// Probed every 5 minutes by birdhaus-watch (ops/watch). 503 names what failed.
+app.get("/api/health", async (_request, response) => {
+  response.set("Cache-Control", "no-store");
+  const health = { db: "not configured", webhook: "ok" };
+  if (db.isConfigured()) {
+    try {
+      await Promise.race([db.query("select 1"), new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 3000))]);
+      health.db = "ok";
+    } catch (error) {
+      health.db = `failing: ${error.message}`;
+    }
+  }
+  if (Date.now() - lastWebhookFailure < 15 * 60 * 1000) {
+    health.webhook = `failing: a Stripe event could not be recorded at ${new Date(lastWebhookFailure).toISOString()}`;
+  }
+  const ok = health.db !== "not configured" && !health.db.startsWith("failing") && health.webhook === "ok";
+  response.status(ok ? 200 : 503).json(health);
+});
 
 // remaining is only shown once the batch is nearly gone (under 20% left).
 app.get("/api/batch", async (_request, response) => {

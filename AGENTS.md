@@ -28,6 +28,7 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 
 - DNS records we write by hand live in `dns/` and are the source of truth; apply them with `datumctl apply -f dns/ --project <project>`.
 
+- Operator alerts: `ops/watch/` (birdhaus-watch in AWS) emails on failures. Keep `/api/health` honest and cheap, and keep the Postgres watchdog in `postgres/entrypoint.sh` reporting every 5 minutes; a new component that can fail silently should get a check in `ops/watch/checks.json`.
 - Design docs live in `docs/design/`. Postgres on S3 is built and deployed as workload `birdhaus-pg` (deployment `birdhaus-db`) in the `birdhaus` Network (`network/`), alongside the store (see `postgres/README.md`); Umami analytics (`umami/`) is its first consumer, at https://stats.birdhaus.store, connecting through `db.birdhaus.store` (`dns/aaaa.yaml`). `datumctl compute build` makes unikernel images only, so general-purpose workloads are built with nerdctl.
 
 ## Secrets and safety

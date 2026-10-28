@@ -1,0 +1,27 @@
+[
+  {
+    "name": "postgres",
+    "kind": "heartbeat",
+    "periodMinutes": 5,
+    "graceMinutes": 10,
+    "runbook": "See postgres/README.md. Check `datumctl compute logs birdhaus-pg` for [entrypoint] and archive errors, and `select * from pg_stat_archiver`. Silence means the instance, its network or the Datum location is down."
+  },
+  {
+    "name": "store",
+    "kind": "probe",
+    "urls": ["https://birdhaus.store/api/health"],
+    "runbook": "The response body names the failing part (db or webhook). Check `datumctl compute logs birdhaus-store`. While the database is down checkout stays open and Stripe retries webhooks for 3 days."
+  },
+  {
+    "name": "checkout",
+    "kind": "probe",
+    "urls": ["https://birdhaus.store/api/batch"],
+    "runbook": "The storefront API is not answering. Check `datumctl get workload birdhaus-store` and its logs, and the HTTPProxy."
+  },
+  {
+    "name": "umami",
+    "kind": "probe",
+    "urls": ["https://stats.birdhaus.store/api/heartbeat", "https://stats.birdhaus.store/t.js"],
+    "runbook": "Analytics are not being collected. Check `datumctl compute logs birdhaus-umami`. The store keeps working without it."
+  }
+]
