@@ -75,6 +75,7 @@ report b c =
     , "  nullif(:'cap', '')::int as cap,"
     , "  nullif(:'cap', '')::int - (select coalesce(sum(quantity), 0) from paid) as remaining,"
     , "  case when (select units from rate) > 0 and nullif(:'cap', '') is not null"
+    , "    and nullif(:'cap', '')::int > (select coalesce(sum(quantity), 0) from paid)"
     , "    then to_char(now() + (greatest(nullif(:'cap', '')::int - (select coalesce(sum(quantity), 0) from paid), 0)::numeric"
     , "      / (select units from rate) * 7) * interval '1 day', 'YYYY-MM-DD')"
     , "  end as projected_sell_out;"
