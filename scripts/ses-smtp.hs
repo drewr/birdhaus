@@ -51,7 +51,7 @@ parser =
     <*> opt "domain" 'd' "birdhaus.store" "Verified SES domain identity"
     <*> opt "region" 'r' "us-east-1" "AWS region"
     <*> opt "name" 'n' "birdhaus-ses" "Datum Secret to create"
-    <*> opt "from" 'f' "Birdhaus <login@birdhaus.store>" "From address"
+    <*> opt "from" 'f' "Birdhaus <info@birdhaus.store>" "From address"
     <*> switch "rotate" 'R' "Replace an existing access key and Secret"
   where
     opt n short def help =

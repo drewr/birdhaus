@@ -94,6 +94,8 @@ main = do
     encId <- randHex 4
     encKey <- randB64 32
     adminPassword <- randHex 24
+    raftSecret <- randHex 32
+    apiSecret <- randHex 32
     let proxies = T.intercalate "\n" (T.words (trustedProxies o))
         manifest = A.object
           [ "apiVersion" .= ("v1" :: Text), "kind" .= ("Secret" :: Text)
@@ -110,18 +112,24 @@ main = do
                 , "PUB_URL" .= publicHost o
                 , "LISTEN_SCHEME" .= ("http" :: Text)
                 , "LISTEN_ADDRESS" .= ("::" :: Text)
-                , "PORT_HTTP" .= ("8080" :: Text)
+                , "LISTEN_PORT_HTTP" .= ("8080" :: Text)
                 , "PROXY_MODE" .= ("true" :: Text)
                 , "TRUSTED_PROXIES" .= proxies
                 , "HTTP_WORKERS" .= ("1" :: Text)
                 , "ENC_KEYS" .= (encId <> "/" <> encKey)
                 , "ENC_KEY_ACTIVE" .= encId
+                , "HQL_SECRET_RAFT" .= raftSecret
+                , "HQL_SECRET_API" .= apiSecret
+                , "HQL_NODE_ID" .= ("1" :: Text)
                 , "RP_ID" .= publicHost o
-                , "RP_ORIGIN" .= ("https://" <> publicHost o)
+                , "RP_ORIGIN" .= ("https://" <> publicHost o <> ":443")
                 , "RP_NAME" .= ("Birdhaus" :: Text)
                 , "BOOTSTRAP_ADMIN_EMAIL" .= adminEmail o
                 , "BOOTSTRAP_ADMIN_PASSWORD_PLAIN" .= adminPassword
+                , "RAUTHY_ADMIN_EMAIL" .= adminEmail o
+                , "EMAIL_SUB_PREFIX" .= ("Birdhaus" :: Text)
                 , "OPEN_USER_REG" .= ("true" :: Text)
+                , "SMTP_TLS_MODE" .= ("starttls" :: Text)
                 ]
                   <> [K.fromText k .= v | (k, v) <- smtp]
               )
@@ -190,9 +198,9 @@ workloadManifest o =
     , "  - name: default"
     , "    locations:"
     , "    - name: " <> location o
-    , "      scaleSettings:"
-    , "        instanceManagementPolicy: OrderedReady"
-    , "        minReplicas: 1"
+    , "    scaleSettings:"
+    , "      instanceManagementPolicy: OrderedReady"
+    , "      minReplicas: 1"
     , "  template:"
     , "    spec:"
     , "      networkInterfaces:"

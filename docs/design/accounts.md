@@ -68,7 +68,7 @@ browser ──► umami.identify({ id }) + login/signup/logout ──► birdhau
 - **WebAuthn:** `RP_ID=login.birdhaus.store`, `RP_ORIGIN=https://login.birdhaus.store`, `RP_NAME=Birdhaus`.
 - **Encryption:** at least one `ENC_KEYS` entry and `ENC_KEY_ACTIVE` in the `birdhaus-auth` Secret. These encrypt client secrets and cookies in the database; losing them means re-creating clients and upstream providers.
 - **Admin:** bootstrap the first admin with `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_PLAIN` from the Secret, then force MFA on the Admin UI.
-- **Email:** SES SMTP (`SMTP_URL`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`). `birdhaus.store` is verified in the `drewr` account, DKIM is `SUCCESS` and SES production access is enabled, so it can send to customers. The SMTP credentials are an IAM user's key and derived SMTP password, stored in `birdhaus-ses`; magic links and account mail come from `login@birdhaus.store`.
+- **Email:** SES SMTP (`SMTP_URL`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`). `birdhaus.store` is verified in the `drewr` account, DKIM is `SUCCESS` and SES production access is enabled, so it can send to customers. The SMTP credentials are an IAM user's key and derived SMTP password, stored in `birdhaus-ses`; magic links and account mail come from `info@birdhaus.store`.
 - **Registration:** `OPEN_USER_REG=true`.
 - **Google:** a Web application OAuth client with redirect `https://login.birdhaus.store/auth/v1/providers/callback`; the client ID and secret are entered in Rauthy's Providers page and stored encrypted in Postgres.
 
