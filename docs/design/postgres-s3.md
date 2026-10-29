@@ -83,6 +83,25 @@ One cluster, one database and role per consumer (for example `umami` and `birdha
 - **Umami:** a separate workload pointing at the database address.
 - **Birdhaus orders:** a schema migration and a `POST /api/stripe-webhook` handler that verifies Stripe's signature and records `payment_intent.succeeded`. This also closes the webhook gap noted in `AGENTS.md`.
 
+## Durability and the loss window
+
+WAL archiving is continuous; the daily base backup is only the starting point for a restore:
+
+- **WAL:** `archive_command = 'wal-g wal-push %p'` pushes each segment as soon as it closes — when it fills, when `archive_timeout = 60` forces a switch, or on `pg_switch_wal()`. A committed write reaches S3 at the next switch, usually well under a minute.
+- **Base backup:** taken daily and shortly after every boot; a restore fetches the latest one and replays WAL from there.
+
+PostgreSQL acknowledges a commit only after its WAL record is on local disk, and replay stops at record boundaries, so the failure mode is loss, never a half-applied or corrupted write. What happens to a write committed in the last ~60 seconds depends on how the instance ends:
+
+| Situation | The write | Why |
+|---|---|---|
+| The instance keeps running | Not lost | It is committed locally and pushed at the next segment switch (≤60 s, sooner if the segment fills). It falls into the hard-kill row if the instance dies before that switch. |
+| Graceful stop or redeploy | Not lost | SIGTERM runs `pg_switch_wal()` and then a fast shutdown: in-flight transactions roll back and the archiver drains every pending segment before Postgres exits. The replacement restores and replays to that point. |
+| Hard kill (SIGKILL, node loss, crash) | Lost, up to ~60 seconds of writes | The drain never runs; those writes existed only on the dead instance's disk. The hard-kill drill measured exactly this: the first 100 rows survived and the next 100 were gone. |
+
+Writes that arrive during the replacement gap are refused, not half-accepted: checkout fails open, the webhook returns 500 so Stripe retries, and Umami loses page views.
+
+The sharp edge of the hard-kill case is orders. If the webhook writes the `orders` row and returns 200 to Stripe, and the instance then dies before that segment is archived, Stripe considers the event delivered and will not redeliver. The PaymentIntent still exists, so a reconciliation job could recover the row; without one, the database can be missing an order Stripe has. `archive_timeout` is the knob: lowering it shrinks the window at the cost of more, smaller objects.
+
 ## Planned files
 
 - `postgres/Dockerfile`, `entrypoint.sh` (the only shell script, since it runs inside the container image), `birdhaus.conf` (settings included from `postgresql.conf`), `pg_hba.conf` (all written)
@@ -156,6 +175,8 @@ The backup bucket and the watcher moved from the sandbox account to the owner's 
 ## Risks
 
 - **Silent failure** (archiving stops while Postgres keeps serving) is now watched: the entrypoint reports to birdhaus-watch (`ops/watch/`), which emails the operator. Tested by revoking the database user's S3 access, which was detected in 4.5 minutes.
+
+- **A hard kill can lose a just-recorded order.** The last ~60 seconds of writes may not have reached S3, and Stripe will not redeliver an event it already got a 200 for (see "Durability and the loss window").
 
 - **Local disk size** caps the database and the real limit is still unknown (the spike could not tell). Find it before storing anything large; beyond it, use a larger instance type or keep cold data elsewhere.
 - **Replacement downtime:** a restore takes minutes, and consumers see connection errors meanwhile. Clients need retries, and the unikernel app must not crash-loop on a missing database.
