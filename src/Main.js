@@ -20,6 +20,16 @@ function track(name, data) {
   }
 }
 
+// Wraps a promise-returning function as an EffectFnAff that always succeeds.
+const effectFnAff = (run) => (_onError, onSuccess) => {
+  const controller = new AbortController();
+  run(controller.signal).then(onSuccess);
+  return (_cancelError, _onCancelerError, onCancelerSuccess) => {
+    controller.abort();
+    onCancelerSuccess();
+  };
+};
+
 // The signed-in account, if any. Also tells Umami who this is (the Rauthy
 // subject, never the email) and reports a login after the callback redirect.
 export const fetchMe = effectFnAff(async (signal) => {
@@ -53,16 +63,6 @@ export const signOut = () => {
     // analytics must never break sign-out
   }
   fetch("/api/auth/logout", { method: "POST", keepalive: true }).finally(() => window.location.assign("/"));
-};
-
-// Wraps a promise-returning function as an EffectFnAff that always succeeds.
-const effectFnAff = (run) => (_onError, onSuccess) => {
-  const controller = new AbortController();
-  run(controller.signal).then(onSuccess);
-  return (_cancelError, _onCancelerError, onCancelerSuccess) => {
-    controller.abort();
-    onCancelerSuccess();
-  };
 };
 
 // If the batch can't be loaded, show the store as open; the server still
