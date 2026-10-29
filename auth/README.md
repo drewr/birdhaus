@@ -16,31 +16,13 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `bi
 
 2. **Store the SES SMTP settings** in their own Secret. Rauthy copies them into `birdhaus-auth` on first run. `birdhaus.store` is verified in the `drewr` account (DKIM is `SUCCESS`) and SES production access is enabled, so it can deliver to customers.
 
-   SES SMTP needs an IAM user allowed only `ses:SendEmail` and `ses:SendRawEmail` on the domain identity, plus an access key. The SMTP password is derived from that key, not the key itself:
-
-   ```
-   SMTP username = access key ID
-   SMTP password = base64(0x04 || HMAC-SHA256("AWS4" + secret_access_key, "SendRawEmail"))
-   ```
-
-   The `drewr` user cannot create IAM users, so an admin (root) has to create this one. Then create the Secret:
+   SES SMTP needs an IAM user allowed only `ses:SendEmail` and `ses:SendRawEmail` on the domain identity, plus an access key. `scripts/ses-smtp.hs` creates the user, an SES-only policy, the key, the derived SMTP password and the `birdhaus-ses` Secret; it needs an IAM admin (the `drewr` user cannot create IAM users):
 
    ```sh
-   datumctl create -f - --project <project> <<'YAML'
-   apiVersion: v1
-   kind: Secret
-   metadata:
-     name: birdhaus-ses
-     namespace: default
-   type: Opaque
-   stringData:
-     SMTP_URL: email-smtp.us-east-1.amazonaws.com
-     SMTP_PORT: "587"
-     SMTP_USERNAME: <SMTP access key ID>
-     SMTP_PASSWORD: <derived SMTP password>
-     SMTP_FROM: Birdhaus <login@birdhaus.store>
-   YAML
+   AWS_PROFILE=<admin-profile> ./scripts/ses-smtp.hs --project <project>
    ```
+
+   The SMTP password is the SigV4-style derivation from the access key (not the key itself), so the secret key is never stored or printed. Pass `--rotate` to replace an existing key and Secret. Verify the credentials with any SMTP client before deploying Rauthy; new keys can take several minutes to work with SES.
 
    birdhaus-watch already sends through the same SES identity, from `alerts@birdhaus.store`.
 
