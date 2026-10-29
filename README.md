@@ -91,3 +91,4 @@ Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`u
 
 - [A reproducible AWS account, and moving off the sandbox](docs/design/aws-account.md) (built): one script to set up, migrate and tear down every Birdhaus AWS resource.
 - [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md) : persistence for orders and analytics. Deployed; operations in [`postgres/README.md`](postgres/README.md).
+- [Accounts and sign-in with Google and email](docs/design/accounts.md) (proposed): a self-hosted Rauthy identity service in the `birdhaus` Network, wired into the store and Umami analytics.
