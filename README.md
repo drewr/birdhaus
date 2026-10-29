@@ -43,6 +43,25 @@ After payment Stripe redirects to `/?payment=complete&payment_intent=…&payment
 
 Production caching: hashed files under `/assets` are immutable for a year; `index.html` is served from memory with a content-hash ETag and `no-cache`. Reproducible image builds pin file mtimes, so Express's default size+mtime ETags cannot tell builds apart.
 
+## AWS account setup
+
+`ops/aws-account.hs` creates, migrates and tears down every Birdhaus AWS resource: the Postgres backup bucket and its IAM user, and `ops/watch/` alerting. Run it from the repository root with an admin AWS profile for the target account:
+
+```
+export AWS_PROFILE=<admin-profile>
+./ops/aws-account.hs setup --project <project> --alert-to <email>
+./ops/aws-account.hs copy-data --from-profile <old-profile> --project <project>
+./ops/aws-account.hs switch --project <project>
+./ops/aws-account.hs destroy --confirm <account-id> --project <project>
+```
+
+- `setup` is idempotent. It creates the bucket, its shared policy, the deployment's IAM user and Datum Secret (unless the Secret already exists, as it does during a move), birdhaus-watch, and `dns/ses.yaml` with the DKIM records. Apply that file with `datumctl apply -f dns/ses.yaml --project <project>` and click the SES verification email; DNS changes need approval.
+- `copy-data` copies `birdhaus-db/` from the old account's bucket. It switches the source's WAL and waits for the archive to drain, refuses to merge into a non-empty prefix, and verifies object counts and bytes. Pause writers (Umami) first: writes after the WAL switch are not copied. The source instance is found with `--workload` (default `birdhaus-pg`); use `--session` or an active `datumctl` session for the project.
+- `switch` points Postgres at this account. It refuses unless the new bucket holds a base backup, recreates the `birdhaus-db-aws` and `birdhaus-db-watch` Secrets, restarts the workload, waits for recovery and prints row counts.
+- `destroy` removes birdhaus-watch, the deployment's IAM user and the bucket. It refuses if the `birdhaus-db-aws` Secret still points at the account, and `--confirm` must be the account ID.
+
+`dns/ses.yaml` is generated, so regenerating it never touches the Stripe records in `dns/cname.yaml`.
+
 ## Pre-orders
 
 The store sells in batches. Each pre-order is charged at checkout and promises a ship-by date; when the batch's cap is reached or its closing date passes, the page swaps checkout for a waitlist (email, quantity, optional ZIP, no payment).
@@ -70,5 +89,5 @@ Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`u
 
 ## Design docs
 
-- [A reproducible AWS account, and moving off the sandbox](docs/design/aws-account.md) (proposed): one script to set up, migrate and tear down every Birdhaus AWS resource.
+- [A reproducible AWS account, and moving off the sandbox](docs/design/aws-account.md) (built): one script to set up, migrate and tear down every Birdhaus AWS resource.
 - [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md) : persistence for orders and analytics. Deployed; operations in [`postgres/README.md`](postgres/README.md).

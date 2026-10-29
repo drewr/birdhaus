@@ -7,17 +7,18 @@ One Postgres per deployment (default `birdhaus-db`) runs on a general-purpose in
 Prerequisites: `datumctl` on PATH, `gh` logged in with `write:packages`, colima running the containerd runtime, and an AWS profile that can administer IAM and S3.
 
 ```sh
-# Once per AWS account and region: bucket and shared policy.
-./postgres/aws/bootstrap.hs bucket
-# Once per deployment: IAM user plus the Datum secret NAME-aws.
-./postgres/aws/bootstrap.hs deployment birdhaus-db <project>
+# Once per AWS account: bucket, shared policy, deployment user, the Datum
+# Secrets and birdhaus-watch. Writes dns/ses.yaml.
+./ops/aws-account.hs setup --project <project> --alert-to <email>
 # Build, push, deploy. Creates the secret NAME-db (one random password per database) on first run.
 ./postgres/deploy.hs --project <project> --pull-secret <ghcr-pull-secret>
 ```
 
+For an existing account, the individual steps are still available: `./postgres/aws/bootstrap.hs bucket`, then `deployment birdhaus-db <project>`. `ops/aws-account.hs copy-data` and `switch` move an existing deployment to another account; see the root README.
+
 `deploy.hs` options: `--name`, `--workload` (default: the name), `--databases` (default `"birdhaus umami"`), `--network` (default `birdhaus`; create it with `datumctl apply -f network/`), `--location`, `--instance-type`, `--tag`.
 
-The sandbox deployment runs as workload `birdhaus-pg` with deployment name `birdhaus-db` (see the design doc for why). Pass `--workload birdhaus-pg` when redeploying it. Do not change the network of an existing workload in place; recreate it under a new workload name.
+The deployment runs as workload `birdhaus-pg` with deployment name `birdhaus-db` (see the design doc for why). Pass `--workload birdhaus-pg` when redeploying it. Do not change the network of an existing workload in place; recreate it under a new workload name.
 
 ## Connect
 
@@ -44,4 +45,4 @@ datumctl compute exec birdhaus-pg-default-us-east-1-0 -- sh -c "gosu postgres ps
 - **Restore drill:** `datumctl compute restart birdhaus-pg`. The new instance has an empty disk and restores in seconds for a small database.
 - **Add a database or rotate a password:** change the `NAME-db` secret and restart. Every boot reconciles roles and passwords.
 - **Rotate the AWS key:** `./postgres/aws/bootstrap.hs rotate birdhaus-db <project>`, then restart.
-- **Teardown:** `datumctl compute destroy birdhaus-pg`, then `bootstrap.hs destroy birdhaus-db` (removes the IAM user, keeps the data). Delete the `birdhaus-db/` prefix in the bucket to drop the data.
+- **Teardown:** `datumctl compute destroy birdhaus-pg`, then `bootstrap.hs destroy birdhaus-db` (removes the IAM user, keeps the data). To drop the data too, run `bootstrap.hs destroy-bucket`, which deletes every object version, the bucket, and the shared policy once nothing uses it. `ops/aws-account.hs destroy` does the whole account, including the watcher, but refuses while the Datum Secrets still point at it.

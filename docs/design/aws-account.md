@@ -1,17 +1,17 @@
 # Design: a reproducible AWS account, and moving off the sandbox
 
-Status: proposed (2026-10-28). Nothing below is built yet; the resources still live in the sandbox account.
+Status: built and run (2026-10-29). The resources live in the owner's account, and the sandbox resources are gone.
 
 ## Context
 
-All Birdhaus AWS resources live in the `datum-sandbox-admin` account (007091975061), which is meant for experiments. They are moving to the owner's own account (profile `drewr-admin`, us-east-1). It's a good moment:
+All Birdhaus AWS resources used to live in the `datum-sandbox-admin` account (007091975061), which is meant for experiments. They moved to the owner's own account (profile `drewr-admin`, us-east-1). It was a good moment:
 - The database holds only test data: one test waitlist entry, no orders, and Umami's first page views.
 - SES never finished verifying `birdhaus.store` in the sandbox (DKIM still `PENDING`), so no working alert email is lost.
 - The new account generates new DKIM records anyway.
 
 The data must survive the move, and the Postgres entrypoint must never start against an empty bucket, because it would `initdb` a fresh database.
 
-## What exists in the sandbox (to recreate, then delete)
+## What existed in the sandbox (recreated, then deleted)
 
 - **S3:** bucket `birdhaus-pg-007091975061-use1`, prefix `birdhaus-db/` (WAL-G base backups and WAL), versioned.
 - **IAM:** managed policy `/birdhaus-pg/birdhaus-pg-deployment`, and user `birdhaus-pg-birdhaus-db` (tag `deployment=birdhaus-db`) with one access key.
@@ -44,11 +44,11 @@ The data must survive the move, and the Postgres entrypoint must never start aga
    - The `postgres` heartbeat arrives and the probes pass (`deploy.hs status`).
    - When SES verifies, `test-alert` arrives with DKIM pass.
    - If SES stays `PENDING` well past an hour with correct DNS, recreate the identity to force a check.
-8. **Delete from the sandbox** (sandbox profile):
-   - The watcher: schedules, Lambda and its URL, table, roles, SES identities. Then the IAM user and its key, and the policy.
-   - The bucket: delete all object versions and delete markers, then the bucket. The bucket is deleted last, after a day of healthy archiving in drewr, so a rollback stays possible until then.
-   - Datum's `birdhaus-store-db` is unaffected; it's Stripe and database settings only.
-9. **Docs:** replace sandbox references (account ID, the profile name `datum-sandbox-admin`, the "sandbox AWS account" wording) in `docs/design/postgres-s3.md`, `postgres/README.md`, `ops/watch/README.md` and `AGENTS.md`. Commit `dns/cname.yaml` with the new records.
+8. **Delete from the sandbox** (sandbox profile; done 2026-10-29):
+   - `AWS_PROFILE=datum-sandbox-admin ./ops/aws-account.hs destroy --confirm 007091975061 --project drewr-y4nd1b --session <datum-session>`.
+   - The sandbox watcher had already gone: no table, Lambda, schedules or SES identities remained. The command removed the IAM user and its key, the shared policy, and the bucket (114 object versions and delete markers).
+   - Datum's `birdhaus-store-db` was unaffected; it's Stripe and database settings only.
+9. **Docs:** replace sandbox references (account ID, the profile name `datum-sandbox-admin`, the "sandbox AWS account" wording) in `docs/design/postgres-s3.md`, `postgres/README.md`, `ops/watch/README.md` and `AGENTS.md`. Commit `dns/ses.yaml` with the new records and remove the three sandbox SES records from `dns/cname.yaml`.
 
 ## Everything in code: one entry point for a fresh account
 
@@ -62,15 +62,15 @@ Every piece of AWS setup must be reproducible from the repo, so the steps above 
   3. `ops/watch/deploy.hs deploy --to EMAIL --project P`.
   4. Writes `dns/ses.yaml`: a separate DNSRecordSet `birdhaus-store-ses` holding the SES DKIM CNAMEs, generated from SES. Being its own record set, regenerating it never touches the Stripe records in `dns/cname.yaml`.
   5. Prints the remaining manual steps: apply `dns/ses.yaml` (DNS changes need approval), click the SES verification email, then redeploy Postgres so it picks up `birdhaus-db-watch`.
-- **`copy-data --from-profile OLD`:** copies `birdhaus-db/` from the old account's bucket to this account's bucket.
-  - It refuses unless the source's newest WAL is archived (it checks the source has no newer local `.ready` files, by running `pg_stat_archiver` and `ls archive_status` inside the instance).
+- **`copy-data --from-profile OLD --project P`:** copies `birdhaus-db/` from the old account's bucket to this account's bucket. (`--project` locates the source instance for the WAL check.)
+  - It closes the source's current WAL segment (`pg_switch_wal`) and waits until the archive has drained, using `pg_stat_archiver` and `ls archive_status` inside the instance. Writes after that switch are not copied, so pause consumers first.
   - It refuses if the destination prefix isn't empty.
   - It verifies object counts and bytes after copying.
 - **`switch --project P`:** points Postgres at this account.
-  - Recreates `birdhaus-db-aws` and `birdhaus-db-watch` from this account's resources (deletes the old Secrets first).
+  - Recreates `birdhaus-db-aws` and `birdhaus-db-watch` from this account's resources (deletes the old Secrets first). The alert address comes from the new `birdhaus-watch` Lambda.
   - Refuses unless the new bucket holds a base backup.
-  - Redeploys Postgres, waits for the restore, and prints row counts.
-- **`destroy --confirm ACCOUNT_ID`:** removes every Birdhaus resource in the account, by delegating to `ops/watch/deploy.hs destroy` and `postgres/aws/bootstrap.hs destroy-bucket`.
+  - Restarts the Postgres workload, waits for recovery, and prints row counts.
+- **`destroy --confirm ACCOUNT_ID --project P`:** removes every Birdhaus resource in the account, by delegating to `ops/watch/deploy.hs destroy`, `postgres/aws/bootstrap.hs destroy` and `destroy-bucket`. (`--project` lets it read the Datum Secret that would still be pointing at the account.)
   - It refuses if the account is the one the Datum Secrets currently point at, or if `--confirm` doesn't match the account ID.
   - This is how the sandbox gets cleaned up.
 
@@ -83,11 +83,11 @@ Additions to the existing scripts:
 - **`dns/cname.yaml`:** remove the three sandbox SES records, since SES records now live in the generated `dns/ses.yaml`.
 - **Docs:** a new "Fresh AWS account" section in `README.md`. It covers the prerequisite (an admin profile), the `setup` command, and the two manual steps (DNS approval and the SES verification click). It also covers moving accounts: `setup`, `copy-data`, `switch`, then `destroy` the old account.
 
-With these, the move is just: `setup` (drewr) → apply `dns/ses.yaml` and click verify → `copy-data --from-profile datum-sandbox-admin` → `switch` → check → `destroy` (sandbox, after a day).
+The move ran as: `setup` (drewr) → apply `dns/ses.yaml` and click verify → `copy-data --from-profile datum-sandbox-admin --project P` → `switch --project P` → check → `destroy` (sandbox).
 
 ## Rollback
 
-Until step 8 deletes the old bucket: recreate `birdhaus-db-aws` with the sandbox key (`bootstrap.hs rotate` with the sandbox profile) and restart Postgres. It restores from the old bucket, which has everything up to the switch.
+Rollback was available until the sandbox resources were deleted on 2026-10-29: recreate `birdhaus-db-aws` with the sandbox key (`bootstrap.hs rotate` with the sandbox profile) and restart Postgres. It restored from the old bucket, which had everything up to the switch. That path is now closed.
 
 ## Verification
 
@@ -95,4 +95,4 @@ Until step 8 deletes the old bucket: recreate `birdhaus-db-aws` with the sandbox
 - `wal-g backup-list` inside the instance lists backups in the new bucket only. `aws s3 ls` with drewr shows new WAL arriving every few minutes.
 - `ops/watch/deploy.hs status` (drewr) shows every check up. The test alert arrives.
 - The sandbox account has no `birdhaus-*` resources left (S3, IAM, Lambda, DynamoDB, Scheduler, SES).
-- `git grep 007091975061` finds nothing.
+- The only remaining mention of the sandbox account ID is in this design doc.

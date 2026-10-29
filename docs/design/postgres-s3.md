@@ -1,6 +1,6 @@
 # Design: S3-backed PostgreSQL on Datum Compute
 
-Status: built and deployed as `birdhaus-db` in the sandbox project (us-east-1). Consumers are not connected yet.
+Status: built and deployed as `birdhaus-db` in project `drewr-y4nd1b` (us-east-1). The store and Umami are consumers.
 
 ## Problem
 
@@ -133,7 +133,16 @@ Run under colima with temporary admin credentials and a throwaway prefix in the 
 The `birdhaus` Network (`network/birdhaus.yaml`, `fd20:0:4a::/48`) now holds the store and the database. Moving the database was a test of the design: the workload was recreated on the new network, and the new instance restored from S3 in about 5 s with the same databases and roles. Its address changed (`fd20:0:4a::1:0:0`), so consumers need the new `PGHOST`.
 
 - **Platform gotcha:** changing a workload's network does not work in place for a workload with `reclaimPolicy: Retain`. The retained interface stays bound to the old network, and the instance fails with `NetworkMismatch` even after the interface and workload are deleted, because the instance name (`<workload>-default-<location>-0`) keeps pointing at the stale holder. Instances cannot be deleted by a project user. The workaround was a new workload name (`birdhaus-pg`), which gets a new interface name. The store has `reclaimPolicy: Delete` and moved in place with no problem.
-- The store (`fd20:0:4a::2:0:0`) and database share the network, but the store has no database client yet, so that path is untested. From inside the database instance, a scram login as `birdhaus` over its own VPC address works.
+- The store (`fd20:0:4a::2:0:0`) and database share the network; the store records orders and the waitlist over it, and `/api/health` reports the database as ok. From inside the database instance, a scram login as `birdhaus` over its own VPC address works.
+
+## Moving AWS accounts (2026-10-29)
+
+The backup bucket and the watcher moved from the sandbox account to the owner's account with `ops/aws-account.hs` (see [`aws-account.md`](aws-account.md)):
+
+- `setup` created `birdhaus-pg-053819943201-use1`, the shared policy and the watcher. It left the deployment's IAM user and Datum Secret for `switch`, because the old Secret still existed.
+- `copy-data` switched WAL on the source, waited for the archive to drain, and copied 113 objects (51,293,976 bytes); the source and destination counts and bytes matched.
+- `switch` recreated `birdhaus-db-aws` and `birdhaus-db-watch` and restarted `birdhaus-pg`. It fetched the base backup from the new bucket in 1 s and replayed WAL. `pg_stat_archiver.failed_count` was 0 and new WAL arrived in the new bucket. Counts matched: 1 waitlist entry, 0 orders, 19 Umami events.
+- The old bucket and its IAM user were deleted after verification (2026-10-29), closing the rollback path.
 
 ## Verification
 
@@ -152,4 +161,4 @@ The `birdhaus` Network (`network/birdhaus.yaml`, `fd20:0:4a::/48`) now holds the
 - **Replacement downtime:** a restore takes minutes, and consumers see connection errors meanwhile. Clients need retries, and the unikernel app must not crash-loop on a missing database.
 - **Not highly available**, by choice.
 - **A static key in a secret** is the only credential path available. Limit its policy to one prefix and document rotation.
-- **Sandbox account:** moving to a production AWS account later means re-running the bootstrap with a different account and bucket.
+- **Moving accounts:** done in place on 2026-10-29 with `ops/aws-account.hs` (`copy-data`, then `switch`); see [`aws-account.md`](aws-account.md).

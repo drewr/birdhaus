@@ -9,6 +9,8 @@
 --   ./ops/watch/deploy.hs status
 --   ./ops/watch/deploy.hs sweep          run the 5-minute sweep now
 --   ./ops/watch/deploy.hs test-alert     send a test email
+--   ./ops/watch/deploy.hs dkim           print the SES DKIM CNAMEs as YAML
+--   ./ops/watch/deploy.hs destroy        delete everything this script created
 --
 -- deploy is idempotent. It creates or updates the SES identities, the
 -- DynamoDB table, the Lambda and its public Function URL, the schedules, and
@@ -33,7 +35,7 @@ import System.FilePath ((</>))
 import qualified System.Process as P
 import Turtle hiding (FilePath, (</>))
 
-data Cmd = Deploy Text Text | Status | Sweep | TestAlert
+data Cmd = Deploy Text Text | Status | Sweep | TestAlert | Dkim | Destroy
 
 region, name, domain, from :: Text
 region = "us-east-1"
@@ -49,11 +51,15 @@ main = do
       <|> subcommand "status" "Show every check's state" (pure Status)
       <|> subcommand "sweep" "Run the sweep now" (pure Sweep)
       <|> subcommand "test-alert" "Send a test email" (pure TestAlert)
+      <|> subcommand "dkim" "Print the SES DKIM CNAMEs as YAML records" (pure Dkim)
+      <|> subcommand "destroy" "Delete everything this script created" (pure Destroy)
   case cmd of
     Deploy to project -> deploy to project
     Status -> status
     Sweep -> invoke "{\"task\":\"sweep\"}"
     TestAlert -> invoke "{\"task\":\"test-alert\"}" >> echo "Sent; check the inbox (and spam)."
+    Dkim -> printDkim
+    Destroy -> destroy
 
 -- ---------------------------------------------------------------- deploy
 
@@ -66,7 +72,6 @@ deploy to project = do
   echo "SES identities..."
   haveDomain <- awsOk ["sesv2", "get-email-identity", "--email-identity", domain]
   unless haveDomain $ aws_ ["sesv2", "create-email-identity", "--email-identity", domain]
-  dkim <- T.words <$> awsText ["sesv2", "get-email-identity", "--email-identity", domain, "--query", "DkimAttributes.Tokens", "--output", "text"]
   verified <- awsText ["sesv2", "get-email-identity", "--email-identity", domain, "--query", "VerifiedForSendingStatus", "--output", "text"]
   haveTo <- awsOk ["sesv2", "get-email-identity", "--email-identity", to]
   unless haveTo $ do
@@ -153,9 +158,54 @@ deploy to project = do
       procs "datumctl" ["create", "-f", "-", "--project", project] (select (textToLines (jsonText manifest)))
 
   printf ("\nWatch URL: " % s % "\n") url
-  unless (verified == "True") $ do
-    printf "\nSES has not verified birdhaus.store yet. Add these CNAMEs to dns/cname.yaml and apply:\n"
-    forM_ dkim $ \t -> printf ("  " % s % "._domainkey  ->  " % s % ".dkim.amazonses.com.\n") t t
+  unless (verified == "True") $
+    T.putStrLn "\nSES has not verified birdhaus.store yet; DKIM records: ./ops/watch/deploy.hs dkim"
+
+-- The records for dns/ses.yaml, generated from SES so a new account gets new
+-- tokens without hand-editing DNS.
+printDkim :: IO ()
+printDkim = do
+  tokens <- T.words <$> awsText
+    ["sesv2", "get-email-identity", "--email-identity", domain, "--query", "DkimAttributes.Tokens", "--output", "text"]
+  when (null tokens) $ die "No DKIM tokens; run deploy first."
+  forM_ tokens $ \t ->
+    T.putStr (T.unlines
+      [ "- name: " <> t <> "._domainkey"
+      , "  ttl: 300"
+      , "  cname:"
+      , "    content: " <> t <> ".dkim.amazonses.com."
+      ])
+
+-- Removes the watcher and its data. The Datum Secret birdhaus-db-watch is
+-- left alone: it belongs to the deployment's current account.
+destroy :: IO ()
+destroy = do
+  haveFunction <- awsOk ["lambda", "get-function", "--function-name", name]
+  to <- if haveFunction
+    then awsText ["lambda", "get-function-configuration", "--function-name", name, "--query", "Environment.Variables.TO", "--output", "text"]
+    else pure ""
+  forM_ [name <> "-sweep", name <> "-digest"] $ \s -> do
+    exists <- awsOk ["scheduler", "get-schedule", "--name", s]
+    when exists $ aws_ ["scheduler", "delete-schedule", "--name", s]
+  -- The URL and its permissions go before the function they point at.
+  haveUrl <- awsOk ["lambda", "get-function-url-config", "--function-name", name]
+  when haveUrl $ aws_ ["lambda", "delete-function-url-config", "--function-name", name]
+  forM_ ["url-public", "url-public-invoke"] $ \s ->
+    void $ awsOk ["lambda", "remove-permission", "--function-name", name, "--statement-id", s]
+  when haveFunction $ aws_ ["lambda", "delete-function", "--function-name", name]
+  haveTable <- awsOk ["dynamodb", "describe-table", "--table-name", name]
+  when haveTable $ do
+    aws_ ["dynamodb", "delete-table", "--table-name", name]
+    void $ awsOk ["dynamodb", "wait", "table-not-exists", "--table-name", name]
+  forM_ [name, name <> "-scheduler"] $ \r -> do
+    exists <- awsOk ["iam", "get-role", "--role-name", r]
+    when exists $ do
+      void $ awsOk ["iam", "delete-role-policy", "--role-name", r, "--policy-name", r]
+      aws_ ["iam", "delete-role", "--role-name", r]
+  forM_ (domain : [x | x <- [to], not (T.null x), x /= "None"]) $ \i -> do
+    exists <- awsOk ["sesv2", "get-email-identity", "--email-identity", i]
+    when exists $ aws_ ["sesv2", "delete-email-identity", "--email-identity", i]
+  echo "birdhaus-watch removed."
 
 schedule :: Text -> Text -> Text -> Text -> Text -> Text -> IO ()
 schedule sched expr tz input target role = do

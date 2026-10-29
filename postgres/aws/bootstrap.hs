@@ -10,6 +10,7 @@
 --   ./bootstrap.hs deployment NAME DATUM_PROJECT
 --   ./bootstrap.hs rotate NAME DATUM_PROJECT
 --   ./bootstrap.hs destroy NAME
+--   ./bootstrap.hs destroy-bucket
 --   ./bootstrap.hs test-isolation
 --
 -- The bucket is --bucket, else $BUCKET, else birdhaus-pg-<account id>-<region
@@ -34,6 +35,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import System.Directory (getTemporaryDirectory)
 import System.Environment (getEnvironment)
 import qualified System.Process as P
 import Turtle hiding (FilePath, (</>))
@@ -45,6 +47,7 @@ data Cmd
   | Deployment Text Text
   | Rotate Text Text
   | Destroy Text
+  | DestroyBucket
   | TestIsolation
 
 policyName, iamPath :: Text
@@ -76,6 +79,7 @@ main = do
     Deployment n p -> cmdDeployment c n p
     Rotate n p -> cmdRotate c n p
     Destroy n -> cmdDestroy c n
+    DestroyBucket -> cmdDestroyBucket c
     TestIsolation -> cmdTestIsolation c
 
 -- birdhaus-pg-<account id>-<short region>, e.g. birdhaus-pg-123456789012-use1.
@@ -105,6 +109,8 @@ cmdParser =
       (Rotate <$> argText "name" "Deployment name" <*> argText "project" "Datum project")
     <|> subcommand "destroy" "Delete a deployment's IAM user (its data is kept)"
       (Destroy <$> argText "name" "Deployment name")
+    <|> subcommand "destroy-bucket" "Delete the bucket, every object version and the shared policy"
+      (pure DestroyBucket)
     <|> subcommand "test-isolation" "Prove deployments cannot see each other's data" (pure TestIsolation)
 
 -- Deployment names double as S3 prefixes and IAM user names.
@@ -353,12 +359,69 @@ cmdDestroy :: Ctx -> Text -> IO ()
 cmdDestroy c name = do
   checkName name
   let user = userName name
-  keys <- accessKeyIds c user
-  forM_ keys $ \k -> aws_ c ["iam", "delete-access-key", "--user-name", user, "--access-key-id", k]
+  exists <- awsOk c ["iam", "get-user", "--user-name", user]
+  if not exists
+    then say ("no " <> user <> "; nothing to delete")
+    else do
+      keys <- accessKeyIds c user
+      forM_ keys $ \k -> aws_ c ["iam", "delete-access-key", "--user-name", user, "--access-key-id", k]
+      arn <- policyArn c
+      void $ awsOk c ["iam", "detach-user-policy", "--user-name", user, "--policy-arn", arn]
+      aws_ c ["iam", "delete-user", "--user-name", user]
+      say ("deleted " <> user <> " (data under s3://" <> (bucket c) <> "/" <> name <> "/ kept)")
+
+-- Versioned buckets need every version and delete marker removed before the
+-- bucket can go. WAL-G's keys have no spaces, so the text query is enough.
+purgeBucket :: Ctx -> IO ()
+purgeBucket c = go
+  where
+    go = do
+      out <- awsText c
+        [ "s3api", "list-object-versions", "--bucket", bucket c
+        , "--query", "[Versions,DeleteMarkers][][].[Key,VersionId]", "--output", "text" ]
+      let versions = [pair | l <- T.lines out, Just pair <- [parseLine l]]
+          parseLine l = case T.words l of
+            [k, v] | v /= "None" -> Just (k, v)
+            _ -> Nothing
+      unless (null versions) $ do
+        let batch = take 1000 versions
+        tmp <- getTemporaryDirectory
+        with (mktempfile tmp "purge") $ \path -> do
+          T.writeFile path $ jsonText $ object
+            [ "Objects" .= [object ["Key" .= k, "VersionId" .= v] | (k, v) <- batch]
+            , "Quiet" .= True
+            ]
+          aws_ c ["s3api", "delete-objects", "--bucket", bucket c, "--delete", "file://" <> T.pack path]
+        printf ("  deleted " % d % " object versions\n") (length batch)
+        go
+
+-- Deletes the bucket and, once no user uses it, the shared policy.
+cmdDestroyBucket :: Ctx -> IO ()
+cmdDestroyBucket c = do
+  let b = bucket c
+  exists <- awsOk c ["s3api", "head-bucket", "--bucket", b]
+  if exists
+    then do
+      say ("emptying bucket " <> b <> "...")
+      purgeBucket c
+      aws_ c ["s3api", "delete-bucket", "--bucket", b]
+      say ("deleted bucket " <> b)
+    else say ("no bucket " <> b)
   arn <- policyArn c
-  aws_ c ["iam", "detach-user-policy", "--user-name", user, "--policy-arn", arn]
-  aws_ c ["iam", "delete-user", "--user-name", user]
-  say ("deleted " <> user <> " (data under s3://" <> (bucket c) <> "/" <> name <> "/ kept)")
+  have <- awsOk c ["iam", "get-policy", "--policy-arn", arn]
+  when have $ do
+    attached <- T.words <$> awsText c
+      [ "iam", "list-entities-for-policy", "--policy-arn", arn
+      , "--query", "[length(PolicyUsers),length(PolicyGroups),length(PolicyRoles)]", "--output", "text" ]
+    if all (== "0") attached
+      then do
+        -- IAM refuses to delete a policy that still has non-default versions.
+        versions <- T.words <$> awsText c
+          ["iam", "list-policy-versions", "--policy-arn", arn, "--query", "Versions[?!IsDefaultVersion].VersionId", "--output", "text"]
+        forM_ versions $ \v -> aws_ c ["iam", "delete-policy-version", "--policy-arn", arn, "--version-id", v]
+        aws_ c ["iam", "delete-policy", "--policy-arn", arn]
+        say ("deleted policy " <> arn)
+      else say ("kept policy " <> arn <> "; it is still attached")
 
 -- Deletes every version and delete marker under a prefix (the bucket is versioned).
 purgePrefix :: Ctx -> Text -> IO ()

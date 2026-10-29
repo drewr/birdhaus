@@ -26,7 +26,7 @@ Probes alert after 2 failed sweeps in a row. A reported Postgres problem alerts 
 
 - **DOWN** when a check goes down, with the reason and what to check. **STILL DOWN** every 24 hours while it stays down. **RECOVERED** when it's healthy again.
 - **Weekly status** on Mondays at 9:00 US Central. If it stops arriving, the watcher itself is broken.
-- Sent through SES from `alerts@birdhaus.store`, signed with DKIM (the SES records are in `dns/cname.yaml`). SES is in sandbox mode, so it only delivers to verified addresses. That suits a single operator; adding a recipient means verifying it in SES too.
+- Sent through SES from `alerts@birdhaus.store`, signed with DKIM. The records are generated into `dns/ses.yaml` by `ops/aws-account.hs setup` and applied by hand. SES is in sandbox mode, so it only delivers to verified addresses. That suits a single operator; adding a recipient means verifying it in SES too.
 - If an email fails to send, the state is kept and the next sweep (5 minutes later) retries it.
 
 Stripe separately emails the account owner when webhook deliveries keep failing.
@@ -39,7 +39,11 @@ export AWS_PROFILE=<profile>
 ./ops/watch/deploy.hs status       # each check's state
 ./ops/watch/deploy.hs sweep        # run a sweep now
 ./ops/watch/deploy.hs test-alert   # send a test email
+./ops/watch/deploy.hs dkim         # the SES DKIM records, as YAML
+./ops/watch/deploy.hs destroy      # delete the schedules, Lambda, table, roles and identities
 ```
+
+`ops/aws-account.hs setup` runs `deploy` and writes its `dkim` output to `dns/ses.yaml`.
 
 - `deploy` is idempotent. Changing `checks.json` or `lambda/index.mjs` takes effect on the next `deploy`.
 - Per-check tokens are generated once and kept. Postgres gets its URL and token from the Datum Secret `birdhaus-db-watch` (`WATCH_URL`, `WATCH_CHECK`, `WATCH_TOKEN`); `postgres/deploy.hs` attaches it when it exists. To rotate, delete the Secret and remove `TOKENS` from the Lambda's environment, run `deploy`, then redeploy Postgres.

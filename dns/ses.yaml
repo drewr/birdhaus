@@ -1,0 +1,22 @@
+apiVersion: dns.networking.miloapis.com/v1alpha1
+kind: DNSRecordSet
+metadata:
+  name: birdhaus-store-ses
+  namespace: default
+spec:
+  dnsZoneRef:
+    name: birdhaus-store-1kamnr
+  recordType: CNAME
+  records:
+  - name: sr3f77rsugghd7qkdoytdht5264px643._domainkey
+    ttl: 300
+    cname:
+      content: sr3f77rsugghd7qkdoytdht5264px643.dkim.amazonses.com.
+  - name: ffvk5iyimjvft5eya5a3zchyeb74o5bk._domainkey
+    ttl: 300
+    cname:
+      content: ffvk5iyimjvft5eya5a3zchyeb74o5bk.dkim.amazonses.com.
+  - name: bummdw2sodpxkm4o45cmzi4m47ibwh7v._domainkey
+    ttl: 300
+    cname:
+      content: bummdw2sodpxkm4o45cmzi4m47ibwh7v.dkim.amazonses.com.
