@@ -49,6 +49,12 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `bi
 
    Put the client ID and secret into the store's Secret `birdhaus-store-auth` (`scripts/store-auth-secret.hs`).
 
+## Configuration notes
+
+- Rauthy requires `HQL_SECRET_RAFT`, `HQL_SECRET_API` and `HQL_NODE_ID` even with `HIQLITE=false`; `auth/deploy.hs` generates the first two. Losing `ENC_KEYS` or the cluster secrets means encrypted client/provider secrets can no longer be read.
+- The listen port is `LISTEN_PORT_HTTP` (not `PORT_HTTP`), and `LISTEN_ADDRESS=::` is required on the IPv6-only Network. `RP_ORIGIN` must include `:443`; Rauthy rejects it otherwise.
+- SES on port 587 needs `SMTP_TLS_MODE=starttls`. The default mode is an insecure local relay on port 1025.
+
 ## Operate
 
 - **Logs:** `datumctl compute logs birdhaus-auth`. Startup logs the public URL and any config error; a wrong `PUB_URL`, proxy or encryption key panics at boot.

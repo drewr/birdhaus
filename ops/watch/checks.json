@@ -19,6 +19,12 @@
     "runbook": "The storefront API is not answering. Check `datumctl get workload birdhaus-store` and its logs, and the HTTPProxy."
   },
   {
+    "name": "auth",
+    "kind": "probe",
+    "urls": ["https://login.birdhaus.store/auth/v1/health"],
+    "runbook": "Sign-in is down; guest checkout and existing sessions keep working. Check `datumctl compute logs birdhaus-auth` and the workload, then the `auth` database in Postgres."
+  },
+  {
     "name": "umami",
     "kind": "probe",
     "urls": ["https://stats.birdhaus.store/api/heartbeat", "https://stats.birdhaus.store/t.js"],
