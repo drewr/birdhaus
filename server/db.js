@@ -68,8 +68,8 @@ export async function paidUnits(batch) {
 
 export async function recordOrder(intent) {
   await query(
-    `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at)
-     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8))
+    `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub)
+     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9)
      on conflict (id) do nothing`,
     [
       intent.id,
@@ -79,13 +79,20 @@ export async function recordOrder(intent) {
       intent.currency,
       intent.receipt_email,
       intent.shipping ? JSON.stringify(intent.shipping) : null,
-      intent.created
+      intent.created,
+      intent.metadata.account_sub || null
     ]
   );
 }
 
 export async function markRefunded(paymentIntentId) {
   await query("update orders set status = 'refunded' where id = $1", [paymentIntentId]);
+}
+
+// Claims guest orders placed with an address the identity provider has verified.
+// Older orders keep their guest attribution if the account is already set.
+export async function linkOrders(accountSub, email) {
+  await query("update orders set account_sub = $1 where email = $2 and account_sub is null", [accountSub, email]);
 }
 
 export async function joinWaitlist(batch, email, quantity, postalCode) {

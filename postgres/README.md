@@ -16,7 +16,9 @@ Prerequisites: `datumctl` on PATH, `gh` logged in with `write:packages`, colima 
 
 For an existing account, the individual steps are still available: `./postgres/aws/bootstrap.hs bucket`, then `deployment birdhaus-db <project>`. `ops/aws-account.hs copy-data` and `switch` move an existing deployment to another account; see the root README.
 
-`deploy.hs` options: `--name`, `--workload` (default: the name), `--databases` (default `"birdhaus umami"`), `--network` (default `birdhaus`; create it with `datumctl apply -f network/`), `--location`, `--instance-type`, `--tag`.
+`deploy.hs` options: `--name`, `--workload` (default: the name), `--databases` (default `"birdhaus umami auth"`), `--network` (default `birdhaus`; create it with `datumctl apply -f network/`), `--location`, `--instance-type`, `--tag`.
+
+The `auth` database belongs to Rauthy ([`auth/README.md`](../auth/README.md)). Adding a database means adding its password to the `NAME-db` Secret, passing it in `--databases`, and redeploying: every boot reconciles databases, roles and passwords.
 
 The deployment runs as workload `birdhaus-pg` with deployment name `birdhaus-db` (see the design doc for why). Pass `--workload birdhaus-pg` when redeploying it. Do not change the network of an existing workload in place; recreate it under a new workload name.
 

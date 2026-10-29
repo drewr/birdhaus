@@ -5,16 +5,55 @@ const params = new URLSearchParams(window.location.search);
 export const isPaymentComplete = params.get("payment") === "complete";
 
 const emptyOrder = { status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "" };
+const signedOut = { signedIn: false, id: "", email: "", name: "" };
+
+// Set by fetchMe. Every event carries loggedIn so conversions can be split.
+let account = null;
 
 // Umami custom events. The tracker loads deferred and may be blocked, so this
 // never throws and silently does nothing without it.
 function track(name, data) {
   try {
-    window.umami?.track(name, data);
+    window.umami?.track(name, { ...(data ?? {}), loggedIn: Boolean(account) });
   } catch {
     // analytics must never break the store
   }
 }
+
+// The signed-in account, if any. Also tells Umami who this is (the Rauthy
+// subject, never the email) and reports a login after the callback redirect.
+export const fetchMe = effectFnAff(async (signal) => {
+  try {
+    const response = await fetch("/api/me", { signal, headers: { accept: "application/json" } });
+    if (!response.ok) return signedOut;
+    const me = await response.json();
+    if (!me.signedIn) return signedOut;
+    account = me;
+    try {
+      window.umami?.identify({ id: me.id });
+    } catch {
+      // analytics must never break sign-in
+    }
+    if (params.get("auth") === "in") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("auth");
+      window.history.replaceState({}, "", url);
+      window.addEventListener("load", () => track("login"), { once: true });
+    }
+    return { signedIn: true, id: me.id ?? "", email: me.email ?? "", name: me.name ?? "" };
+  } catch {
+    return signedOut;
+  }
+});
+
+export const signOut = () => {
+  try {
+    window.umami?.track("logout", { loggedIn: true });
+  } catch {
+    // analytics must never break sign-out
+  }
+  fetch("/api/auth/logout", { method: "POST", keepalive: true }).finally(() => window.location.assign("/"));
+};
 
 // Wraps a promise-returning function as an EffectFnAff that always succeeds.
 const effectFnAff = (run) => (_onError, onSuccess) => {

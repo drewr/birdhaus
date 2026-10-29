@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { batchStatus, currentBatch, displayDate } from "./batch.js";
+import * as auth from "./auth.js";
 import * as db from "./db.js";
 
 const app = express();
@@ -60,6 +61,11 @@ app.post("/api/stripe-webhook", express.raw({ type: "application/json" }), async
 });
 
 app.use(express.json());
+
+// Accounts (auth/README.md). Sign-in is optional; a missing configuration or
+// an unreachable identity service must never affect checkout.
+app.use("/api/auth", auth.routes());
+app.get("/api/me", auth.me);
 
 // Probed every 5 minutes by birdhaus-watch (ops/watch). 503 names what failed.
 app.get("/api/health", async (_request, response) => {
@@ -134,6 +140,9 @@ app.post("/api/create-payment-intent", async (request, response) => {
   }
 
   const shipBy = displayDate(batch.shipBy);
+  const account = auth.accountOf(request);
+  const metadata = { product: "bluebird-house", quantity: String(quantity), batch: batch.id, ship_by: batch.shipBy };
+  if (account) metadata.account_sub = account.sub;
   try {
     const stripe = new Stripe(secretKey);
     const intent = await stripe.paymentIntents.create({
@@ -141,7 +150,7 @@ app.post("/api/create-payment-intent", async (request, response) => {
       currency: "usd",
       automatic_payment_methods: { enabled: true },
       description: shipBy ? `Pre-order: Birdhaus Bluebird House × ${quantity}, ships by ${shipBy}` : `Birdhaus Bluebird House × ${quantity}`,
-      metadata: { product: "bluebird-house", quantity: String(quantity), batch: batch.id, ship_by: batch.shipBy }
+      metadata
     });
     response.json({ clientSecret: intent.client_secret, publishableKey });
   } catch (error) {

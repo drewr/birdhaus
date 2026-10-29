@@ -63,7 +63,7 @@ browser ──► umami.identify({ id }) + login/signup/logout ──► birdhau
 
 ## Rauthy configuration
 
-- **Public URL and proxy:** `PUB_URL=https://login.birdhaus.store`, `LISTEN_SCHEME=http`, `PORT_HTTP=8080`, `PROXY_MODE=true`, `TRUSTED_PROXIES` set to the edge's source range once observed in the spike. TLS terminates at the Datum edge, as it does for the store and Umami.
+- **Public URL and proxy:** `PUB_URL=login.birdhaus.store` (Rauthy rejects a scheme here), `LISTEN_SCHEME=http`, `PORT_HTTP=8080`, `PROXY_MODE=true`, `TRUSTED_PROXIES` set to the edge's source range once observed in the spike. With proxy mode on, Rauthy derives the public `https` scheme. TLS terminates at the Datum edge, as it does for the store and Umami.
 - **Database:** `HIQLITE=false`, `PG_HOST=db.birdhaus.store`, `PG_DB_NAME=auth`, `PG_USER=auth`, `PG_TLS=disable`, with the password from the `birdhaus-db-db` Secret. The `auth` database and role are declared in the Postgres workload's `DATABASES` list, so every boot reconciles them.
 - **WebAuthn:** `RP_ID=login.birdhaus.store`, `RP_ORIGIN=https://login.birdhaus.store`, `RP_NAME=Birdhaus`.
 - **Encryption:** at least one `ENC_KEYS` entry and `ENC_KEY_ACTIVE` in the `birdhaus-auth` Secret. These encrypt client secrets and cookies in the database; losing them means re-creating clients and upstream providers.

@@ -39,6 +39,7 @@ data Opts = Opts
   , imageName :: Text
   , stripeSecret :: Text
   , dbSecret :: Text
+  , authSecret :: Text
   , pullSecret :: Text
   , domain :: Text
   , imageTag :: Maybe Text
@@ -59,6 +60,7 @@ parser =
     <*> opt "image-name" 'i' "birdhaus-store" "GHCR package name"
     <*> opt "stripe-secret" 'k' "birdhaus-stripe" "Secret holding the Stripe keys"
     <*> opt "db-secret" 'b' "birdhaus-store-db" "Secret with PG* settings and STRIPE_WEBHOOK_SECRET (scripts/store-db-secret.hs)"
+    <*> opt "auth-secret" 'A' "birdhaus-store-auth" "Secret with the OIDC settings and session key (scripts/store-auth-secret.hs)"
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
     <*> opt "domain" 'd' "birdhaus.store" "Public hostname"
     <*> optional (optText "tag" 't' "Image tag (default: UTC timestamp)")
@@ -92,6 +94,10 @@ main = do
   for_ [stripeSecret o, dbSecret o, pullSecret o] $ \s -> do
     ok <- dcQuiet ["get", "secret", s]
     unless ok $ die ("Secret " <> s <> " not found in project " <> project o)
+  -- Accounts are optional: without the Secret the store runs as a guest-only
+  -- storefront (scripts/store-auth-secret.hs creates it).
+  haveAuth <- dcQuiet ["get", "secret", authSecret o]
+  unless haveAuth $ T.putStrLn ("No Secret " <> authSecret o <> ": deploying without accounts.")
 
   echo "Building the storefront..."
   procs "npm" ["ci"] empty
@@ -117,7 +123,7 @@ main = do
   with (mktempdir tmp "birdhaus") $ \dir -> do
     let workloadFile = dir </> "workload.yaml"
         serviceFile = dir </> "service.yaml"
-    T.writeFile workloadFile (workloadManifest o digestRef)
+    T.writeFile workloadFile (workloadManifest o haveAuth digestRef)
     T.writeFile serviceFile (serviceManifest o)
     printf ("Deploying " % s % " to " % s % " in " % s % "...\n") digestRef (location o) (project o)
     dc ["compute", "deploy", "-f", T.pack workloadFile, "--yes"]
@@ -167,9 +173,9 @@ pushedDigest out =
 timestamp :: IO Text
 timestamp = T.pack . formatTime defaultTimeLocale "%Y%m%d%H%M%S" <$> getCurrentTime
 
-workloadManifest :: Opts -> Text -> Text
-workloadManifest o image =
-  T.unlines
+workloadManifest :: Opts -> Bool -> Text -> Text
+workloadManifest o auth image =
+  T.unlines $
     [ "apiVersion: compute.datumapis.com/v1alpha"
     , "kind: Workload"
     , "metadata:"
@@ -215,15 +221,17 @@ workloadManifest o image =
     , "                name: " <> stripeSecret o
     , "            - secretRef:"
     , "                name: " <> dbSecret o
-    , "            ports:"
-    , "            - name: http"
-    , "              port: 8080"
-    , "              protocol: TCP"
-    , "            securityContext:"
-    , "              capabilities:"
-    , "                drop:"
-    , "                - ALL"
     ]
+      <> (if auth then ["            - secretRef:", "                name: " <> authSecret o] else [])
+      <> [ "            ports:"
+         , "            - name: http"
+         , "              port: 8080"
+         , "              protocol: TCP"
+         , "            securityContext:"
+         , "              capabilities:"
+         , "                drop:"
+         , "                - ALL"
+         ]
 
 -- `compute deploy --http-port` cannot be combined with -f, so declare the
 -- NetworkService and HTTPProxy it would create, plus the custom hostname.

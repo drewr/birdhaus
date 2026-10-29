@@ -52,7 +52,7 @@ parser =
     <*> opt "name" 'n' "birdhaus-db" "Deployment name (workload, image and secret prefix)"
     <*> opt "network" 'N' "birdhaus" "Datum Network (VPC) to attach"
     <*> optional (optText "workload" 'w' "Workload name (default: the deployment name)")
-    <*> (T.words <$> opt "databases" 'd' "birdhaus umami" "Space-separated databases to create")
+    <*> (T.words <$> opt "databases" 'd' "birdhaus umami auth" "Space-separated databases to create")
     <*> opt "instance-type" 'i' "datumcloud-d1-standard-2" "Compute instance type"
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
     <*> optional (optText "tag" 't' "Image tag (default: UTC timestamp)")

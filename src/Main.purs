@@ -19,6 +19,8 @@ foreign import resetCheckout :: Effect Unit
 foreign import isPaymentComplete :: Boolean
 foreign import fetchOrder :: EffectFnAff Order
 foreign import fetchBatch :: EffectFnAff Batch
+foreign import fetchMe :: EffectFnAff Account
+foreign import signOut :: Effect Unit
 -- email, quantity, postal code -> "" on success, else a message to show.
 foreign import joinWaitlist :: String -> Int -> String -> EffectFnAff String
 
@@ -34,6 +36,15 @@ type Order =
   , email :: String
   , shipTo :: Array String
   , shipBy :: String
+  }
+
+-- From /api/me. id is the Rauthy subject, used only for analytics; email is the
+-- verified address. signedIn is false for guests and when sign-in is off.
+type Account =
+  { signedIn :: Boolean
+  , id :: String
+  , email :: String
+  , name :: String
   }
 
 -- From /api/batch. reason is "open", "sold-out" or "closed"; remaining is -1
@@ -64,6 +75,7 @@ type State =
   , batch :: Maybe Batch
   , showWaitlist :: Boolean
   , waitlist :: Waitlist
+  , account :: Account
   }
 
 data Action
@@ -77,6 +89,7 @@ data Action
   | SetWaitlistQuantity String
   | SetWaitlistPostalCode String
   | SubmitWaitlist Event
+  | SignOut
 
 data Query :: Type -> Type
 data Query a
@@ -96,6 +109,7 @@ component = H.mkComponent
       , batch: Nothing
       , showWaitlist: false
       , waitlist: { email: "", quantity: "1", postalCode: "", status: Editing }
+      , account: { signedIn: false, id: "", email: "", name: "" }
       }
   , render
   , eval: H.mkEval $ H.defaultEval { handleAction = handleAction, initialize = Just Initialize }
@@ -109,10 +123,28 @@ render state =
             [ HH.img [ HP.classes [ HH.ClassName "wordmark-mark" ], HP.src "/favicon-48.png", HP.alt "" ]
             , HH.text "BIRDHAUS"
             ]
+        , accountNav state.account
         ]
     , HH.main_
         [ if state.paymentComplete then paymentCompleteView state.order else storefront state ]
     ]
+
+accountNav :: Account -> H.ComponentHTML Action () Aff
+accountNav account =
+  HH.nav [ HP.classes [ HH.ClassName "account-nav" ] ]
+    ( if account.signedIn then
+        [ HH.span [ HP.classes [ HH.ClassName "account-email" ] ]
+            [ HH.text (if account.name == "" then account.email else account.name) ]
+        , HH.button
+            [ HP.type_ HP.ButtonButton
+            , HP.classes [ HH.ClassName "text-button" ]
+            , HE.onClick \_ -> SignOut
+            ]
+            [ HH.text "Sign out" ]
+        ]
+      else
+        [ HH.a [ HP.classes [ HH.ClassName "text-link" ], HP.href "/api/auth/login?next=/" ] [ HH.text "Sign in" ] ]
+    )
 
 storefront :: State -> H.ComponentHTML Action () Aff
 storefront state =
@@ -318,6 +350,8 @@ backToStore label =
 handleAction :: forall output. Action -> H.HalogenM State Action () output Aff Unit
 handleAction = case _ of
   Initialize -> do
+    account <- H.liftAff (fromEffectFnAff fetchMe)
+    H.modify_ _ { account = account }
     state <- H.get
     if state.paymentComplete then do
       order <- H.liftAff (fromEffectFnAff fetchOrder)
@@ -343,6 +377,7 @@ handleAction = case _ of
   SetWaitlistEmail email -> H.modify_ \state -> state { waitlist = state.waitlist { email = email } }
   SetWaitlistQuantity quantity -> H.modify_ \state -> state { waitlist = state.waitlist { quantity = quantity } }
   SetWaitlistPostalCode postalCode -> H.modify_ \state -> state { waitlist = state.waitlist { postalCode = postalCode } }
+  SignOut -> H.liftEffect signOut
   SubmitWaitlist event -> do
     H.liftEffect (preventDefault event)
     state <- H.get

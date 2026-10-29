@@ -12,7 +12,9 @@
 body { margin: 0; min-width: 320px; }
 a { color: inherit; }
 button, input { font: inherit; }
-.site-header { height: 64px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid var(--line); }
+.site-header { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid var(--line); }
+.account-nav { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; font-size: 14px; }
+.account-email { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #444; }
 .wordmark-mark { width: 28px; height: 28px; }
 .wordmark { display: inline-flex; align-items: center; gap: 10px; color: inherit; font-size: 13px; font-weight: 800; letter-spacing: .16em; text-decoration: none; }
 main { width: min(100% - 48px, 960px); margin: 48px 24px 80px; }
