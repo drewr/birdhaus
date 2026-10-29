@@ -66,6 +66,8 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `bi
 - **Lost passkey:** a passkey-only user who loses every device needs an admin-assisted reset in the Admin UI. Users who chose a password can reset it by email.
 - **Proxy trust:** TLS terminates at the Datum edge, so `PROXY_MODE=true` and `TRUSTED_PROXIES` must include the edge's source range. The first deploy trusts everything (`0.0.0.0/0 ::/0`); narrow it after checking the peer addresses in the instance logs, or Rauthy will either block requests or accept spoofed client IPs. `SESSION_VALIDATE_IP` is on, so a wrong range shows up as sessions with the proxy's IP in the Admin UI.
 
+- **The public hostname hairpins:** from inside the `birdhaus` Network, `https://login.birdhaus.store` times out through the edge. The store's server-side OIDC calls therefore use `OIDC_INTERNAL_URL=http://auth-internal.birdhaus.store:8080`; `auth-internal` is the AAAA record in `dns/aaaa.yaml` for the auth instance's private address. The browser still uses the public issuer. If the auth instance is replaced with a new address, update that record (and the Secret) or sign-in fails while the site keeps selling.
+
 ## Limits
 
 - **Email login is passkey-first**, not a per-login magic link: Rauthy's magic link activates the account and sets the first passkey or password. Users without a passkey can keep a password.

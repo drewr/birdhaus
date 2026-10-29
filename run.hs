@@ -1,6 +1,6 @@
 #!/usr/bin/env nix-shell
 #! nix-shell -i runghc -p "haskellPackages.ghcWithPackages (pkgs: [ pkgs.turtle pkgs.base64-bytestring ])"
-#! nix-shell -p nodejs_22 gh git colima
+#! nix-shell -p nodejs_22 gh git
 
 -- Build the storefront, push it to GHCR as a Compute image, and deploy it to
 -- Datum Compute behind https://birdhaus.store.
@@ -26,7 +26,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
-import System.Directory (doesFileExist, findExecutable, getHomeDirectory, getTemporaryDirectory)
+import System.Directory (findExecutable, getTemporaryDirectory)
 import System.FilePath ((</>))
 import Turtle hiding (FilePath, (</>))
 
@@ -103,7 +103,6 @@ main = do
   procs "npm" ["ci"] empty
   procs "npm" ["run", "build"] empty
 
-  buildkit <- ensureBuildkit
   ghUser <- T.toLower . T.strip . snd <$> procStrict "gh" ["api", "user", "--jq", ".login"] empty
   tag <- maybe timestamp pure (imageTag o)
   let image = "ghcr.io/" <> ghUser <> "/" <> imageName o <> ":" <> tag
@@ -114,8 +113,10 @@ main = do
     writeDockerConfig dir ghUser ghToken
     export "DOCKER_CONFIG" (T.pack dir)
     printf ("Building and pushing " % s % "...\n") image
+    -- By default datumctl uses the container engine's BuildKit (honoring
+    -- DOCKER_HOST/DOCKER_CONTEXT); BUILDKIT_HOST overrides it.
     out <- fold (streamLines (inprocWithErr datumctl
-      [ "compute", "build", "--project", project o, "--buildkit-host", buildkit
+      [ "compute", "build", "--project", project o
       , "--push", "--output", image, "." ] empty)) Fold.list
     unset "DOCKER_CONFIG"
     maybe (die "Could not find the pushed digest in the build output") pure (pushedDigest out)
@@ -132,19 +133,6 @@ main = do
   (_, canonical) <- procStrict datumctl
     ["get", "httpproxy", workload o, "-o", "jsonpath={.status.canonicalHostname}", "--project", project o] empty
   printf ("Deployed: https://" % s % " (also https://" % s % ")\n") (domain o) canonical
-
--- Builds go through the BuildKit inside the containerd-runtime colima VM.
-ensureBuildkit :: IO Text
-ensureBuildkit = do
-  home <- getHomeDirectory
-  let sock = home </> ".colima/default/buildkitd.sock"
-  (status, _, _) <- procStrictWithErr "colima" ["status"] empty
-  unless (status == ExitSuccess) $ do
-    echo "Starting colima..."
-    procs "colima" ["start"] empty
-  present <- doesFileExist sock
-  unless present $ die ("No BuildKit socket at " <> T.pack sock <> "; is colima using the containerd runtime?")
-  pure ("unix://" <> T.pack sock)
 
 -- A throwaway Docker config so datumctl can push to GHCR with the gh token.
 writeDockerConfig :: FilePath -> Text -> Text -> IO ()

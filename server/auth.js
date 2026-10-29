@@ -8,6 +8,10 @@ import * as db from "./db.js";
 // only disables accounts: checkout and the rest of the store keep running.
 
 const ISSUER = (process.env.OIDC_ISSUER || "").replace(/\/+$/, "");
+// The public hostname hairpins through the edge and times out from inside the
+// Datum Network, so discovery, JWKS and the token exchange use the private
+// address. The issuer stays public for token validation and browser redirects.
+const INTERNAL = (process.env.OIDC_INTERNAL_URL || "").replace(/\/+$/, "");
 const CLIENT_ID = process.env.OIDC_CLIENT_ID || "";
 const CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET || "";
 const REDIRECT_URI = process.env.OIDC_REDIRECT_URI || "";
@@ -24,12 +28,21 @@ let jwks;
 
 // Cached discovery and JWKS. A failure is retried on the next login instead of
 // leaving the store unable to sign anyone in for the life of the instance.
+function internalEndpoint(url) {
+  if (!INTERNAL) return url;
+  const target = new URL(url);
+  if (target.origin !== new URL(ISSUER).origin) return url;
+  return `${INTERNAL}${target.pathname}${target.search}`;
+}
+
 async function metadata() {
   if (!discovery) {
     discovery = (async () => {
-      const response = await fetch(`${ISSUER}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(`${INTERNAL || ISSUER}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw new Error(`discovery returned ${response.status}`);
       const found = await response.json();
+      found.token_endpoint = internalEndpoint(found.token_endpoint);
+      found.jwks_uri = internalEndpoint(found.jwks_uri);
       jwks = createRemoteJWKSet(new URL(found.jwks_uri));
       return found;
     })().catch((error) => {

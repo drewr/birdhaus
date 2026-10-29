@@ -31,6 +31,7 @@ data Opts = Opts
   , issuer :: Text
   , clientId :: Text
   , redirect :: Text
+  , internalUrl :: Text
   }
 
 parser :: Parser Opts
@@ -42,6 +43,7 @@ parser =
     <*> opt "issuer" 'i' "https://login.birdhaus.store" "Rauthy issuer URL"
     <*> optText "client-id" 'c' "OIDC client ID from Rauthy"
     <*> opt "redirect" 'r' "https://birdhaus.store/api/auth/callback" "Callback URL registered for the client"
+    <*> opt "internal-url" 'I' "" "Private base for server-side OIDC calls (optional)"
   where
     opt n short def help =
       optText n short (Specific (HelpMessage (help <> " (default: " <> def <> ")"))) <|> pure def
@@ -74,6 +76,7 @@ main = do
             , "OIDC_CLIENT_ID" .= clientId o
             , "OIDC_CLIENT_SECRET" .= secret
             , "OIDC_REDIRECT_URI" .= redirect o
+            , "OIDC_INTERNAL_URL" .= internalUrl o
             , "SESSION_SECRET" .= sessionKey
             ]
         ]

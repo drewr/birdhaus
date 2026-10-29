@@ -38,7 +38,7 @@ After payment Stripe redirects to `/?payment=complete&payment_intent=…&payment
 - The database and webhook settings come from a second secret (default `birdhaus-store-db`, override with `--db-secret`), created once by `./scripts/store-db-secret.hs --project <project>`.
 - The pre-order batch is set with `--batch` (default `xmas-2026`), `--cap` (default `20`, the Christmas 2026 batch), `--closes` (default `2026-12-01`) and `--ship-by` (default `2026-12-15`).
 - Other options (`--location`, `--workload`, `--image-name`, `--domain`, `--tag`, `--session`) have defaults; run `./run.hs --help`.
-- Image builds use `datumctl compute build` against BuildKit in a colima VM, which the script starts if needed. Stop it afterwards with `colima stop`.
+- Image builds use `datumctl compute build`, which uses the container engine's BuildKit (Docker, OrbStack, Colima, …) and honors `DOCKER_HOST`/`DOCKER_CONTEXT`; set `BUILDKIT_HOST` to use a different BuildKit.
 - Every run replaces the running instance with the new image digest; expect a few seconds of rollout.
 
 Production caching: hashed files under `/assets` are immutable for a year; `index.html` is served from memory with a content-hash ETag and `no-cache`. Reproducible image builds pin file mtimes, so Express's default size+mtime ETags cannot tell builds apart.
