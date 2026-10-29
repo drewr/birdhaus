@@ -4,7 +4,7 @@ Self-hosted [Rauthy](https://github.com/sebadob/rauthy) 0.37.2 at https://login.
 
 ## Deploy
 
-Prerequisites: `datumctl` on PATH, the Postgres workload is running, and you know the Mailgun SMTP credentials. Run from the repo root.
+Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `birdhaus-ses` SMTP Secret exists. Run from the repo root.
 
 1. **Add the database.** Put a random password under the key `auth` in the Secret `birdhaus-db-db` (recreate the Secret with all existing keys plus the new one), then redeploy Postgres so its entrypoint creates the database and role:
 
@@ -14,26 +14,35 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and you kno
 
    The restart is graceful (WAL switches and drains), so no committed write is lost; the restore takes seconds.
 
-2. **Store the SMTP settings** in their own Secret. Rauthy copies them into `birdhaus-auth` on first run:
+2. **Store the SES SMTP settings** in their own Secret. Rauthy copies them into `birdhaus-auth` on first run. `birdhaus.store` is verified in the `drewr` account (DKIM is `SUCCESS`) and SES production access is enabled, so it can deliver to customers.
+
+   SES SMTP needs an IAM user allowed only `ses:SendEmail` and `ses:SendRawEmail` on the domain identity, plus an access key. The SMTP password is derived from that key, not the key itself:
+
+   ```
+   SMTP username = access key ID
+   SMTP password = base64(0x04 || HMAC-SHA256("AWS4" + secret_access_key, "SendRawEmail"))
+   ```
+
+   The `drewr` user cannot create IAM users, so an admin (root) has to create this one. Then create the Secret:
 
    ```sh
    datumctl create -f - --project <project> <<'YAML'
    apiVersion: v1
    kind: Secret
    metadata:
-     name: birdhaus-mailgun
+     name: birdhaus-ses
      namespace: default
    type: Opaque
    stringData:
-     SMTP_URL: smtp.mailgun.org
+     SMTP_URL: email-smtp.us-east-1.amazonaws.com
      SMTP_PORT: "587"
-     SMTP_USERNAME: postmaster@birdhaus.store
-     SMTP_PASSWORD: <Mailgun SMTP password>
+     SMTP_USERNAME: <SMTP access key ID>
+     SMTP_PASSWORD: <derived SMTP password>
      SMTP_FROM: Birdhaus <login@birdhaus.store>
    YAML
    ```
 
-   The domain already has Mailgun SPF, DKIM, DMARC and MX records (`dns/`).
+   birdhaus-watch already sends through the same SES identity, from `alerts@birdhaus.store`.
 
 3. **Deploy the workload** (the Secret `birdhaus-auth` is created on first run):
 

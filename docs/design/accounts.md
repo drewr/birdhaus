@@ -68,7 +68,7 @@ browser ──► umami.identify({ id }) + login/signup/logout ──► birdhau
 - **WebAuthn:** `RP_ID=login.birdhaus.store`, `RP_ORIGIN=https://login.birdhaus.store`, `RP_NAME=Birdhaus`.
 - **Encryption:** at least one `ENC_KEYS` entry and `ENC_KEY_ACTIVE` in the `birdhaus-auth` Secret. These encrypt client secrets and cookies in the database; losing them means re-creating clients and upstream providers.
 - **Admin:** bootstrap the first admin with `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_PLAIN` from the Secret, then force MFA on the Admin UI.
-- **Email:** Mailgun SMTP (`SMTP_URL`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`); the domain already has Mailgun SPF, DKIM, DMARC and MX. Magic links and account mail come from `login@birdhaus.store`.
+- **Email:** SES SMTP (`SMTP_URL`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`). `birdhaus.store` is verified in the `drewr` account, DKIM is `SUCCESS` and SES production access is enabled, so it can send to customers. The SMTP credentials are an IAM user's key and derived SMTP password, stored in `birdhaus-ses`; magic links and account mail come from `login@birdhaus.store`.
 - **Registration:** `OPEN_USER_REG=true`.
 - **Google:** a Web application OAuth client with redirect `https://login.birdhaus.store/auth/v1/providers/callback`; the client ID and secret are entered in Rauthy's Providers page and stored encrypted in Postgres.
 
@@ -103,7 +103,7 @@ Changed:
 ## Verification
 
 - Google round-trips to `birdhaus.store` and `/api/me` returns the account; a passkey registration survives a logout.
-- A magic link from Mailgun activates a new account (DKIM pass).
+- A magic link through SES activates a new account (DKIM pass).
 - A previous guest order with the same verified email appears in the account after login.
 - Umami shows identified sessions and `login`/`signup` events; `checkout-start` splits by `loggedIn`.
 - With `birdhaus-auth` stopped: login fails, guest checkout and the webhook still work, and the watch probe reports the auth service down.
@@ -114,6 +114,6 @@ Changed:
 - **Rauthy is a small project.** The upstream-provider docs cover GitHub only; Google and generic OIDC exist in the admin UI but need a hands-on check. Fallback is Zitadel v4.
 - **Passkey loss.** A passkey-only user who loses every device needs an admin reset. Offer the password option and document the recovery path.
 - **Proxy trust.** With edge-terminated TLS, Rauthy must trust the edge's forwarded headers; a wrong `TRUSTED_PROXIES` either blocks requests or lets clients spoof their address. The spike pins the range, and `SESSION_VALIDATE_IP` is left on so a bad setup shows up in the Admin UI.
-- **SMTP dependency.** Email login needs Mailgun; Google login and the store do not.
+- **SMTP dependency.** Email login needs SES SMTP; Google login and the store do not. SES SMTP credentials need an IAM user, and the `drewr` user cannot create one, so an admin (root) has to do it.
 - **Auth outage** blocks sign-in but not sales; the store's auth calls must time out quickly and never gate checkout.
 - **Umami SSO is not possible** on self-hosted Umami; the dashboard login stays separate.

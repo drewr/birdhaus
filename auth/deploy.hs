@@ -9,7 +9,7 @@
 --
 -- Prerequisites: datumctl on PATH; the Postgres workload is running with an
 -- `auth` database and password in the NAME-db Secret; the Secret
--- birdhaus-mailgun holds the SMTP settings; --admin-email is the operator's
+-- birdhaus-ses holds the SMTP settings; --admin-email is the operator's
 -- address. The Secret birdhaus-auth is created on first run. Run from the repo
 -- root.
 
@@ -63,7 +63,7 @@ parser =
     <*> opt "db-host" 'D' "db.birdhaus.store" "Postgres hostname (a name, not an IPv6 literal)"
     <*> opt "db-secret" 'S' "birdhaus-db-db" "Secret holding the database passwords"
     <*> opt "db-name" 'd' "auth" "Database name (the Postgres DATABASES list must include it)"
-    <*> opt "smtp-secret" 'm' "birdhaus-mailgun" "Secret with the SMTP settings"
+    <*> opt "smtp-secret" 'm' "birdhaus-ses" "Secret with the SMTP settings"
     <*> optText "admin-email" 'a' "Email address for the bootstrap admin"
     <*> opt "trusted-proxies" 't' "0.0.0.0/0 ::/0" "Edge proxy CIDRs, space separated (narrow after the spike)"
     <*> opt "instance-type" 'i' "datumcloud-d1-standard-2" "Compute instance type"
