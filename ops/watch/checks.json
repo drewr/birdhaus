@@ -7,6 +7,12 @@
     "runbook": "See postgres/README.md. Check `datumctl compute logs birdhaus-pg` for [entrypoint] and archive errors, and `select * from pg_stat_archiver`. Silence means the instance, its network or the Datum location is down."
   },
   {
+    "name": "auth",
+    "kind": "probe",
+    "urls": ["https://login.birdhaus.store/auth/v1/health"],
+    "runbook": "Sign-in and account pages are down, but the store and guest checkout keep working. Check `datumctl compute logs birdhaus-auth`; if the health body reports db_healthy false, the database is the problem (see postgres)."
+  },
+  {
     "name": "store",
     "kind": "probe",
     "urls": ["https://birdhaus.store/api/health"],

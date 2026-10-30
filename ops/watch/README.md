@@ -9,6 +9,7 @@ Defined in `checks.json`; each check carries the "what to check" text that goes 
 | Check | How | Down when |
 |---|---|---|
 | `postgres` | Heartbeat: the Postgres entrypoint reports every 5 minutes | It reports a problem, or is silent for over 15 minutes (instance, network or location down) |
+| `auth` | Probe of `https://login.birdhaus.store/auth/v1/health` | Not 200; sign-in and account pages are down (guest checkout keeps working) |
 | `store` | Probe of `https://birdhaus.store/api/health` | Not 200; the body names the database or webhook as failing |
 | `checkout` | Probe of `https://birdhaus.store/api/batch` | Not 200 |
 | `umami` | Probe of `https://stats.birdhaus.store/api/heartbeat` and `/t.js` | Not 200 |
