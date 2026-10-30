@@ -48,6 +48,13 @@ main = do
     magick [markFull, "-resize", "512x512", "-strip", "public/mark-512.png"]
     magick [markFull, "-resize", "180x180", "-strip", "public/apple-touch-icon.png"]
 
+    -- 4:1 canvases for the Rauthy login page, which puts a logo that hugs its
+    -- image at the left of the header. A card-width canvas centers the mark.
+    magick [ "public/mark-512.png", "-background", "white", "-gravity", "center"
+           , "-extent", "2048x512", "-strip", "public/mark-login.png" ]
+    magick [ "public/logo.png", "-background", "white", "-gravity", "center"
+           , "-extent", "4560x1140", "-strip", "public/logo-login.png" ]
+
     -- Tiny sizes: thicken the pencil so it survives downscaling.
     forM_ [16, 32, 48 :: Int] $ \size -> do
       let px = T.pack (show size)
