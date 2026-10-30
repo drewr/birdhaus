@@ -199,7 +199,9 @@ export function routes() {
           console.error("Could not link past orders:", error.message);
         }
       }
-      response.cookie(SESSION_COOKIE, sign({ sub: payload.sub, email, name, exp: now() + SESSION_TTL }), cookieOptions(SESSION_TTL));
+      // The ID token is kept so sign-out can end the Rauthy session too;
+      // without it Rauthy would silently sign the same user back in.
+      response.cookie(SESSION_COOKIE, sign({ sub: payload.sub, email, name, id_token: tokens.id_token, exp: now() + SESSION_TTL }), cookieOptions(SESSION_TTL));
       // The fragment tells the store's client to count a login in analytics and
       // is removed from the address bar before the page settles.
       const destination = new URL(pending.next || "/", new URL(REDIRECT_URI).origin);
@@ -211,9 +213,24 @@ export function routes() {
     }
   });
 
-  router.post("/logout", (request, response) => {
+  // RP-initiated logout. Clearing only the store's cookie leaves the Rauthy
+  // session alive, so the next sign-in silently reuses it. Send the browser to
+  // Rauthy's end-session endpoint with the ID token instead.
+  router.get("/logout", async (request, response) => {
+    const session = unsign(cookies(request)[SESSION_COOKIE]);
     response.clearCookie(SESSION_COOKIE, cookieOptions(0));
-    response.json({ ok: true });
+    if (!session?.id_token) return response.redirect("/");
+    try {
+      const found = await metadata();
+      if (!found.end_session_endpoint) return response.redirect("/");
+      const url = new URL(found.end_session_endpoint);
+      url.searchParams.set("id_token_hint", session.id_token);
+      url.searchParams.set("post_logout_redirect_uri", new URL("/", new URL(REDIRECT_URI).origin).toString());
+      response.redirect(url.toString());
+    } catch (error) {
+      console.error("Could not end the identity session:", error.message);
+      response.redirect("/");
+    }
   });
 
   return router;

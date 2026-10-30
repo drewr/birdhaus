@@ -62,7 +62,9 @@ export const signOut = () => {
   } catch {
     // analytics must never break sign-out
   }
-  fetch("/api/auth/logout", { method: "POST", keepalive: true }).finally(() => window.location.assign("/"));
+  // A full navigation, not fetch: the endpoint redirects to Rauthy to end the
+  // identity session, then back to the store.
+  window.location.assign("/api/auth/logout");
 };
 
 // If the batch can't be loaded, show the store as open; the server still
