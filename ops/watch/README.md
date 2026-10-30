@@ -37,6 +37,7 @@ Stripe separately emails the account owner when webhook deliveries keep failing.
 ```sh
 export AWS_PROFILE=<profile>
 ./ops/watch/deploy.hs deploy --to <email> --project <datum-project>   # create or update everything
+./ops/watch/deploy.hs code         # update only checks.json and the Lambda code
 ./ops/watch/deploy.hs status       # each check's state
 ./ops/watch/deploy.hs sweep        # run a sweep now
 ./ops/watch/deploy.hs test-alert   # send a test email

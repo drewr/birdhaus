@@ -35,7 +35,7 @@ import System.FilePath ((</>))
 import qualified System.Process as P
 import Turtle hiding (FilePath, (</>))
 
-data Cmd = Deploy Text Text | Status | Sweep | TestAlert | Dkim | Destroy
+data Cmd = Deploy Text Text | Status | Sweep | TestAlert | Code | Dkim | Destroy
 
 region, name, domain, from :: Text
 region = "us-east-1"
@@ -51,6 +51,7 @@ main = do
       <|> subcommand "status" "Show every check's state" (pure Status)
       <|> subcommand "sweep" "Run the sweep now" (pure Sweep)
       <|> subcommand "test-alert" "Send a test email" (pure TestAlert)
+      <|> subcommand "code" "Update only the Lambda code and checks.json" (pure Code)
       <|> subcommand "dkim" "Print the SES DKIM CNAMEs as YAML records" (pure Dkim)
       <|> subcommand "destroy" "Delete everything this script created" (pure Destroy)
   case cmd of
@@ -58,6 +59,7 @@ main = do
     Status -> status
     Sweep -> invoke "{\"task\":\"sweep\"}"
     TestAlert -> invoke "{\"task\":\"test-alert\"}" >> echo "Sent; check the inbox (and spam)."
+    Code -> code
     Dkim -> printDkim
     Destroy -> destroy
 
@@ -244,6 +246,21 @@ readChecks = do
     str k o = case KM.lookup k o of
       Just (A.String t) -> Just t
       _ -> Nothing
+
+-- Updates the Lambda zip only. checks.json and lambda/index.mjs changes do not
+-- touch IAM, SES, DynamoDB or the schedules, so this path works with a
+-- Lambda-only profile.
+code :: IO ()
+code = do
+  exists <- awsOk ["lambda", "get-function", "--function-name", name]
+  unless exists $ die ("No Lambda " <> name <> " in this AWS account")
+  tmp <- getTemporaryDirectory
+  with (mktempdir tmp "watch") $ \dir -> do
+    let zipFile = T.pack (dir </> "function.zip")
+    procs "zip" ["-q", "-j", zipFile, "ops/watch/lambda/index.mjs", "ops/watch/checks.json"] empty
+    aws_ ["lambda", "update-function-code", "--function-name", name, "--zip-file", "fileb://" <> zipFile]
+    aws_ ["lambda", "wait", "function-updated-v2", "--function-name", name]
+  echo "Lambda code updated; the new checks take effect on the next sweep."
 
 -- ---------------------------------------------------------------- operate
 
