@@ -1,6 +1,6 @@
 # Birdhaus Store
 
-A single-product storefront for the $40 Bluebird House. The frontend is a PureScript Halogen component with a JavaScript bridge for Stripe.js. The Express server creates a fixed-price Stripe PaymentIntent so the amount is never accepted from the browser.
+A single-product storefront for the $40 Bluebird House. Pages are server-rendered by PureScript with HTMX; a small PureScript/JavaScript client mounts Stripe Elements. The Express server creates a fixed-price Stripe PaymentIntent so the amount is never accepted from the browser.
 
 ## Run locally
 
@@ -23,7 +23,7 @@ The pencil sketches in `brand/` are the source. `./scripts/brand-assets.hs` leve
 
 ## Order confirmation
 
-After payment Stripe redirects to `/?payment=complete&payment_intent=…&payment_intent_client_secret=…`. The page calls `GET /api/order/:id?client_secret=…`, which looks the PaymentIntent up in Stripe and returns only when the client secret matches, so order details are visible only to the buyer. The page shows the order number, date, items, total, shipping address and receipt email, and has separate states for processing, declined and unavailable orders. Stripe sends receipt emails only in live mode, and only if receipts are enabled in the Dashboard.
+After payment Stripe redirects to `/order?payment_intent=…&payment_intent_client_secret=…`. The server looks the PaymentIntent up in Stripe and renders it only when the client secret matches, so order details are visible only to the buyer. The page shows the order number, date, items, total, pick-up time (or shipping address for older orders) and receipt email, and has separate states for processing, declined and unavailable orders. Stripe sends receipt emails only in live mode, and only if receipts are enabled in the Dashboard.
 
 ## Deploy to Datum Cloud
 
@@ -83,7 +83,9 @@ Setup and operations are in [`auth/README.md`](auth/README.md); the design and o
 
 ## Stripe
 
-Stripe test mode is enabled by supplying test keys. Before launch, add live keys in the deployment environment and configure Stripe's payment methods in the Dashboard. The current checkout charges $40 USD and collects an email and shipping address. Shipping cost and tax are not added to the amount yet. Orders are recorded from verified webhooks, not the browser return page (see Pre-orders).
+Stripe test mode is enabled by supplying test keys. Before launch, add live keys in the deployment environment and configure Stripe's payment methods in the Dashboard. Checkout is two steps: `/checkout` chooses delivery (local pick-up at an admin-defined slot; shipping is greyed out until USPS pricing is added) and `/checkout/pay` takes payment. It charges $40 USD per house and collects an email; tax is not added yet.
+
+Store admins (members of the Rauthy group `birdhaus-admins`) see an Admin link: `/admin` lists recent orders and `/admin/pickup` manages pick-up locations, time slots and the pick-up schedule. To grant access, create the group in Rauthy, add users to it, and add `groups` to the Allowed Scopes of each store client; members then sign out and back in. Orders are recorded from verified webhooks, not the browser return page (see Pre-orders).
 
 ## Analytics
 

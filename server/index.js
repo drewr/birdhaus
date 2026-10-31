@@ -10,6 +10,7 @@ import { readCart, writeCart, clearCart } from "./cart.js";
 import { formatOrder } from "./order-format.js";
 import * as auth from "./auth.js";
 import * as db from "./db.js";
+import * as pickup from "./pickup.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4242);
@@ -53,9 +54,23 @@ function chrome(request, reason = "open") {
     accountId: account?.sub ?? "",
     accountLabel: account ? account.name || account.email : "",
     signedIn: Boolean(account),
+    isAdmin: Boolean(account?.admin),
     cartQty: readCart(request).qty,
     reason
   };
+}
+
+// The cart's slot if it can still be booked; null when unset, stale, or the
+// database is down (pick-up then can't proceed, the rest of the store can).
+async function cartSlot(request) {
+  const { slot } = readCart(request);
+  if (slot === null || !db.isConfigured()) return null;
+  try {
+    return await pickup.bookableSlot(slot);
+  } catch (error) {
+    console.error("Could not load the pick-up slot:", error.message);
+    return null;
+  }
 }
 
 // Units the stepper may reach: the batch cap (when nearly gone) or 99.
@@ -158,9 +173,22 @@ app.post("/api/create-payment-intent", async (request, response) => {
     return response.status(409).json({ error: `Only ${status.remaining} left in this batch. Lower the quantity, or join the waitlist for more.` });
   }
 
+  // Pick-up is the only delivery method until shipping is added.
+  const slot = await cartSlot(request);
+  if (!slot) return response.status(409).json({ error: "Choose a new pick-up time." });
+  const label = pickup.slotLabel(slot);
+
   const shipBy = displayDate(batch.shipBy);
   const account = auth.accountOf(request);
-  const metadata = { product: "bluebird-house", quantity: String(quantity), batch: batch.id, ship_by: batch.shipBy };
+  const metadata = {
+    product: "bluebird-house",
+    quantity: String(quantity),
+    batch: batch.id,
+    ship_by: batch.shipBy,
+    fulfillment: "pickup",
+    pickup_slot_id: String(slot.id),
+    pickup_label: label
+  };
   if (account) metadata.account_sub = account.sub;
   try {
     const stripe = new Stripe(secretKey);
@@ -168,7 +196,7 @@ app.post("/api/create-payment-intent", async (request, response) => {
       amount: quantity * UNIT_PRICE_CENTS,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
-      description: shipBy ? `Pre-order: Birdhaus Bluebird House × ${quantity}, ships by ${shipBy}` : `Birdhaus Bluebird House × ${quantity}`,
+      description: `${shipBy ? "Pre-order: " : ""}Birdhaus Bluebird House × ${quantity}, pick-up: ${label}`,
       metadata
     });
     response.json({ clientSecret: intent.client_secret, publishableKey });
@@ -198,6 +226,8 @@ async function lookupOrder(id, clientSecret) {
       shipBy: displayDate(intent.metadata.ship_by),
       email: intent.receipt_email,
       shipping: intent.shipping && { name: intent.shipping.name, address: intent.shipping.address },
+      fulfillment: intent.metadata.fulfillment === "pickup" ? "pickup" : "ship",
+      pickupLabel: intent.metadata.pickup_label || "",
       error: intent.last_payment_error?.message
     };
   } catch (error) {
@@ -219,18 +249,19 @@ app.get("/api/order/:id", async (request, response) => {
 
 // Add the chosen amount to what's already in the cart (form POST, 303 to /cart).
 app.post("/cart/add", (request, response) => {
-  const current = readCart(request).qty;
+  const cart = readCart(request);
   const add = Number.parseInt(request.body?.quantity, 10);
-  const qty = Number.isInteger(add) && add > 0 ? Math.min(current + add, 99) : Math.max(current, 1);
-  writeCart(response, qty);
+  const qty = Number.isInteger(add) && add > 0 ? Math.min(cart.qty + add, 99) : Math.max(cart.qty, 1);
+  writeCart(response, { ...cart, qty });
   response.redirect(303, "/cart");
 });
 
 // The cart stepper. HTMX gets the re-rendered #cart fragment; no-JS gets a 303.
 app.post("/cart/update", async (request, response) => {
+  const cart = readCart(request);
   const target = Number.parseInt(request.body?.quantity, 10);
-  const qty = Number.isInteger(target) ? Math.min(Math.max(target, 1), 99) : readCart(request).qty;
-  writeCart(response, qty);
+  const qty = Number.isInteger(target) ? Math.min(Math.max(target, 1), 99) : cart.qty;
+  writeCart(response, { ...cart, qty });
   if (request.get("HX-Request")) {
     const status = batchStatus(batch, await paidUnits());
     const vm = {
@@ -338,11 +369,69 @@ app.get("/cart", async (request, response) => {
   response.set("Cache-Control", "no-cache").type("html").send(views.cartPage(vm));
 });
 
+// Checkout step 1: how to get the house. Shipping is shown but greyed out until
+// USPS pricing is added (docs/design/fulfillment.md); pick-up is the only choice.
+async function deliveryPage(request, response, error = "") {
+  const cart = readCart(request);
+  let slots = [];
+  let available = db.isConfigured();
+  if (available) {
+    try {
+      slots = await pickup.upcomingSlots();
+    } catch (failure) {
+      console.error("Could not load pick-up slots:", failure.message);
+      available = false;
+    }
+  }
+  const vm = {
+    ...chrome(request),
+    quantity: cart.qty,
+    total: formatTotal(cart.qty),
+    error,
+    slots: available
+      ? slots.map((s) => ({ id: s.id, location: s.name, details: s.details, time: pickup.slotTime(s.starts_at, s.ends_at), selected: s.id === cart.slot }))
+      : []
+  };
+  response.set("Cache-Control", "no-cache").type("html").send(views.deliveryPage(vm));
+}
+
 app.get("/checkout", (request, response) => {
+  if (readCart(request).qty <= 0) return response.redirect(303, "/cart");
+  return deliveryPage(request, response);
+});
+
+app.post("/checkout/delivery", async (request, response) => {
+  const cart = readCart(request);
+  if (cart.qty <= 0) return response.redirect(303, "/cart");
+  const slotId = Number.parseInt(request.body?.slot, 10);
+  let slot = null;
+  if (Number.isInteger(slotId) && db.isConfigured()) {
+    try {
+      slot = await pickup.bookableSlot(slotId);
+    } catch (error) {
+      console.error("Could not load the pick-up slot:", error.message);
+    }
+  }
+  if (!slot) return deliveryPage(request, response, "Choose a pick-up time from the list.");
+  writeCart(response, { ...cart, slot: slot.id });
+  response.redirect(303, "/checkout/pay");
+});
+
+// Checkout step 2: pay, with the delivery choice summarized.
+app.get("/checkout/pay", async (request, response) => {
   const qty = readCart(request).qty;
   if (qty <= 0) return response.redirect(303, "/cart");
+  const slot = await cartSlot(request);
+  if (!slot) return response.redirect(303, "/checkout");
   const account = auth.accountOf(request);
-  const vm = { ...chrome(request), quantity: qty, total: formatTotal(qty), email: account?.email ?? "" };
+  const vm = {
+    ...chrome(request),
+    quantity: qty,
+    subtotal: formatTotal(qty),
+    total: formatTotal(qty),
+    pickupLabel: pickup.slotLabel(slot),
+    email: account?.email ?? ""
+  };
   response.set("Cache-Control", "no-cache").type("html").send(views.checkoutPage(vm));
 });
 
@@ -352,9 +441,90 @@ app.get("/order", async (request, response) => {
   const base = chrome(request);
   const vm = order
     ? { ...base, ...formatOrder(order) }
-    : { ...base, status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1 };
+    : { ...base, status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1, fulfillment: "ship", pickupLabel: "" };
   response.type("html").send(views.confirmationPage(vm));
 });
+
+// -------------------------------------------------------------- admin
+
+// Members of the Rauthy admin group (auth.requireAdmin). Pages hold buyer PII,
+// so they are no-store; forms post back and redirect.
+const orderDate = new Intl.DateTimeFormat("en-US", { timeZone: pickup.ZONE, dateStyle: "medium" });
+
+async function adminData(request, load) {
+  if (!db.isConfigured()) return { ...chrome(request), error: "The database is not configured." };
+  try {
+    return { ...chrome(request), error: "", ...(await load()) };
+  } catch (error) {
+    console.error("Admin page could not load:", error.message);
+    return { ...chrome(request), error: "The database is unavailable. Try again shortly." };
+  }
+}
+
+app.get("/admin", auth.requireAdmin, async (request, response) => {
+  const vm = await adminData(request, async () => ({
+    orders: (await pickup.recentOrders()).map((o) => ({
+      number: o.id.slice(-8).toUpperCase(),
+      date: orderDate.format(o.created_at),
+      email: o.email ?? "",
+      quantity: o.quantity,
+      total: formatUsd(o.amount),
+      status: o.status,
+      method: o.fulfillment === "pickup" ? `Pick-up: ${o.pickup_label ?? ""}` : "Ship"
+    }))
+  }));
+  response.type("html").send(views.adminOrdersPage({ orders: [], ...vm }));
+});
+
+app.get("/admin/pickup", auth.requireAdmin, async (request, response) => {
+  const vm = await adminData(request, async () => {
+    const [locations, slots, schedule] = await Promise.all([pickup.listLocations(), pickup.listSlots(), pickup.pickupSchedule()]);
+    const now = new Date();
+    return {
+      locations: locations.map((l) => ({ id: l.id, name: l.name, details: l.details, active: l.active })),
+      slots: slots.map((s) => ({ id: s.id, location: s.name, time: pickup.slotTime(s.starts_at, s.ends_at), active: s.active, past: s.ends_at < now })),
+      schedule: schedule.map((o) => ({ slot: o.pickup_label ?? "", email: o.email ?? "", quantity: o.quantity, number: o.id.slice(-8).toUpperCase() }))
+    };
+  });
+  response.type("html").send(views.adminPickupPage({ locations: [], slots: [], schedule: [], ...vm }));
+});
+
+// Runs an admin write, logging failures; every form redirects back regardless.
+async function adminWrite(response, write) {
+  try {
+    if (db.isConfigured()) await write();
+  } catch (error) {
+    console.error("Admin change failed:", error.message);
+  }
+  response.redirect(303, "/admin/pickup");
+}
+
+app.post("/admin/pickup/locations", auth.requireAdmin, (request, response) => {
+  const name = String(request.body?.name ?? "").trim().slice(0, 120);
+  const details = String(request.body?.details ?? "").trim().slice(0, 500);
+  return adminWrite(response, async () => {
+    if (name) await pickup.createLocation(name, details);
+  });
+});
+
+app.post("/admin/pickup/locations/:id/active", auth.requireAdmin, (request, response) =>
+  adminWrite(response, () => pickup.setLocationActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"))
+);
+
+app.post("/admin/pickup/slots", auth.requireAdmin, (request, response) => {
+  const locationId = Number.parseInt(request.body?.location, 10);
+  const date = String(request.body?.date ?? "");
+  const start = String(request.body?.start ?? "");
+  const end = String(request.body?.end ?? "");
+  const valid = Number.isInteger(locationId) && /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(start) && /^\d{2}:\d{2}$/.test(end) && end > start;
+  return adminWrite(response, async () => {
+    if (valid) await pickup.createSlot(locationId, date, start, end);
+  });
+});
+
+app.post("/admin/pickup/slots/:id/active", auth.requireAdmin, (request, response) =>
+  adminWrite(response, () => pickup.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"))
+);
 
 // Anything else: back to the storefront.
 app.get(/.*/, (_request, response) => response.redirect(303, "/"));

@@ -20,6 +20,8 @@ export function formatOrder(order) {
     email: order.email ?? "",
     shipTo: [order.shipping?.name, address.line1, address.line2, cityLine, address.country].filter(Boolean),
     shipBy: order.shipBy ?? "",
-    quantity: order.quantity ?? 1
+    quantity: order.quantity ?? 1,
+    fulfillment: order.fulfillment ?? "ship",
+    pickupLabel: order.pickupLabel ?? ""
   };
 }

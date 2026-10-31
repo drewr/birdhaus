@@ -47,6 +47,7 @@ data Opts = Opts
   , cap :: Maybe Text
   , closes :: Text
   , shipBy :: Text
+  , adminGroup :: Text
   }
 
 parser :: Parser Opts
@@ -68,6 +69,7 @@ parser =
     <*> (Just <$> opt "cap" 'c' "20" "Units the batch can sell")
     <*> opt "closes" 'C' "2026-12-01" "Last day of pre-orders, YYYY-MM-DD (US Central)"
     <*> opt "ship-by" 'S' "2026-12-15" "Ship-by date promised at checkout, YYYY-MM-DD"
+    <*> opt "admin-group" 'G' "birdhaus-admins" "Rauthy group whose members get the store admin portal"
   where
     opt name short def help =
       optText name short (Specific (HelpMessage (help <> " (default: " <> def <> ")"))) <|> pure def
@@ -204,6 +206,8 @@ workloadManifest o auth image =
     , "              value: \"" <> closes o <> "\""
     , "            - name: BATCH_SHIP_BY"
     , "              value: \"" <> shipBy o <> "\""
+    , "            - name: ADMIN_GROUP"
+    , "              value: \"" <> adminGroup o <> "\""
     , "            envFrom:"
     , "            - secretRef:"
     , "                name: " <> stripeSecret o

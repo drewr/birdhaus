@@ -68,8 +68,8 @@ export async function paidUnits(batch) {
 
 export async function recordOrder(intent) {
   await query(
-    `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub)
-     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9)
+    `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub, fulfillment, pickup_slot_id, pickup_label)
+     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12)
      on conflict (id) do nothing`,
     [
       intent.id,
@@ -80,7 +80,10 @@ export async function recordOrder(intent) {
       intent.receipt_email,
       intent.shipping ? JSON.stringify(intent.shipping) : null,
       intent.created,
-      intent.metadata.account_sub || null
+      intent.metadata.account_sub || null,
+      intent.metadata.fulfillment === "pickup" ? "pickup" : "ship",
+      Number(intent.metadata.pickup_slot_id) || null,
+      intent.metadata.pickup_label || null
     ]
   );
 }

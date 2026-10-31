@@ -5,25 +5,18 @@ module Server.Render
   ( productPage
   , cartPage
   , cartFragment
+  , deliveryPage
   , checkoutPage
   , confirmationPage
   , waitlistFragment
+  , module Server.Admin
   ) where
 
 import Prelude
+import Data.Array (null)
 import Html (Attr(..), Html, cls, el, elVoid, empty, render, text, whenH)
-
--- Fields shared by every full page (header + <head> asset links + analytics).
-type Chrome r =
-  ( css :: String
-  , js :: String
-  , accountId :: String
-  , accountLabel :: String
-  , signedIn :: Boolean
-  , cartQty :: Int
-  , reason :: String
-  | r
-  )
+import Server.Admin (adminOrdersPage, adminPickupPage)
+import Server.Layout (Chrome, cartLinkEl, layout)
 
 type WaitlistFields r =
   ( wlState :: String        -- "editing" | "joined" | "error"
@@ -51,8 +44,13 @@ type ProductVM =
 type CartVM =
   { | Chrome ( lineTotal :: String, subtotal :: String, shipBy :: String, maxQuantity :: Int ) }
 
+type Slot = { id :: Int, location :: String, details :: String, time :: String, selected :: Boolean }
+
+type DeliveryVM =
+  { | Chrome ( quantity :: Int, total :: String, error :: String, slots :: Array Slot ) }
+
 type CheckoutVM =
-  { | Chrome ( quantity :: Int, total :: String, email :: String ) }
+  { | Chrome ( quantity :: Int, subtotal :: String, total :: String, pickupLabel :: String, email :: String ) }
 
 type OrderVM =
   { | Chrome
@@ -66,75 +64,12 @@ type OrderVM =
       , shipTo :: Array String
       , shipBy :: String
       , quantity :: Int
+      , fulfillment :: String
+      , pickupLabel :: String
       )
   }
 
 type WaitlistVM = { | WaitlistFields ( signedIn :: Boolean, accountLabel :: String ) }
-
--- ---------------------------------------------------------------- layout
-
-layout :: forall r. { | Chrome r } -> Html -> String
-layout c content =
-  "<!doctype html>" <> render
-    ( el "html" [ A "lang" "en" ]
-        [ el "head" []
-            [ elVoid "meta" [ A "charset" "UTF-8" ]
-            , elVoid "meta" [ A "name" "viewport", A "content" "width=device-width, initial-scale=1.0" ]
-            , elVoid "meta" [ A "name" "description", A "content" "A handcrafted bluebird house from Birdhaus." ]
-            , elVoid "meta" [ A "name" "theme-color", A "content" "#ffffff" ]
-            , elVoid "meta" [ A "property" "og:title", A "content" "Birdhaus — Bluebird House" ]
-            , elVoid "meta" [ A "property" "og:description", A "content" "A handcrafted bluebird house from Birdhaus." ]
-            , elVoid "meta" [ A "property" "og:type", A "content" "website" ]
-            , elVoid "meta" [ A "property" "og:image", A "content" "https://birdhaus.store/og-image.png" ]
-            , elVoid "meta" [ A "name" "twitter:card", A "content" "summary_large_image" ]
-            , elVoid "link" [ A "rel" "icon", A "href" "/favicon.ico", A "sizes" "48x48" ]
-            , elVoid "link" [ A "rel" "icon", A "type" "image/png", A "sizes" "32x32", A "href" "/favicon-32.png" ]
-            , elVoid "link" [ A "rel" "apple-touch-icon", A "href" "/apple-touch-icon.png" ]
-            , elVoid "link" [ A "rel" "preconnect", A "href" "https://fonts.googleapis.com" ]
-            , elVoid "link" [ A "rel" "preconnect", A "href" "https://fonts.gstatic.com", B "crossorigin" ]
-            , elVoid "link" [ A "rel" "stylesheet", A "href" "https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap" ]
-            , whenH (c.css /= "") (elVoid "link" [ A "rel" "stylesheet", A "href" c.css ])
-            , el "title" [] [ text "Birdhaus — Bluebird House" ]
-            -- Umami analytics (umami/deploy.hs); data-domains keeps dev out of stats.
-            , el "script"
-                [ B "defer", A "src" "https://stats.birdhaus.store/t.js"
-                , A "data-website-id" "51956e06-bdef-4268-babc-69b667a56dc5"
-                , A "data-domains" "birdhaus.store"
-                ] []
-            , whenH (c.js /= "") (el "script" [ A "type" "module", A "src" c.js ] [])
-            ]
-        , el "body" [ A "data-account-id" c.accountId, A "data-batch-reason" c.reason ]
-            [ header c
-            , el "main" [] [ content ]
-            ]
-        ]
-    )
-
-header :: forall r. { | Chrome r } -> Html
-header c =
-  el "header" [ cls "site-header" ]
-    [ el "a" [ cls "wordmark", A "href" "/" ]
-        [ elVoid "img" [ cls "wordmark-mark", A "src" "/mark-512.png", A "alt" "" ]
-        , text "birdhaus"
-        ]
-    , el "div" [ cls "header-actions" ]
-        [ whenH (c.cartQty > 0) (cartLinkEl false c.cartQty)
-        , el "nav" [ cls "account-nav" ]
-            ( if c.signedIn then
-                [ el "span" [ cls "account-email" ] [ text c.accountLabel ]
-                , el "a" [ cls "text-button", A "href" "/api/auth/logout", B "data-signout" ] [ text "Sign out" ]
-                ]
-              else
-                [ el "a" [ cls "text-link", A "href" "/api/auth/login?next=/" ] [ text "Sign in" ] ]
-            )
-        ]
-    ]
-
-cartLinkEl :: Boolean -> Int -> Html
-cartLinkEl oob qty =
-  el "a"
-    ([ A "id" "cart-link", cls "cart-link", A "href" "/cart" ] <> (if oob then [ A "hx-swap-oob" "true" ] else []))
-    [ text ("Cart · " <> show qty) ]
 
 -- ---------------------------------------------------------------- product
 
@@ -180,7 +115,7 @@ purchase vm =
             [ text (if vm.cartQty > 0 then "Add to cart (" <> show vm.cartQty <> " in cart)" else "Add to cart") ]
         ]
     , el "p" [ cls "fine-print" ]
-        [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> "Shipping and taxes are not included.") ]
+        [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> "Local pick-up only for now — shipping coming soon. Taxes not included.") ]
     , el "details" [ cls "waitlist-inline" ]
         [ el "summary" [ cls "text-button" ] [ text "Need more? Join the waitlist" ]
         , el "p" [ cls "description" ] [ text "Need more than this batch has? Tell us how many and we'll email you when we can build them." ]
@@ -296,7 +231,7 @@ cartPage vm =
       , el "a" [ cls "buy-button", A "href" "/checkout" ] [ text "Proceed to checkout" ]
       , el "a" [ cls "text-button", A "href" "/" ] [ text "Continue shopping" ]
       , el "p" [ cls "fine-print" ]
-          [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> "Shipping and taxes are not included.") ]
+          [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> "Local pick-up only for now — shipping coming soon. Taxes not included.") ]
       ]
 
 -- The #cart box, re-rendered in place by the HTMX stepper.
@@ -338,17 +273,58 @@ stepButton target disabled label symbol =
 
 -- ---------------------------------------------------------------- checkout
 
+-- Step 1: delivery. Shipping is listed but disabled until USPS pricing exists.
+deliveryPage :: DeliveryVM -> String
+deliveryPage vm =
+  layout vm $
+    el "section" [ cls "checkout", A "aria-labelledby" "delivery-title" ]
+      [ el "h2" [ A "id" "delivery-title" ] [ text "Delivery" ]
+      , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × Bluebird House · " <> vm.total) ]
+      , el "form" [ cls "delivery-form", A "method" "post", A "action" "/checkout/delivery" ]
+          ( [ el "label" [ cls "delivery-option delivery-option-disabled" ]
+                [ elVoid "input" [ A "type" "radio", A "name" "method", A "value" "ship", B "disabled" ]
+                , el "span" [] [ el "strong" [] [ text "Shipping" ], text " — coming soon" ]
+                ]
+            , el "p" [ cls "delivery-heading" ] [ el "strong" [] [ text "Local pick-up" ], text " — free. Choose a time:" ]
+            , whenH (vm.error /= "") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text vm.error ])
+            ]
+              <>
+                if null vm.slots then
+                  [ el "p" [ cls "description" ] [ text "No pick-up times are open right now — check back soon." ] ]
+                else
+                  map slotOption vm.slots
+                    <> [ el "button" [ cls "buy-button", A "type" "submit" ] [ text "Continue to payment" ] ]
+          )
+      , el "div" [ cls "checkout-actions" ]
+          [ el "a" [ cls "text-button", A "href" "/cart" ] [ text "Back to cart" ] ]
+      ]
+
+slotOption :: Slot -> Html
+slotOption slot =
+  el "label" [ cls "delivery-option" ]
+    [ elVoid "input" ([ A "type" "radio", A "name" "slot", A "value" (show slot.id), B "required" ] <> (if slot.selected then [ B "checked" ] else []))
+    , el "span" []
+        [ el "strong" [] [ text slot.location ]
+        , text (" — " <> slot.time)
+        , whenH (slot.details /= "") (el "span" [ cls "delivery-details" ] [ text slot.details ])
+        ]
+    ]
+
+-- Step 2: pay. Pick-up needs no address, so only the Payment Element mounts.
 checkoutPage :: CheckoutVM -> String
 checkoutPage vm =
   layout vm $
     el "section" [ A "id" "checkout", cls "checkout", A "aria-labelledby" "checkout-title", A "data-quantity" (show vm.quantity) ]
       [ el "h2" [ A "id" "checkout-title" ] [ text "Checkout" ]
-      , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × Bluebird House · " <> vm.total) ]
+      , el "dl" [ cls "order-summary checkout-breakdown" ]
+          [ el "dt" [] [ text (show vm.quantity <> " × Bluebird House") ], el "dd" [] [ text vm.subtotal ]
+          , el "dt" [] [ text "Pick-up" ], el "dd" [] [ text (vm.pickupLabel <> " — free") ]
+          , el "dt" [] [ text "Total" ], el "dd" [] [ text vm.total ]
+          ]
+      , el "p" [ cls "fine-print" ] [ el "a" [ cls "text-link", A "href" "/checkout" ] [ text "Change pick-up time" ] ]
       , el "form" [ A "id" "payment-form" ]
           [ el "label" [ A "for" "email" ] [ text "Email for receipt" ]
           , elVoid "input" [ A "id" "email", A "name" "email", A "type" "email", B "required", A "placeholder" "you@example.com", A "value" vm.email ]
-          , el "label" [] [ text "Shipping address" ]
-          , el "div" [ A "id" "shipping-address" ] []
           , el "div" [ A "id" "payment-element" ] []
           , el "div" [ A "id" "payment-message", A "role" "alert", A "aria-live" "polite" ] []
           , el "button" [ A "id" "submit-payment", cls "buy-button" ] [ text ("Pay " <> vm.total) ]
@@ -375,8 +351,7 @@ confirmationBody vm = case vm.status of
   "succeeded" ->
     [ el "h1" [] [ text (if vm.shipBy == "" then "Thank you for your order" else "Thank you for your pre-order") ]
     , el "p" [ cls "confirmation-lede" ]
-        [ text (if vm.shipBy == "" then "Your payment went through and your bluebird house is on its way to the workshop."
-                else "Your payment went through. Your bluebird house is on the workshop's list and will ship by " <> vm.shipBy <> ".") ]
+        [ text (succeededLede vm) ]
     , orderSummary vm
     , receiptNote vm "A receipt has been sent to "
     , backToStore "Back to the store"
@@ -399,6 +374,12 @@ confirmationBody vm = case vm.status of
     , backToStore "Back to the store"
     ]
 
+succeededLede :: OrderVM -> String
+succeededLede vm
+  | vm.fulfillment == "pickup" = "Your payment went through. Your bluebird house will be ready for pick-up: " <> vm.pickupLabel <> "."
+  | vm.shipBy == "" = "Your payment went through and your bluebird house is on its way to the workshop."
+  | otherwise = "Your payment went through. Your bluebird house is on the workshop's list and will ship by " <> vm.shipBy <> "."
+
 orderSummary :: OrderVM -> Html
 orderSummary vm =
   el "dl" [ cls "order-summary" ]
@@ -406,8 +387,12 @@ orderSummary vm =
       , el "dt" [] [ text "Date" ], el "dd" [] [ text vm.date ]
       , el "dt" [] [ text "Items" ], el "dd" [] [ text vm.items ]
       , el "dt" [] [ text "Total" ], el "dd" [] [ text vm.total ]
-      ] <> shipToRows vm.shipTo
+      ] <> (if vm.fulfillment == "pickup" then pickupRows vm.pickupLabel else shipToRows vm.shipTo)
     )
+
+pickupRows :: String -> Array Html
+pickupRows "" = []
+pickupRows label = [ el "dt" [] [ text "Pick-up" ], el "dd" [] [ text label ] ]
 
 shipToRows :: Array String -> Array Html
 shipToRows [] = []

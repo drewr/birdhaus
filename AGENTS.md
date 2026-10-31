@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository. See `README.md` for us
 
 ## What this is
 
-A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI (`src/Main.purs`) with a JS bridge for Stripe.js and the confirmation lookup (`src/Main.js`), built by Vite, served by an Express 5 server (`server/index.js`). Deployed as a unikernel on Datum Cloud with `run.hs`.
+A single-product Stripe storefront (Bluebird House, $40). Pages (`/`, `/cart`, `/checkout`, `/checkout/pay`, `/order`, `/admin`) are server-rendered by PureScript (`src/Html.purs`, `src/Server/*.purs`, bundled to `server/views.js`) with HTMX; the only client code is `src/Client/*` (Stripe Elements and Umami), bundled by Vite. An Express 5 server (`server/index.js`) serves both. Deployed as a unikernel on Datum Cloud with `run.hs`.
 
 ## Commands
 
@@ -19,10 +19,12 @@ A single-product Stripe storefront (Bluebird House, $40). PureScript Halogen UI 
 
 - Every script is a self-contained Haskell (turtle) script with a `nix-shell` shebang, like `run.hs`: executable, with its tools named in the shebang and run from the repository root. Do not add bash or node scripts. The one exception is a script that runs inside a container image (for example the Postgres entrypoint), where Nix is not available.
 
-- The server sets prices. Never accept an amount from the browser; the price lives in `server/index.js` and is mirrored for display in `formatTotal` in `Main.purs`. Change both together.
+- The server sets prices. Never accept an amount from the browser; the unit price lives only in `server/price.js`, and checkout takes the quantity and pick-up slot from the signed cart cookie (`server/cart.js`) and re-validates both.
+- Delivery is local pick-up only, at slots admins define on `/admin/pickup` (docs/design/fulfillment.md). Shipping is shown greyed out until USPS pricing is added; there is no USPS code yet.
+- Store admins are members of the Rauthy group `birdhaus-admins` (`run.hs --admin-group`), not Rauthy admins. The store requests the `groups` scope, so each store client in Rauthy must list `groups` in its Allowed Scopes. The admin flag is re-read at sign-in and lapses after 12 hours; `/admin` stays `no-store` and its POSTs must be same-origin.
 - `/api/order/:id` must keep requiring the matching `client_secret` and `Cache-Control: no-store`; it returns buyer PII.
 - The secret key is server-side only. Never expose it through a `VITE_` variable or the client bundle.
-- Keep `index.html` served from memory with `no-cache`, and hashed `/assets` immutable (see README, "Production caching").
+- Keep pages `no-cache` (`/order` and `/admin` `no-store`) and hashed `/assets` immutable; the server links the hashed client bundle from Vite's manifest.
 - Add PureScript dependencies in `spago.yaml`; `spago.lock` is generated and committed.
 - Match the existing style: terse comments that explain why, no dead code.
 

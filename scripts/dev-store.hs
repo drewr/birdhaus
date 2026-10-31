@@ -53,6 +53,7 @@ data Opts = Opts
   , stripeSecret :: Text
   , authSecret :: Text
   , pullSecret :: Text
+  , adminGroup :: Text
   }
 
 parser :: Parser Opts
@@ -70,6 +71,7 @@ parser =
     <*> opt "stripe-secret" 'k' "birdhaus-stripe-test" "Dev Stripe (test keys) Secret"
     <*> opt "auth-secret" 'A' "birdhaus-store-dev-auth" "Dev OIDC Secret (created only if OIDC_CLIENT_* are set)"
     <*> opt "pull-secret" 'r' "ghcr-drewr" "dockerconfigjson Secret used to pull from GHCR"
+    <*> opt "admin-group" 'G' "birdhaus-admins" "Rauthy group whose members get the store admin portal"
   where
     opt n short def help =
       optText n short (Specific (HelpMessage (help <> " (default: " <> def <> ")"))) <|> pure def
@@ -104,6 +106,7 @@ main = do
       , "--stripe-secret", stripeSecret o
       , "--auth-secret", if haveAuth then authSecret o else authSecret o <> "-absent"
       , "--pull-secret", pullSecret o
+      , "--admin-group", adminGroup o
       ] <> maybe [] (\s -> ["--session", s]) (session o)
     )
     empty

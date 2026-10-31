@@ -61,11 +61,10 @@ export const initWaitlistTracking = () => {
 
 let elements;
 let stripe;
-let shippingAddress;
-let paymentElement;
 
-// Mount Stripe Elements on the checkout page. The server sets price and reads the
-// quantity from the cart cookie, so the browser sends no amount.
+// Mount the Payment Element on the checkout page. The server sets the price and
+// reads the quantity and pick-up slot from the cart cookie, so the browser sends
+// no amount. Pick-up is the only delivery method, so no address is collected.
 async function initializeCheckout() {
   const form = document.getElementById("payment-form");
   const message = document.getElementById("payment-message");
@@ -87,10 +86,7 @@ async function initializeCheckout() {
     if (!stripe) throw new Error("Stripe could not be loaded. Please try again.");
 
     elements = stripe.elements({ clientSecret: result.clientSecret, appearance: { theme: "flat" } });
-    shippingAddress = elements.create("address", { mode: "shipping" });
-    shippingAddress.mount("#shipping-address");
-    paymentElement = elements.create("payment");
-    paymentElement.mount("#payment-element");
+    elements.create("payment").mount("#payment-element");
     form.addEventListener("submit", submitPayment);
   } catch (error) {
     message.textContent = error.message;
@@ -113,13 +109,6 @@ async function submitPayment(event) {
   const { error: submitError } = await elements.submit();
   if (submitError) {
     message.textContent = submitError.message;
-    submitButton.disabled = false;
-    return;
-  }
-
-  const { complete } = await shippingAddress.getValue();
-  if (!complete) {
-    message.textContent = "Please complete your shipping address.";
     submitButton.disabled = false;
     return;
   }

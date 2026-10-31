@@ -21,6 +21,11 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "";
 const SESSION_COOKIE = "bh_session";
 const STATE_COOKIE = "bh_auth";
 const SESSION_TTL = 7 * 24 * 60 * 60;
+// Store admins are members of this Rauthy group (not Rauthy's own admin role).
+// Membership is read from the id_token at sign-in, so the admin flag lapses
+// sooner than the session and is refreshed by signing in again.
+const ADMIN_GROUP = process.env.ADMIN_GROUP || "birdhaus-admins";
+const ADMIN_TTL = 12 * 60 * 60;
 
 export const isConfigured = () => Boolean(ISSUER && CLIENT_ID && CLIENT_SECRET && REDIRECT_URI && SESSION_SECRET);
 
@@ -72,7 +77,29 @@ export function accountOf(request) {
   if (!isConfigured()) return null;
   const session = unsign(cookies(request)[SESSION_COOKIE]);
   if (!session || typeof session.sub !== "string") return null;
-  return { sub: session.sub, email: session.email || "", name: session.name || "" };
+  const admin = session.admin === true && Number(session.adminUntil) > now();
+  return { sub: session.sub, email: session.email || "", name: session.name || "", admin };
+}
+
+// Gate for /admin. Signed-out visitors sign in (which also refreshes a lapsed
+// admin flag); signed-in non-admins see a 404, so the portal isn't advertised.
+// POSTs must come from this origin; session cookies are SameSite=Lax as well.
+export function requireAdmin(request, response, next) {
+  response.set("Cache-Control", "no-store");
+  const account = accountOf(request);
+  if (!account) {
+    const next = request.method === "GET" ? safeNext(request.originalUrl) : "/admin";
+    return response.redirect(303, `/api/auth/login?next=${encodeURIComponent(next)}`);
+  }
+  if (!account.admin) return response.status(404).type("text").send("Not found");
+  if (request.method === "POST") {
+    // TLS ends at the edge, so the public origin comes from the redirect URI.
+    const origin = request.get("origin");
+    if (!origin || (origin !== new URL(REDIRECT_URI).origin && origin !== `${request.protocol}://${request.get("host")}`)) {
+      return response.status(403).type("text").send("Forbidden");
+    }
+  }
+  next();
 }
 
 export function me(request, response) {
@@ -120,7 +147,7 @@ export function routes() {
       const url = new URL(found.authorization_endpoint);
       url.searchParams.set("client_id", CLIENT_ID);
       url.searchParams.set("response_type", "code");
-      url.searchParams.set("scope", "openid email profile");
+      url.searchParams.set("scope", "openid email profile groups");
       url.searchParams.set("redirect_uri", REDIRECT_URI);
       url.searchParams.set("state", state);
       url.searchParams.set("code_challenge", challenge);
@@ -169,7 +196,9 @@ export function routes() {
       }
       // The ID token is kept so sign-out can end the Rauthy session too;
       // without it Rauthy would silently sign the same user back in.
-      response.cookie(SESSION_COOKIE, sign({ sub: payload.sub, email, name, id_token: tokens.id_token, exp: now() + SESSION_TTL }), cookieOptions(SESSION_TTL));
+      // groups is present only when the client allows the scope; absent means not an admin.
+      const admin = Array.isArray(payload.groups) && payload.groups.includes(ADMIN_GROUP);
+      response.cookie(SESSION_COOKIE, sign({ sub: payload.sub, email, name, admin, adminUntil: now() + ADMIN_TTL, id_token: tokens.id_token, exp: now() + SESSION_TTL }), cookieOptions(SESSION_TTL));
       // The fragment tells the store's client to count a login in analytics and
       // is removed from the address bar before the page settles.
       const destination = new URL(pending.next || "/", new URL(REDIRECT_URI).origin);
