@@ -611,24 +611,47 @@ app.get("/admin/pickup", auth.requireAdmin, async (request, response) => {
       schedule: schedule.map((o) => ({ slot: o.pickup_label ?? "", email: o.email ?? "", quantity: o.quantity, number: o.id.slice(-8).toUpperCase() }))
     };
   });
-  response.type("html").send(views.adminPickupPage({ locations: [], slots: [], schedule: [], ...vm }));
+  response.type("html").send(views.adminPickupPage({ locations: [], slots: [], schedule: [], ...vm, error: adminNotice(request) || vm.error }));
 });
 
 // Runs an admin write, logging failures; every form redirects back regardless.
+// Why a write was refused. Only these codes travel in the redirect's ?error=,
+// so the page shows fixed text, never anything taken from the URL.
+const ADMIN_ERRORS = {
+  "location-name": "Give the location a name.",
+  "slot-fields": "Choose a location, a date, and start and end times.",
+  "slot-times": "The end time must be after the start time (check AM/PM).",
+  "no-database": "The database is not configured.",
+  "save-failed": "That change couldn't be saved. Try again shortly."
+};
+const adminNotice = (request) => ADMIN_ERRORS[request.query.error] ?? "";
+
+// write() returns an ADMIN_ERRORS code to refuse the change, or nothing.
 async function adminWrite(response, write, back = "/admin/pickup") {
-  try {
-    if (db.isConfigured()) await write();
-  } catch (error) {
-    console.error("Admin change failed:", error.message);
+  let code = db.isConfigured() ? "" : "no-database";
+  if (!code) {
+    try {
+      code = (await write()) ?? "";
+    } catch (error) {
+      console.error("Admin change failed:", error.message);
+      code = "save-failed";
+    }
   }
-  response.redirect(303, back);
+  response.redirect(303, code ? `${back}?error=${code}` : back);
+}
+
+// Slot form fields: a date and HH:MM times in the store's zone, end after start.
+function slotProblem(date, start, end) {
+  if (!DATE.test(date) || !TIME.test(start) || !TIME.test(end)) return "slot-fields";
+  return end > start ? "" : "slot-times";
 }
 
 app.post("/admin/pickup/locations", auth.requireAdmin, (request, response) => {
   const name = String(request.body?.name ?? "").trim().slice(0, 120);
   const details = String(request.body?.details ?? "").trim().slice(0, 500);
   return adminWrite(response, async () => {
-    if (name) await pickup.createLocation(name, details);
+    if (!name) return "location-name";
+    await pickup.createLocation(name, details);
   });
 });
 
@@ -641,9 +664,10 @@ app.post("/admin/pickup/slots", auth.requireAdmin, (request, response) => {
   const date = String(request.body?.date ?? "");
   const start = String(request.body?.start ?? "");
   const end = String(request.body?.end ?? "");
-  const valid = Number.isInteger(locationId) && /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(start) && /^\d{2}:\d{2}$/.test(end) && end > start;
   return adminWrite(response, async () => {
-    if (valid) await pickup.createSlot(locationId, date, start, end);
+    const problem = Number.isInteger(locationId) ? slotProblem(date, start, end) : "slot-fields";
+    if (problem) return problem;
+    await pickup.createSlot(locationId, date, start, end);
   });
 });
 
@@ -686,7 +710,7 @@ async function adminDeliveryPage(request, response, notice = "") {
   response.type("html").send(views.adminDeliveryPage({ ...empty, ...vm, error: notice || vm.error }));
 }
 
-app.get("/admin/delivery", auth.requireAdmin, (request, response) => adminDeliveryPage(request, response));
+app.get("/admin/delivery", auth.requireAdmin, (request, response) => adminDeliveryPage(request, response, adminNotice(request)));
 
 app.post("/admin/delivery/settings", auth.requireAdmin, async (request, response) => {
   const fee = Number.parseFloat(request.body?.fee);
@@ -714,9 +738,10 @@ app.post("/admin/delivery/slots", auth.requireAdmin, (request, response) => {
   const date = String(request.body?.date ?? "");
   const start = String(request.body?.start ?? "");
   const end = String(request.body?.end ?? "");
-  const valid = DATE.test(date) && TIME.test(start) && TIME.test(end) && end > start;
   return adminWrite(response, async () => {
-    if (valid) await delivery.createSlot(date, start, end);
+    const problem = slotProblem(date, start, end);
+    if (problem) return problem;
+    await delivery.createSlot(date, start, end);
   }, "/admin/delivery");
 });
 
