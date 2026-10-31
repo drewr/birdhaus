@@ -17,8 +17,12 @@ button, input { font: inherit; }
 .account-email { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #444; }
 .wordmark-mark { width: 28px; height: 28px; }
 .wordmark { display: inline-flex; align-items: center; gap: 10px; color: inherit; font-size: 13px; font-weight: 800; letter-spacing: .16em; text-decoration: none; }
-main { width: min(100% - 48px, 960px); margin: 48px 24px 80px; }
-.product { display: grid; gap: 24px; }
+main { width: min(100% - 48px, 1040px); margin: 48px 24px 80px; }
+.product { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); align-items: start; gap: 48px; }
+.product-media { position: sticky; top: 24px; }
+.product-figure { margin: 0; border: 1px solid var(--line); background: #fafafa; padding: 40px; display: grid; place-items: center; }
+.product-illustration { width: 100%; max-width: 340px; height: auto; display: block; }
+.product-figcaption { margin: 12px 0 0; text-align: center; color: var(--muted); font-size: 12px; font-style: italic; }
 .product-details h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: -.04em; }
 .price { margin: 12px 0; font-size: 18px; font-weight: 700; }
 .preorder-note { display: inline-block; margin: 0 0 16px; padding: 4px 10px; border: 1px solid #111; font-size: 13px; font-weight: 700; letter-spacing: .02em; }
@@ -65,6 +69,37 @@ main { width: min(100% - 48px, 960px); margin: 48px 24px 80px; }
 #payment-form input { display: block; width: 100%; padding: 13px; border: 1px solid #999; margin-bottom: 22px; }
 #payment-element { margin: 22px 0; }
 #payment-message { min-height: 24px; margin-bottom: 8px; color: #a11; font-size: 14px; }
+
+/* Below-the-fold merchandising */
+.info { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--line); }
+.section-title { margin: 0 0 24px; font-size: 20px; letter-spacing: -.02em; }
+.spec-todo { color: var(--muted); font-style: italic; }
+.feature-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px 40px; }
+.feature { display: grid; grid-template-columns: 22px 1fr; gap: 12px; }
+.feature-check { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #111; border-radius: 50%; font-size: 12px; line-height: 1; }
+.feature-title { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+.feature-desc { margin: 0; color: #444; font-size: 14px; line-height: 1.5; }
+.spec-list { display: grid; grid-template-columns: max-content 1fr; gap: 0; margin: 0; font-size: 14px; }
+.spec-list dt { padding: 12px 0; border-top: 1px solid var(--line); color: var(--muted); }
+.spec-list dd { margin: 0; padding: 12px 0 12px 24px; border-top: 1px solid var(--line); font-weight: 700; }
+.spec-list dd.spec-todo { font-weight: 400; }
+.trust-strip { margin-top: 56px; padding: 28px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+.trust-item h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.trust-item p { margin: 0; color: #444; font-size: 13px; line-height: 1.5; }
+.faq-list { border-bottom: 1px solid var(--line); }
+.faq-item { border-top: 1px solid var(--line); }
+.faq-item summary { padding: 16px 0; font-size: 15px; font-weight: 700; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: "+"; font-weight: 400; font-size: 20px; line-height: 1; }
+.faq-item[open] summary::after { content: "−"; }
+.faq-answer { margin: 0 0 18px; color: #444; font-size: 14px; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  .product { grid-template-columns: 1fr; gap: 28px; }
+  .product-media { position: static; }
+  .feature-list { grid-template-columns: 1fr; gap: 24px; }
+  .trust-strip { grid-template-columns: 1fr; gap: 20px; }
+}
 @media (max-width: 520px) {
   main { width: min(100% - 32px, 960px); margin: 24px 16px 80px; }
   .product-details h1 { font-size: 28px; }

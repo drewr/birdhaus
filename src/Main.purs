@@ -150,7 +150,9 @@ storefront :: State -> H.ComponentHTML Action () Aff
 storefront state =
   HH.div_
     [ HH.section [ HP.classes [ HH.ClassName "product" ], HP.attr (HH.AttrName "aria-labelledby") "product-title" ]
-        [ HH.div [ HP.classes [ HH.ClassName "product-details" ] ]
+        [ productMedia
+        -- Main.js selects `.product-details .buy-button`; keep the buy control here.
+        , HH.div [ HP.classes [ HH.ClassName "product-details" ] ]
             [ HH.h1 [ HP.id "product-title" ] [ HH.text "Bluebird House" ]
             , HH.p [ HP.classes [ HH.ClassName "price" ] ] [ HH.text "$40.00 USD each" ]
             , if shipBy == "" then HH.text ""
@@ -160,6 +162,12 @@ storefront state =
             ]
         ]
     , if open && state.checkoutOpen then checkoutView state.quantity else HH.text ""
+    -- Static merchandising below the fold. Bracketed text is a placeholder to
+    -- confirm before publishing; the 1.5" entrance hole is the NABB standard.
+    , featureSection
+    , specSection
+    , trustStrip
+    , faqSection
     ]
   where
   fromBatch :: forall a. a -> (Batch -> a) -> a
@@ -229,6 +237,121 @@ storefront state =
         else
           HH.button [ HP.type_ HP.ButtonButton, HP.classes [ HH.ClassName "text-button" ], HE.onClick \_ -> ShowWaitlist ] [ HH.text "Need more? Join the waitlist" ]
       ]
+
+-- The product figure. An illustration stands in until real photos exist.
+productMedia :: forall w i. HH.HTML w i
+productMedia =
+  HH.div [ HP.classes [ HH.ClassName "product-media" ] ]
+    [ HH.figure [ HP.classes [ HH.ClassName "product-figure" ] ]
+        [ HH.img
+            [ HP.classes [ HH.ClassName "product-illustration" ]
+            , HP.src "/product-illustration.svg"
+            , HP.alt "Illustration of a bluebird house"
+            ]
+        , HH.figcaption [ HP.classes [ HH.ClassName "product-figcaption" ] ]
+            [ HH.text "Illustration — product photos coming soon." ]
+        ]
+    ]
+
+cls :: String -> HH.ClassName
+cls = HH.ClassName
+
+sectionTitle :: forall w i. String -> HH.HTML w i
+sectionTitle t = HH.h2 [ HP.classes [ cls "section-title" ] ] [ HH.text t ]
+
+-- A confirmed feature (desc shown plainly) or a pending one (desc marked as a
+-- placeholder to fill in before publishing).
+feature :: forall w i. String -> String -> HH.HTML w i
+feature = featureWith false
+
+featurePending :: forall w i. String -> String -> HH.HTML w i
+featurePending = featureWith true
+
+featureWith :: forall w i. Boolean -> String -> String -> HH.HTML w i
+featureWith pending title desc =
+  HH.li [ HP.classes [ cls "feature" ] ]
+    [ HH.span [ HP.classes [ cls "feature-check" ], HP.attr (HH.AttrName "aria-hidden") "true" ] [ HH.text "✓" ]
+    , HH.div_
+        [ HH.p [ HP.classes [ cls "feature-title" ] ] [ HH.text title ]
+        , HH.p [ HP.classes ([ cls "feature-desc" ] <> if pending then [ cls "spec-todo" ] else []) ] [ HH.text desc ]
+        ]
+    ]
+
+featureSection :: forall w i. HH.HTML w i
+featureSection =
+  HH.section [ HP.classes [ cls "info" ], HP.attr (HH.AttrName "aria-label") "Features" ]
+    [ sectionTitle "Built for bluebirds"
+    , HH.ul [ HP.classes [ cls "feature-list" ] ]
+        [ feature "1½-inch entrance hole"
+            "Sized to the North American Bluebird Society standard: the right fit for bluebirds, too small for starlings. No perch, which predators would use."
+        , featurePending "Ventilation" "[Describe the vents that keep the box cool in summer.]"
+        , featurePending "Drainage" "[Describe the floor drainage that keeps the nest dry.]"
+        , featurePending "Easy cleanout" "[Describe the hinged or sliding panel for seasonal cleaning.]"
+        , featurePending "Simple mounting" "[Describe how it mounts — pole, post or screws — and the recommended height.]"
+        , featurePending "Built to last" "[Describe the wood and hardware — e.g. rot-resistant cedar, rust-resistant screws, no nails.]"
+        ]
+    ]
+
+specRow :: forall w i. Boolean -> String -> String -> Array (HH.HTML w i)
+specRow pending label value =
+  [ HH.dt_ [ HH.text label ]
+  , HH.dd [ HP.classes (if pending then [ cls "spec-todo" ] else []) ] [ HH.text value ]
+  ]
+
+specSection :: forall w i. HH.HTML w i
+specSection =
+  HH.section [ HP.classes [ cls "info" ], HP.attr (HH.AttrName "aria-label") "Specifications" ]
+    [ sectionTitle "Specifications"
+    , HH.dl [ HP.classes [ cls "spec-list" ] ] $ join
+        [ specRow true "Material" "[Wood species and grade — e.g. kiln-dried red cedar]"
+        , specRow true "Dimensions" "[Height × width × depth]"
+        , specRow true "Weight" "[Shipping weight]"
+        , specRow false "Entrance hole" "1½ in, about 6 in above the floor"
+        , specRow true "Base footprint" "[Interior floor, width × depth]"
+        , specRow true "Hardware" "[e.g. rust-resistant screws, no nails]"
+        , specRow true "Made in" "[Origin]"
+        ]
+    ]
+
+trustItem :: forall w i. Boolean -> String -> String -> HH.HTML w i
+trustItem pending title desc =
+  HH.div [ HP.classes [ cls "trust-item" ] ]
+    [ HH.h3_ [ HH.text title ]
+    , HH.p [ HP.classes (if pending then [ cls "spec-todo" ] else []) ] [ HH.text desc ]
+    ]
+
+trustStrip :: forall w i. HH.HTML w i
+trustStrip =
+  HH.section [ HP.classes [ cls "trust-strip" ], HP.attr (HH.AttrName "aria-label") "What to expect" ]
+    [ trustItem true "Satisfaction guarantee" "[Your returns or guarantee policy.]"
+    , trustItem true "Shipping" "[Shipping cost and delivery time.]"
+    , trustItem false "Secure checkout" "Payments are processed by Stripe."
+    ]
+
+faqItem :: forall w i. String -> String -> HH.HTML w i
+faqItem question answer =
+  HH.element (HH.ElemName "details") [ HP.classes [ cls "faq-item" ] ]
+    [ HH.element (HH.ElemName "summary") [] [ HH.text question ]
+    , HH.p [ HP.classes [ cls "faq-answer", cls "spec-todo" ] ] [ HH.text answer ]
+    ]
+
+faqSection :: forall w i. HH.HTML w i
+faqSection =
+  HH.section [ HP.classes [ cls "info" ], HP.attr (HH.AttrName "aria-label") "Questions" ]
+    [ sectionTitle "Questions"
+    , HH.div [ HP.classes [ cls "faq-list" ] ]
+        [ faqItem "How do I mount it, and how high?"
+            "[Your mounting guidance. Bluebird houses usually sit 5–6 feet up, in the open, away from heavy foot traffic.]"
+        , faqItem "How do I keep sparrows and predators out?"
+            "[The 1½-inch hole already blocks starlings. Add any guidance on house sparrows, baffles or predator guards.]"
+        , faqItem "How do I clean it?"
+            "[Your cleaning instructions, and how the box opens for it.]"
+        , faqItem "Does it come assembled?"
+            "[Assembled or flat-pack, and what's in the box.]"
+        , faqItem "When will it ship?"
+            "[Shipping timing — for a pre-order, tie this to the current batch's ship-by date.]"
+        ]
+    ]
 
 waitlistView :: Waitlist -> H.ComponentHTML Action () Aff
 waitlistView waitlist = case waitlist.status of
