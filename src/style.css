@@ -13,8 +13,11 @@ body { margin: 0; min-width: 320px; }
 a { color: inherit; }
 button, input { font: inherit; }
 .site-header { height: 84px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid var(--line); }
-.account-nav { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; font-size: 14px; }
+.header-actions { display: inline-flex; align-items: center; gap: 16px; }
+.account-nav { display: inline-flex; align-items: center; gap: 12px; font-size: 14px; }
 .account-email { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #444; }
+.cart-link { border: 1px solid #111; border-radius: 0; background: #fff; color: #111; padding: 8px 14px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.cart-link:hover { background: #f1f1f1; }
 .wordmark-mark { width: 52px; height: 52px; }
 /* Architects Daughter (index.html) echoes the drawn logo's hand lettering. */
 .wordmark { display: inline-flex; align-items: center; gap: 12px; color: inherit; font-family: "Architects Daughter", "Comic Sans MS", cursive; font-size: 30px; font-weight: 400; letter-spacing: .01em; text-decoration: none; }
@@ -36,6 +39,10 @@ main { width: min(100% - 48px, 1040px); margin: 48px 24px 80px; }
 .waitlist-error { margin: 0 0 12px; color: #a11; font-size: 14px; }
 .waitlist-joined { margin: 0; padding: 16px; border: 1px solid var(--line); line-height: 1.5; }
 .description { margin: 0 0 20px; color: #444; line-height: 1.5; }
+.cart-screen { max-width: 560px; }
+.cart-screen h1 { margin: 0 0 24px; font-size: 32px; line-height: 1.1; letter-spacing: -.04em; }
+.cart-screen .buy-button { margin-top: 8px; }
+.cart-screen .text-button { display: block; margin-top: 8px; }
 .cart { margin: 0 0 20px; padding: 16px; border: 1px solid var(--line); }
 .cart h2 { margin: 0 0 14px; font-size: 16px; }
 .cart-line { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
@@ -107,3 +114,12 @@ a.buy-button { display: block; text-align: center; text-decoration: none; }
   main { width: min(100% - 32px, 960px); margin: 24px 16px 80px; }
   .product-details h1 { font-size: 28px; }
 }
+
+/* Server-rendered additions (HTMX storefront) */
+a.cart-link { text-decoration: none; }
+.add-form { margin: 0 0 4px; }
+.quantity-field { margin: 0 0 16px; }
+.quantity-field label { display: block; margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+.quantity-field input { width: 96px; padding: 10px 12px; border: 1px solid #999; }
+details.waitlist-inline > summary { list-style: none; cursor: pointer; }
+details.waitlist-inline > summary::-webkit-details-marker { display: none; }

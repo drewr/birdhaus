@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import express from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { cookies, sign, unsign, cookieOptions, now } from "./cookies.js";
 import * as db from "./db.js";
 
 // OpenID Connect login against Rauthy (auth/README.md). The issuer, client and
@@ -53,46 +54,11 @@ async function metadata() {
   return discovery;
 }
 
-const now = () => Math.floor(Date.now() / 1000);
+// cookies/sign/unsign/cookieOptions/now live in cookies.js, shared with the cart.
 
-function cookies(request) {
-  const found = {};
-  for (const part of String(request.headers.cookie || "").split(";")) {
-    const at = part.indexOf("=");
-    if (at > 0) found[part.slice(0, at).trim()] = decodeURIComponent(part.slice(at + 1).trim());
-  }
-  return found;
-}
-
-// Value.MAC, so the browser can be trusted with the state and the session.
-function sign(payload) {
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const mac = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
-  return `${body}.${mac}`;
-}
-
-function unsign(value) {
-  if (!value) return null;
-  const at = value.lastIndexOf(".");
-  if (at < 0) return null;
-  const body = value.slice(0, at);
-  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
-  const given = Buffer.from(value.slice(at + 1));
-  const wanted = Buffer.from(expected);
-  if (given.length !== wanted.length || !crypto.timingSafeEqual(given, wanted)) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    return payload.exp && payload.exp > now() ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-const secure = ISSUER.startsWith("https://");
-
-function cookieOptions(maxAge) {
-  return { httpOnly: true, secure, sameSite: "lax", path: "/", maxAge: maxAge * 1000 };
-}
+// Rauthy's standalone registration page, so the store can deep-link sign-up past
+// the login dialog. Empty when accounts are off.
+export const signUpUrl = () => (isConfigured() ? `${ISSUER}/auth/v1/users/register` : "");
 
 // Only same-site paths, so a crafted link cannot bounce a fresh login off-site.
 function safeNext(value) {
@@ -112,12 +78,10 @@ export function accountOf(request) {
 export function me(request, response) {
   response.set("Cache-Control", "no-store");
   const authEnabled = isConfigured();
-  // Rauthy's standalone registration page, so the store can deep-link sign-up
-  // past the login dialog. Empty when accounts are off.
-  const signUpUrl = authEnabled ? `${ISSUER}/auth/v1/users/register` : "";
+  const url = signUpUrl();
   const account = accountOf(request);
-  if (!account) return response.json({ signedIn: false, authEnabled, signUpUrl });
-  response.json({ signedIn: true, authEnabled, signUpUrl, id: account.sub, email: account.email, name: account.name });
+  if (!account) return response.json({ signedIn: false, authEnabled, signUpUrl: url });
+  response.json({ signedIn: true, authEnabled, signUpUrl: url, id: account.sub, email: account.email, name: account.name });
 }
 
 // The token endpoint prefers basic auth unless it advertises only post.

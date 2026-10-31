@@ -3,15 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm run build:purs && concurrently \"npm:dev:web\" \"npm:dev:server\"",
-    "dev:web": "vite",
-    "dev:server": "node server/index.js",
     "build:purs": "./scripts/spago-local-cache.hs build",
-    "build": "npm run build:purs && vite build",
+    "build:ssr": "./scripts/spago-local-cache.hs bundle --bundle-type module --module Server.Render --platform node --outfile server/views.js --minify",
+    "build": "npm run build:purs && npm run build:ssr && vite build",
+    "dev": "npm run build:purs && concurrently \"vite build --watch\" \"npm:dev:server\"",
+    "dev:server": "node server/index.js",
     "start": "node server/index.js"
   },
   "dependencies": {
-    "@stripe/stripe-js": "^7.9.0",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "jose": "^6.2.14",
@@ -19,7 +18,9 @@
     "stripe": "^18.4.0"
   },
   "devDependencies": {
+    "@stripe/stripe-js": "^7.9.0",
     "concurrently": "^9.2.0",
+    "htmx.org": "^2.0.4",
     "purescript": "^0.15.15",
     "spago": "^1.0.3",
     "vite": "^7.0.6"

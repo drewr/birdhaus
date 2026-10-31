@@ -5,14 +5,63 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { batchStatus, currentBatch, displayDate } from "./batch.js";
+import { UNIT_PRICE_CENTS, formatUsd, formatTotal } from "./price.js";
+import { readCart, writeCart, clearCart } from "./cart.js";
+import { formatOrder } from "./order-format.js";
 import * as auth from "./auth.js";
 import * as db from "./db.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4242);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const dist = path.join(root, "dist");
 const batch = currentBatch();
 db.migrateInBackground();
+
+// Pages are rendered by PureScript (src/Server/Render.purs). In the image that
+// is pre-bundled to server/views.js (the image ships no PureScript toolchain or
+// output/); in dev we import the compiled module tree directly, so iterating
+// needs only `spago build`, not a bundle step.
+const prod = process.env.NODE_ENV === "production";
+const views = await import(prod ? "./views.js" : "../output/Server.Render/index.js");
+
+// Vite writes content-hashed asset names; the server-rendered <head> links them
+// from the manifest. Read once in prod (fail fast if missing), per request in
+// dev where the hashes change on each watch rebuild.
+function readManifest() {
+  try {
+    return JSON.parse(readFileSync(path.join(dist, ".vite", "manifest.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+let manifest = readManifest();
+function assets() {
+  if (!prod) manifest = readManifest();
+  const entry = manifest?.["src/client-entry.js"];
+  if (!entry) return { css: "", js: "" };
+  return { js: entry.file ? `/${entry.file}` : "", css: entry.css?.[0] ? `/${entry.css[0]}` : "" };
+}
+
+// The shared header/head/analytics fields every full page needs.
+function chrome(request, reason = "open") {
+  const account = auth.accountOf(request);
+  const { css, js } = assets();
+  return {
+    css,
+    js,
+    accountId: account?.sub ?? "",
+    accountLabel: account ? account.name || account.email : "",
+    signedIn: Boolean(account),
+    cartQty: readCart(request).qty,
+    reason
+  };
+}
+
+// Units the stepper may reach: the batch cap (when nearly gone) or 99.
+function stepperLimit(status) {
+  return status.remaining === null ? 99 : Math.max(Math.min(99, status.remaining), 1);
+}
 
 // When the webhook last failed to write to the database; /api/health reports it.
 let lastWebhookFailure = 0;
@@ -61,6 +110,8 @@ app.post("/api/stripe-webhook", express.raw({ type: "application/json" }), async
 });
 
 app.use(express.json());
+// HTMX and the no-JS form fallbacks post application/x-www-form-urlencoded.
+app.use(express.urlencoded({ extended: false }));
 
 // Accounts (auth/README.md). Sign-in is optional; a missing configuration or
 // an unreachable identity service must never affect checkout.
@@ -86,49 +137,11 @@ app.get("/api/health", async (_request, response) => {
   response.status(ok ? 200 : 503).json(health);
 });
 
-// remaining is only shown once the batch is nearly gone (under 20% left).
-app.get("/api/batch", async (_request, response) => {
-  response.set("Cache-Control", "no-store");
-  const status = batchStatus(batch, await paidUnits());
-  const showRemaining = status.open && status.remaining !== null && batch.cap > 0 && status.remaining < batch.cap * 0.2;
-  response.json({
-    open: status.open,
-    reason: status.reason,
-    shipBy: displayDate(batch.shipBy),
-    remaining: showRemaining ? status.remaining : null
-  });
-});
-
-app.post("/api/waitlist", async (request, response) => {
-  // Joining requires an account when sign-in is available, so the waitlist maps
-  // to a verified identity. A guest-only deployment (no auth) still takes an email.
-  const account = auth.accountOf(request);
-  if (auth.isConfigured() && !account) {
-    return response.status(401).json({ error: "Please sign in to join the waitlist." });
-  }
-  const email = account ? account.email : String(request.body?.email ?? "").trim().toLowerCase();
-  const quantity = request.body?.quantity;
-  const postalCode = String(request.body?.postalCode ?? "").trim().slice(0, 12) || null;
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) {
-    return response.status(400).json({ error: "Enter a valid email address." });
-  }
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
-    return response.status(400).json({ error: "Choose a quantity from 1 to 99." });
-  }
-  if (!db.isConfigured()) return response.status(503).json({ error: "The waitlist is not available yet." });
-  try {
-    await db.joinWaitlist(batch.id, email, quantity, postalCode, account?.sub ?? null);
-    response.json({ ok: true });
-  } catch (error) {
-    console.error("Could not save a waitlist entry:", error.message);
-    response.status(500).json({ error: "We could not save your spot. Please try again." });
-  }
-});
-
+// The quantity is the server's cart cookie, never a browser-supplied amount.
 app.post("/api/create-payment-intent", async (request, response) => {
-  const quantity = request.body?.quantity;
+  const quantity = readCart(request).qty;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
-    return response.status(400).json({ error: "Choose a quantity from 1 to 99." });
+    return response.status(400).json({ error: "Your cart is empty." });
   }
 
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -152,7 +165,7 @@ app.post("/api/create-payment-intent", async (request, response) => {
   try {
     const stripe = new Stripe(secretKey);
     const intent = await stripe.paymentIntents.create({
-      amount: quantity * 4000,
+      amount: quantity * UNIT_PRICE_CENTS,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
       description: shipBy ? `Pre-order: Birdhaus Bluebird House × ${quantity}, ships by ${shipBy}` : `Birdhaus Bluebird House × ${quantity}`,
@@ -165,27 +178,17 @@ app.post("/api/create-payment-intent", async (request, response) => {
   }
 });
 
-// The confirmation page's lookup. Stripe appends payment_intent and
-// payment_intent_client_secret to the return URL; requiring the matching
-// secret keeps order details private to the buyer.
-app.get("/api/order/:id", async (request, response) => {
-  response.set("Cache-Control", "no-store");
-  const id = request.params.id;
-  const clientSecret = request.query.client_secret;
+// Retrieve an order, gated by the client_secret Stripe appended to the return
+// URL (possession proves it's the buyer). Returns a trimmed view or null.
+async function lookupOrder(id, clientSecret) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  if (!/^pi_[A-Za-z0-9]+$/.test(id) || typeof clientSecret !== "string" || !clientSecret.startsWith(`${id}_secret_`)) {
-    return response.status(404).json({ error: "Order not found." });
-  }
-  if (!secretKey) {
-    return response.status(503).json({ error: "Checkout is not configured yet." });
-  }
-
+  if (typeof id !== "string" || !/^pi_[A-Za-z0-9]+$/.test(id)) return null;
+  if (typeof clientSecret !== "string" || !clientSecret.startsWith(`${id}_secret_`)) return null;
+  if (!secretKey) return null;
   try {
     const intent = await new Stripe(secretKey).paymentIntents.retrieve(id);
-    if (intent.client_secret !== clientSecret) {
-      return response.status(404).json({ error: "Order not found." });
-    }
-    response.json({
+    if (intent.client_secret !== clientSecret) return null;
+    return {
       id: intent.id,
       status: intent.status,
       created: intent.created,
@@ -196,19 +199,101 @@ app.get("/api/order/:id", async (request, response) => {
       email: intent.receipt_email,
       shipping: intent.shipping && { name: intent.shipping.name, address: intent.shipping.address },
       error: intent.last_payment_error?.message
-    });
+    };
   } catch (error) {
-    if (error.code === "resource_missing") return response.status(404).json({ error: "Order not found." });
+    if (error.code === "resource_missing") return null;
     console.error("Unable to retrieve Stripe PaymentIntent:", error.message);
-    response.status(500).json({ error: "We could not load your order." });
+    return null;
   }
+}
+
+// Kept as JSON too, for any out-of-band lookup.
+app.get("/api/order/:id", async (request, response) => {
+  response.set("Cache-Control", "no-store");
+  const order = await lookupOrder(request.params.id, request.query.client_secret);
+  if (!order) return response.status(404).json({ error: "Order not found." });
+  response.json(order);
 });
 
-// Image builds pin every file's mtime, so static's size+mtime validators can't
-// tell builds apart. Hashed assets never change; the page is sent from memory
-// so its ETag is a hash of its content.
-const dist = path.join(root, "dist");
-const indexHtml = readFileSync(path.join(dist, "index.html"), "utf8");
+// -------------------------------------------------------------- cart mutations
+
+// Add the chosen amount to what's already in the cart (form POST, 303 to /cart).
+app.post("/cart/add", (request, response) => {
+  const current = readCart(request).qty;
+  const add = Number.parseInt(request.body?.quantity, 10);
+  const qty = Number.isInteger(add) && add > 0 ? Math.min(current + add, 99) : Math.max(current, 1);
+  writeCart(response, qty);
+  response.redirect(303, "/cart");
+});
+
+// The cart stepper. HTMX gets the re-rendered #cart fragment; no-JS gets a 303.
+app.post("/cart/update", async (request, response) => {
+  const target = Number.parseInt(request.body?.quantity, 10);
+  const qty = Number.isInteger(target) ? Math.min(Math.max(target, 1), 99) : readCart(request).qty;
+  writeCart(response, qty);
+  if (request.get("HX-Request")) {
+    const status = batchStatus(batch, await paidUnits());
+    const vm = {
+      ...chrome(request),
+      cartQty: qty,
+      lineTotal: formatTotal(qty),
+      subtotal: formatTotal(qty),
+      shipBy: displayDate(batch.shipBy),
+      maxQuantity: stepperLimit(status)
+    };
+    return response.set("Cache-Control", "no-cache").type("html").send(views.cartFragment(vm));
+  }
+  response.redirect(303, "/cart");
+});
+
+app.post("/cart/clear", (request, response) => {
+  clearCart(response);
+  response.redirect(303, "/");
+});
+
+// -------------------------------------------------------------- waitlist
+
+app.post("/waitlist", async (request, response) => {
+  const account = auth.accountOf(request);
+  const authEnabled = auth.isConfigured();
+  const base = {
+    authEnabled,
+    signUpUrl: auth.signUpUrl(),
+    signedIn: Boolean(account),
+    accountLabel: account ? account.name || account.email : ""
+  };
+  const hx = Boolean(request.get("HX-Request"));
+  const email = account ? account.email : String(request.body?.email ?? "").trim().toLowerCase();
+  const quantity = Number.parseInt(request.body?.quantity, 10);
+  const postalCode = String(request.body?.postalCode ?? "").trim().slice(0, 12) || null;
+
+  const fail = (message) => {
+    if (!hx) return response.redirect(303, "/");
+    const vm = { ...base, wlState: "error", wlMessage: message, wlEmail: email, wlQuantity: Number.isInteger(quantity) ? String(quantity) : "", wlPostalCode: postalCode ?? "" };
+    return response.status(200).type("html").send(views.waitlistFragment(vm));
+  };
+
+  // Joining requires an account when sign-in is available. A guest-only
+  // deployment (no auth) still takes an email.
+  if (authEnabled && !account) return fail("Please sign in to join the waitlist.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return fail("Enter a valid email address.");
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) return fail("Choose a quantity from 1 to 99.");
+  if (!db.isConfigured()) return fail("The waitlist is not available yet.");
+  try {
+    await db.joinWaitlist(batch.id, email, quantity, postalCode, account?.sub ?? null);
+  } catch (error) {
+    console.error("Could not save a waitlist entry:", error.message);
+    return fail("We could not save your spot. Please try again.");
+  }
+  if (!hx) return response.redirect(303, "/");
+  const vm = { ...base, wlState: "joined", wlMessage: "", wlEmail: email, wlQuantity: String(quantity), wlPostalCode: postalCode ?? "" };
+  response.type("html").send(views.waitlistFragment(vm));
+});
+
+// -------------------------------------------------------------- static + pages
+
+// Image builds pin every file's mtime, so static's validators can't tell builds
+// apart; hashed /assets are immutable, everything else no-cache.
 app.use("/assets", express.static(path.join(dist, "assets"), { immutable: true, maxAge: "1y" }));
 app.use(express.static(dist, {
   index: false,
@@ -216,6 +301,61 @@ app.use(express.static(dist, {
   lastModified: false,
   setHeaders: (response) => response.setHeader("Cache-Control", "no-cache")
 }));
-app.get(/.*/, (_request, response) => response.set("Cache-Control", "no-cache").type("html").send(indexHtml));
+
+app.get("/", async (request, response) => {
+  const status = batchStatus(batch, await paidUnits());
+  const showRemaining = status.open && status.remaining !== null && batch.cap > 0 && status.remaining < batch.cap * 0.2;
+  const vm = {
+    ...chrome(request, status.reason),
+    authEnabled: auth.isConfigured(),
+    signUpUrl: auth.signUpUrl(),
+    open: status.open,
+    shipBy: displayDate(batch.shipBy),
+    remaining: showRemaining ? status.remaining : -1,
+    priceEach: formatUsd(UNIT_PRICE_CENTS),
+    maxQuantity: stepperLimit(status),
+    wlState: "editing",
+    wlMessage: "",
+    wlEmail: "",
+    wlQuantity: "1",
+    wlPostalCode: ""
+  };
+  response.set("Cache-Control", "no-cache").type("html").send(views.productPage(vm));
+});
+
+app.get("/cart", async (request, response) => {
+  const qty = readCart(request).qty;
+  if (qty <= 0) return response.redirect(303, "/");
+  const status = batchStatus(batch, await paidUnits());
+  const vm = {
+    ...chrome(request),
+    cartQty: qty,
+    lineTotal: formatTotal(qty),
+    subtotal: formatTotal(qty),
+    shipBy: displayDate(batch.shipBy),
+    maxQuantity: stepperLimit(status)
+  };
+  response.set("Cache-Control", "no-cache").type("html").send(views.cartPage(vm));
+});
+
+app.get("/checkout", (request, response) => {
+  const qty = readCart(request).qty;
+  if (qty <= 0) return response.redirect(303, "/cart");
+  const vm = { ...chrome(request), quantity: qty, total: formatTotal(qty) };
+  response.set("Cache-Control", "no-cache").type("html").send(views.checkoutPage(vm));
+});
+
+app.get("/order", async (request, response) => {
+  response.set("Cache-Control", "no-store");
+  const order = await lookupOrder(request.query.payment_intent, request.query.payment_intent_client_secret);
+  const base = chrome(request);
+  const vm = order
+    ? { ...base, ...formatOrder(order) }
+    : { ...base, status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1 };
+  response.type("html").send(views.confirmationPage(vm));
+});
+
+// Anything else: back to the storefront.
+app.get(/.*/, (_request, response) => response.redirect(303, "/"));
 
 app.listen(port, () => console.log(`Birdhaus server listening on http://localhost:${port}`));

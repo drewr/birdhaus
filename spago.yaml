@@ -1,14 +1,11 @@
 package:
   name: birdhaus-store
   dependencies:
-    - aff
+    - arrays
     - effect
-    - halogen
-    - halogen-vdom
-    - integers
-    - maybe
+    - foldable-traversable
     - prelude
-    - web-events
+    - strings
 workspace:
   packageSet:
     registry: 63.3.0
