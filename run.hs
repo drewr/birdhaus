@@ -48,6 +48,7 @@ data Opts = Opts
   , closes :: Text
   , shipBy :: Text
   , adminGroup :: Text
+  , replicas :: Text
   }
 
 parser :: Parser Opts
@@ -70,6 +71,9 @@ parser =
     <*> opt "closes" 'C' "2026-12-01" "Last day of pre-orders, YYYY-MM-DD (US Central)"
     <*> opt "ship-by" 'S' "2026-12-15" "Ship-by date promised at checkout, YYYY-MM-DD"
     <*> opt "admin-group" 'G' "birdhaus-admins" "Rauthy group whose members get the store admin portal"
+    -- Two instances so a rollout replaces one while the other keeps serving;
+    -- with one, every deploy is a short 503 from the edge.
+    <*> opt "replicas" 'n' "2" "Instances to run"
   where
     opt name short def help =
       optText name short (Specific (HelpMessage (help <> " (default: " <> def <> ")"))) <|> pure def
@@ -93,6 +97,9 @@ main = do
   procs datumctl (["whoami"] <> maybe [] (\s -> ["--session", s]) (session o)) empty
   for_ (cap o) $ \c ->
     unless (T.all (`elem` ['0' .. '9']) c && not (T.null c)) $ die ("--cap must be a whole number, not " <> c)
+  let r = replicas o
+  unless (not (T.null r) && T.all (`elem` ['0' .. '9']) r && T.take 1 r /= "0") $
+    die ("--replicas must be a positive whole number, not " <> r)
   for_ [stripeSecret o, dbSecret o, pullSecret o] $ \s -> do
     ok <- dcQuiet ["get", "secret", s]
     unless ok $ die ("Secret " <> s <> " not found in project " <> project o)
@@ -177,7 +184,7 @@ workloadManifest o auth image =
     , "    - name: " <> location o
     , "    scaleSettings:"
     , "      instanceManagementPolicy: OrderedReady"
-    , "      minReplicas: 1"
+    , "      minReplicas: " <> replicas o
     , "  template:"
     , "    spec:"
     , "      networkInterfaces:"

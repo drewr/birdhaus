@@ -107,6 +107,8 @@ main = do
       , "--auth-secret", if haveAuth then authSecret o else authSecret o <> "-absent"
       , "--pull-secret", pullSecret o
       , "--admin-group", adminGroup o
+      -- One instance is enough for dev; a deploy's brief 503 doesn't matter there.
+      , "--replicas", "1"
       ] <> maybe [] (\s -> ["--session", s]) (session o)
     )
     empty
