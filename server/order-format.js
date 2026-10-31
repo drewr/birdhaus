@@ -22,6 +22,7 @@ export function formatOrder(order) {
     shipBy: order.shipBy ?? "",
     quantity: order.quantity ?? 1,
     fulfillment: order.fulfillment ?? "ship",
-    pickupLabel: order.pickupLabel ?? ""
+    pickupLabel: order.pickupLabel ?? "",
+    deliveryLabel: order.deliveryLabel ?? ""
   };
 }

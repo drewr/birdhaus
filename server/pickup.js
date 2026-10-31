@@ -91,7 +91,7 @@ export async function pickupSchedule() {
 
 export async function recentOrders(limit = 50) {
   const { rows } = await query(
-    `select id, created_at, email, quantity, amount, currency, status, fulfillment, pickup_label
+    `select id, created_at, email, quantity, amount, currency, status, fulfillment, pickup_label, delivery_label
      from orders order by created_at desc limit $1`,
     [limit]
   );

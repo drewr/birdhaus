@@ -61,16 +61,22 @@ export const initWaitlistTracking = () => {
 
 let elements;
 let stripe;
+let clientSecret;
+let addressElement;
 
-// Mount the Payment Element on the checkout page. The server sets the price and
-// reads the quantity and pick-up slot from the cart cookie, so the browser sends
-// no amount. Pick-up is the only delivery method, so no address is collected.
+// The pay page: wallet buttons (Express Checkout) above the card form. The
+// server set the amount (houses plus any delivery fee) from the cart; the
+// page's data attributes only label the wallet sheet. A delivery address comes
+// from the wallet or the Address Element and is checked and saved on the
+// PaymentIntent by the server (/api/delivery/verify) before payment.
 async function initializeCheckout() {
   const form = document.getElementById("payment-form");
   const message = document.getElementById("payment-message");
   if (!form || form.dataset.initialized === "true") return;
   form.dataset.initialized = "true";
-  const quantity = Number(document.getElementById("checkout")?.dataset.quantity) || undefined;
+  const section = document.getElementById("checkout");
+  const delivering = section?.dataset.fulfillment === "delivery";
+  const quantity = Number(section?.dataset.quantity) || undefined;
   track("checkout-start", { quantity });
 
   try {
@@ -85,7 +91,20 @@ async function initializeCheckout() {
     stripe = await loadStripe(result.publishableKey);
     if (!stripe) throw new Error("Stripe could not be loaded. Please try again.");
 
-    elements = stripe.elements({ clientSecret: result.clientSecret, appearance: { theme: "flat" } });
+    clientSecret = result.clientSecret;
+    elements = stripe.elements({ clientSecret, appearance: { theme: "flat" } });
+    mountExpressCheckout(section, delivering);
+    if (delivering) {
+      // Its own group, so confirming doesn't attach it: the server sets the
+      // shipping address it verified.
+      addressElement = stripe.elements({ appearance: { theme: "flat" } }).create("address", {
+        mode: "shipping",
+        allowedCountries: ["US"],
+        fields: { phone: "always" },
+        validation: { phone: { required: "always" } }
+      });
+      addressElement.mount("#shipping-address");
+    }
     elements.create("payment").mount("#payment-element");
     form.addEventListener("submit", submitPayment);
   } catch (error) {
@@ -98,34 +117,121 @@ export const initCheckout = () => {
   if (document.getElementById("payment-form")) initializeCheckout();
 };
 
+// Apple Pay / Google Pay and the like. For delivery the wallet supplies the
+// address, name and phone; while the sheet is open only the ZIP is known, so
+// that's checked first and the full address again on confirm.
+function mountExpressCheckout(section, delivering) {
+  const options = { emailRequired: true };
+  if (delivering) {
+    const quantity = Number(section.dataset.quantity) || 1;
+    Object.assign(options, {
+      shippingAddressRequired: true,
+      allowedShippingCountries: ["US"],
+      phoneNumberRequired: true,
+      // The intent's amount already includes the fee, so the rate is $0 and the
+      // fee is a line item; a priced rate would count it twice.
+      shippingRates: [{ id: "local-delivery", displayName: `Local delivery — ${section.dataset.slotLabel}`, amount: 0 }],
+      lineItems: [
+        { name: `${quantity} × Bluebird House`, amount: Number(section.dataset.subtotalCents) || 0 },
+        { name: "Local delivery", amount: Number(section.dataset.feeCents) || 0 }
+      ]
+    });
+  }
+  const express = elements.create("expressCheckout", options);
+  if (delivering) {
+    express.on("shippingaddresschange", async (event) => {
+      let ok = false;
+      try {
+        const response = await fetch("/api/delivery/check-zip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postal_code: event.address?.postal_code })
+        });
+        ok = response.ok && (await response.json()).ok === true;
+      } catch {
+        // a failed check rejects the address; the buyer can retry
+      }
+      if (ok) event.resolve({});
+      else event.reject();
+    });
+  }
+  express.on("confirm", (event) => confirmExpress(event, delivering));
+  express.mount("#express-checkout");
+}
+
+async function confirmExpress(event, delivering) {
+  const message = document.getElementById("payment-message");
+  const { error: submitError } = await elements.submit();
+  if (submitError) {
+    event.paymentFailed({ reason: "fail" });
+    message.textContent = submitError.message;
+    return;
+  }
+  if (delivering) {
+    const problem = await verifyAddress({
+      name: event.shippingAddress?.name || event.billingDetails?.name,
+      phone: event.billingDetails?.phone,
+      address: event.shippingAddress?.address
+    });
+    if (problem) {
+      event.paymentFailed({ reason: "invalid_shipping_address", message: problem });
+      message.textContent = problem;
+      return;
+    }
+  }
+  const error = await confirm({ receipt_email: event.billingDetails?.email || document.getElementById("email").value || undefined });
+  if (error) message.textContent = error.message;
+}
+
+// "" when the server accepted the address (and saved it on the PaymentIntent),
+// otherwise the message to show.
+async function verifyAddress(details) {
+  try {
+    const response = await fetch("/api/delivery/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientSecret, ...details })
+    });
+    if (response.ok) return "";
+    return (await response.json().catch(() => ({}))).error || "We couldn't check that address. Please try again.";
+  } catch {
+    return "We couldn't check that address. Please try again.";
+  }
+}
+
+async function confirm(params) {
+  const { error } = await stripe.confirmPayment({
+    elements,
+    confirmParams: { return_url: `${window.location.origin}/order`, ...params }
+  });
+  return error;
+}
+
+// The card form. For delivery, the Address Element's address is checked by the
+// server first.
 async function submitPayment(event) {
   event.preventDefault();
   const message = document.getElementById("payment-message");
   const submitButton = document.getElementById("submit-payment");
   const email = document.getElementById("email").value;
+  const fail = (text) => {
+    message.textContent = text;
+    submitButton.disabled = false;
+  };
 
   submitButton.disabled = true;
   message.textContent = "";
+  if (addressElement) {
+    const { complete, value } = await addressElement.getValue();
+    if (!complete) return fail("Please complete the delivery address.");
+    const problem = await verifyAddress({ name: value.name, phone: value.phone, address: value.address });
+    if (problem) return fail(problem);
+  }
   const { error: submitError } = await elements.submit();
-  if (submitError) {
-    message.textContent = submitError.message;
-    submitButton.disabled = false;
-    return;
-  }
+  if (submitError) return fail(submitError.message);
 
-  const { error } = await stripe.confirmPayment({
-    elements,
-    confirmParams: {
-      return_url: `${window.location.origin}/order`,
-      receipt_email: email,
-      payment_method_data: { billing_details: { email } }
-    }
-  });
-
-  if (error) {
-    message.textContent = error.message;
-    submitButton.disabled = false;
-  }
+  const error = await confirm({ receipt_email: email, payment_method_data: { billing_details: { email } } });
+  if (error) fail(error.message);
 }
 
 // On the confirmation page, count a paid pre-order once (a reload must not

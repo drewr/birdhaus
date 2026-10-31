@@ -1,9 +1,10 @@
 -- The store admin portal (/admin), for members of the Rauthy admin group: recent
--- orders, and pick-up locations, slots and the pick-up schedule. Plain tables
--- and POST forms; every write redirects back.
+-- orders; pick-up locations, slots and schedule; local delivery settings, slots
+-- and schedule. Plain tables and POST forms; writes redirect back.
 module Server.Admin
   ( adminOrdersPage
   , adminPickupPage
+  , adminDeliveryPage
   ) where
 
 import Prelude
@@ -22,6 +23,25 @@ type Pickup = { slot :: String, email :: String, quantity :: Int, number :: Stri
 
 type OrdersVM = { | Chrome ( error :: String, orders :: Array Order ) }
 
+type DeliverySlot = { id :: Int, time :: String, active :: Boolean, past :: Boolean }
+
+-- check is how the radius was verified: exact, zip, mismatch or none.
+type Delivery =
+  { slot :: String, number :: String, name :: String, phone :: String, address :: String, quantity :: Int, check :: String }
+
+type DeliveryVM =
+  { | Chrome
+      ( error :: String
+      , enabled :: Boolean
+      , fee :: String
+      , radius :: String
+      , baseAddress :: String
+      , baseFound :: String
+      , slots :: Array DeliverySlot
+      , schedule :: Array Delivery
+      )
+  }
+
 type PickupVM =
   { | Chrome ( error :: String, locations :: Array Location, slots :: Array Slot, schedule :: Array Pickup ) }
 
@@ -30,6 +50,7 @@ adminNav current =
   el "nav" [ cls "admin-nav" ]
     [ link "/admin" "Orders"
     , link "/admin/pickup" "Pick-up"
+    , link "/admin/delivery" "Delivery"
     ]
   where
   link href label = el "a" [ cls (if href == current then "text-link admin-current" else "text-link"), A "href" href ] [ text label ]
@@ -116,17 +137,11 @@ newSlotForm locations =
       , el "select" [ A "id" "slot-location", A "name" "location", B "required" ]
           (map (\l -> el "option" [ A "value" (show l.id) ] [ text l.name ]) locations)
       , el "div" [ cls "admin-row" ]
-          [ field "slot-date" "Date" "date" "date"
-          , field "slot-start" "Starts" "start" "time"
-          , field "slot-end" "Ends" "end" "time"
+          [ inputField "slot-date" "Date" "date" "date"
+          , inputField "slot-start" "Starts" "start" "time"
+          , inputField "slot-end" "Ends" "end" "time"
           ]
       , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add slot" ]
-      ]
-  where
-  field id label name kind =
-    el "div" []
-      [ el "label" [ A "for" id ] [ text label ]
-      , elVoid "input" [ A "id" id, A "name" name, A "type" kind, B "required" ]
       ]
 
 newLocationForm :: Html
@@ -138,4 +153,86 @@ newLocationForm =
     , el "label" [ A "for" "location-details" ] [ text "Address and instructions (shown to buyers)" ]
     , el "textarea" [ A "id" "location-details", A "name" "details", A "maxlength" "500", A "rows" "3" ] []
     , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add location" ]
+    ]
+
+-- ---------------------------------------------------------------- delivery
+
+adminDeliveryPage :: DeliveryVM -> String
+adminDeliveryPage vm =
+  layout vm $
+    el "section" [ cls "admin" ]
+      [ el "h1" [] [ text "Admin" ]
+      , adminNav "/admin/delivery"
+      , errorLine vm.error
+      , el "h2" [ cls "section-title" ] [ text "Delivery schedule" ]
+      , if null vm.schedule then el "p" [ cls "description" ] [ text "No paid delivery orders yet." ]
+        else
+          table [ "Slot", "Order", "Name", "Phone", "Address", "Qty", "Address check" ]
+            ( map
+                (\d -> [ text d.slot, text d.number, text d.name, text d.phone, text d.address, text (show d.quantity), text (checkLabel d.check) ])
+                vm.schedule
+            )
+      , el "h2" [ cls "section-title" ] [ text "Settings" ]
+      , settingsForm vm
+      , el "h2" [ cls "section-title" ] [ text "Delivery slots" ]
+      , if null vm.slots then el "p" [ cls "description" ] [ text "No slots yet." ]
+        else
+          table [ "Time", "Status", "" ]
+            ( map
+                (\d -> [ text d.time, text (if d.past then "Past" else status d.active), toggle ("/admin/delivery/slots/" <> show d.id <> "/active") d.active ])
+                vm.slots
+            )
+      , newDeliverySlotForm
+      ]
+
+-- Orders that weren't checked against the exact street address need a look.
+checkLabel :: String -> String
+checkLabel = case _ of
+  "exact" -> "Street address"
+  "zip" -> "ZIP only — check distance"
+  "mismatch" -> "Changed after check — verify"
+  _ -> "Not checked — verify"
+
+settingsForm :: DeliveryVM -> Html
+settingsForm vm =
+  el "form" [ cls "admin-form", A "method" "post", A "action" "/admin/delivery/settings" ]
+    [ el "label" [ cls "admin-check" ]
+        [ elVoid "input" ([ A "type" "checkbox", A "name" "enabled" ] <> (if vm.enabled then [ B "checked" ] else []))
+        , text " Offer local delivery at checkout"
+        ]
+    , el "div" [ cls "admin-row" ]
+        [ el "div" []
+            [ el "label" [ A "for" "delivery-fee" ] [ text "Fee per order ($)" ]
+            , elVoid "input" [ A "id" "delivery-fee", A "name" "fee", A "type" "number", A "min" "0", A "step" "0.01", A "value" vm.fee, B "required" ]
+            ]
+        , el "div" []
+            [ el "label" [ A "for" "delivery-radius" ] [ text "Radius (miles)" ]
+            , elVoid "input" [ A "id" "delivery-radius", A "name" "radius", A "type" "number", A "min" "0.1", A "step" "0.1", A "value" vm.radius, B "required" ]
+            ]
+        ]
+    , el "label" [ A "for" "delivery-base" ] [ text "Home base (street, city, state ZIP)" ]
+    , elVoid "input" [ A "id" "delivery-base", A "name" "baseAddress", A "type" "text", A "maxlength" "300", A "value" vm.baseAddress, A "placeholder" "1100 Congress Ave, Austin, TX 78701", B "required" ]
+    , el "p" [ cls "fine-print" ]
+        [ text (if vm.baseFound == "" then "Not located yet; saving looks the address up with the US Census geocoder." else "Located at " <> vm.baseFound <> ". Distances are measured from here.") ]
+    , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Save settings" ]
+    ]
+
+newDeliverySlotForm :: Html
+newDeliverySlotForm =
+  el "form" [ cls "admin-form", A "method" "post", A "action" "/admin/delivery/slots" ]
+    [ el "h3" [] [ text "Add a delivery slot (US Central)" ]
+    , el "div" [ cls "admin-row" ]
+        [ inputField "dslot-date" "Date" "date" "date"
+        , inputField "dslot-start" "Starts" "start" "time"
+        , inputField "dslot-end" "Ends" "end" "time"
+        ]
+    , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add slot" ]
+    ]
+
+-- A labelled required input for the slot forms.
+inputField :: String -> String -> String -> String -> Html
+inputField id label name kind =
+  el "div" []
+    [ el "label" [ A "for" id ] [ text label ]
+    , elVoid "input" [ A "id" id, A "name" name, A "type" kind, B "required" ]
     ]

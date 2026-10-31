@@ -11,6 +11,8 @@ import { formatOrder } from "./order-format.js";
 import * as auth from "./auth.js";
 import * as db from "./db.js";
 import * as pickup from "./pickup.js";
+import * as delivery from "./delivery.js";
+import { lastGeocodeFailure } from "./geocode.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4242);
@@ -60,17 +62,37 @@ function chrome(request, reason = "open") {
   };
 }
 
-// The cart's slot if it can still be booked; null when unset, stale, or the
-// database is down (pick-up then can't proceed, the rest of the store can).
-async function cartSlot(request) {
-  const { slot } = readCart(request);
+// The cart's delivery choice if it can still be booked: { method, slot, label,
+// feeCents }. Null when unset, stale, delivery switched off, or the database is
+// down: checkout then can't proceed, the rest of the store can.
+async function cartChoice(request) {
+  const { slot, method } = readCart(request);
   if (slot === null || !db.isConfigured()) return null;
   try {
-    return await pickup.bookableSlot(slot);
+    if (method === "delivery") {
+      const s = await delivery.settings();
+      const found = delivery.offered(s) ? await delivery.bookableSlot(slot) : null;
+      return found && { method, slot: found, label: delivery.slotLabel(found), feeCents: s.feeCents };
+    }
+    const found = await pickup.bookableSlot(slot);
+    return found && { method, slot: found, label: pickup.slotLabel(found), feeCents: 0 };
   } catch (error) {
-    console.error("Could not load the pick-up slot:", error.message);
+    console.error("Could not load the delivery choice:", error.message);
     return null;
   }
+}
+
+// The delivery options line on the product and cart pages.
+async function fulfillmentNote() {
+  try {
+    const s = db.isConfigured() ? await delivery.settings() : null;
+    if (s && delivery.offered(s)) {
+      return `Local pick-up, or local delivery within ${s.radiusMiles} miles for ${formatUsd(s.feeCents)}. Shipping coming soon. Taxes not included.`;
+    }
+  } catch (error) {
+    console.error("Could not load delivery settings:", error.message);
+  }
+  return "Local pick-up only for now — shipping coming soon. Taxes not included.";
 }
 
 // Units the stepper may reach: the batch cap (when nearly gone) or 99.
@@ -148,7 +170,12 @@ app.get("/api/health", async (_request, response) => {
   if (Date.now() - lastWebhookFailure < 15 * 60 * 1000) {
     health.webhook = `failing: a Stripe event could not be recorded at ${new Date(lastWebhookFailure).toISOString()}`;
   }
-  const ok = health.db !== "not configured" && !health.db.startsWith("failing") && health.webhook === "ok";
+  // Delivery falls back to ZIP checks while Census is down; report it so the
+  // owner hears about it.
+  health.geocoder = Date.now() - lastGeocodeFailure < 15 * 60 * 1000
+    ? `failing: the Census geocoder could not be reached at ${new Date(lastGeocodeFailure).toISOString()}`
+    : "ok";
+  const ok = health.db !== "not configured" && !health.db.startsWith("failing") && health.webhook === "ok" && health.geocoder === "ok";
   response.status(ok ? 200 : 503).json(health);
 });
 
@@ -173,10 +200,10 @@ app.post("/api/create-payment-intent", async (request, response) => {
     return response.status(409).json({ error: `Only ${status.remaining} left in this batch. Lower the quantity, or join the waitlist for more.` });
   }
 
-  // Pick-up is the only delivery method until shipping is added.
-  const slot = await cartSlot(request);
-  if (!slot) return response.status(409).json({ error: "Choose a new pick-up time." });
-  const label = pickup.slotLabel(slot);
+  // Pick-up or local delivery; shipping isn't offered yet. The fee comes from
+  // the settings now, never from the browser.
+  const choice = await cartChoice(request);
+  if (!choice) return response.status(409).json({ error: "Choose a new delivery or pick-up time." });
 
   const shipBy = displayDate(batch.shipBy);
   const account = auth.accountOf(request);
@@ -185,18 +212,21 @@ app.post("/api/create-payment-intent", async (request, response) => {
     quantity: String(quantity),
     batch: batch.id,
     ship_by: batch.shipBy,
-    fulfillment: "pickup",
-    pickup_slot_id: String(slot.id),
-    pickup_label: label
+    fulfillment: choice.method
   };
+  if (choice.method === "delivery") {
+    Object.assign(metadata, { fee_cents: String(choice.feeCents), delivery_slot_id: String(choice.slot.id), delivery_label: choice.label });
+  } else {
+    Object.assign(metadata, { pickup_slot_id: String(choice.slot.id), pickup_label: choice.label });
+  }
   if (account) metadata.account_sub = account.sub;
   try {
     const stripe = new Stripe(secretKey);
     const intent = await stripe.paymentIntents.create({
-      amount: quantity * UNIT_PRICE_CENTS,
+      amount: quantity * UNIT_PRICE_CENTS + choice.feeCents,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
-      description: `${shipBy ? "Pre-order: " : ""}Birdhaus Bluebird House × ${quantity}, pick-up: ${label}`,
+      description: `${shipBy ? "Pre-order: " : ""}Birdhaus Bluebird House × ${quantity}, ${choice.method === "delivery" ? "local delivery" : "pick-up"}: ${choice.label}`,
       metadata
     });
     response.json({ clientSecret: intent.client_secret, publishableKey });
@@ -206,35 +236,41 @@ app.post("/api/create-payment-intent", async (request, response) => {
   }
 });
 
-// Retrieve an order, gated by the client_secret Stripe appended to the return
-// URL (possession proves it's the buyer). Returns a trimmed view or null.
-async function lookupOrder(id, clientSecret) {
+// A PaymentIntent, gated by its client_secret (possession proves it's the
+// buyer, as Stripe appends it to the return URL). Null when anything is off.
+async function intentForSecret(id, clientSecret) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (typeof id !== "string" || !/^pi_[A-Za-z0-9]+$/.test(id)) return null;
   if (typeof clientSecret !== "string" || !clientSecret.startsWith(`${id}_secret_`)) return null;
   if (!secretKey) return null;
   try {
     const intent = await new Stripe(secretKey).paymentIntents.retrieve(id);
-    if (intent.client_secret !== clientSecret) return null;
-    return {
-      id: intent.id,
-      status: intent.status,
-      created: intent.created,
-      amount: intent.amount,
-      currency: intent.currency,
-      quantity: Number(intent.metadata.quantity) || 1,
-      shipBy: displayDate(intent.metadata.ship_by),
-      email: intent.receipt_email,
-      shipping: intent.shipping && { name: intent.shipping.name, address: intent.shipping.address },
-      fulfillment: intent.metadata.fulfillment === "pickup" ? "pickup" : "ship",
-      pickupLabel: intent.metadata.pickup_label || "",
-      error: intent.last_payment_error?.message
-    };
+    return intent.client_secret === clientSecret ? intent : null;
   } catch (error) {
-    if (error.code === "resource_missing") return null;
-    console.error("Unable to retrieve Stripe PaymentIntent:", error.message);
+    if (error.code !== "resource_missing") console.error("Unable to retrieve Stripe PaymentIntent:", error.message);
     return null;
   }
+}
+
+// The order behind the return URL, as a trimmed view, or null.
+async function lookupOrder(id, clientSecret) {
+  const intent = await intentForSecret(id, clientSecret);
+  if (!intent) return null;
+  return {
+    id: intent.id,
+    status: intent.status,
+    created: intent.created,
+    amount: intent.amount,
+    currency: intent.currency,
+    quantity: Number(intent.metadata.quantity) || 1,
+    shipBy: displayDate(intent.metadata.ship_by),
+    email: intent.receipt_email,
+    shipping: intent.shipping && { name: intent.shipping.name, address: intent.shipping.address },
+    fulfillment: ["pickup", "delivery"].includes(intent.metadata.fulfillment) ? intent.metadata.fulfillment : "ship",
+    pickupLabel: intent.metadata.pickup_label || "",
+    deliveryLabel: intent.metadata.delivery_label || "",
+    error: intent.last_payment_error?.message
+  };
 }
 
 // Kept as JSON too, for any out-of-band lookup.
@@ -243,6 +279,72 @@ app.get("/api/order/:id", async (request, response) => {
   const order = await lookupOrder(request.params.id, request.query.client_secret);
   if (!order) return response.status(404).json({ error: "Order not found." });
   response.json(order);
+});
+
+// -------------------------------------------------------------- local delivery
+
+// The wallet sheet's check while open: only city, state and ZIP are revealed
+// until the buyer confirms, so this tests the ZIP centroid.
+app.post("/api/delivery/check-zip", async (request, response) => {
+  response.set("Cache-Control", "no-store");
+  try {
+    const s = db.isConfigured() ? await delivery.settings() : null;
+    response.json({ ok: Boolean(s && delivery.offered(s) && delivery.checkZip(s, request.body?.postal_code)) });
+  } catch (error) {
+    console.error("Could not check a delivery ZIP:", error.message);
+    response.json({ ok: false });
+  }
+});
+
+const PAYABLE = ["requires_payment_method", "requires_confirmation", "requires_action"];
+const field = (value, max) => String(value ?? "").trim().slice(0, max);
+
+// The authoritative radius check, just before payment: geocode the full
+// address and, if it's in range, set it on the PaymentIntent from the server so
+// the order records the address that passed. The client secret proves the
+// caller is the buyer, as on /order.
+app.post("/api/delivery/verify", async (request, response) => {
+  response.set("Cache-Control", "no-store");
+  const clientSecret = request.body?.clientSecret;
+  const id = typeof clientSecret === "string" ? clientSecret.split("_secret_")[0] : "";
+  const intent = await intentForSecret(id, clientSecret);
+  if (!intent || intent.metadata.fulfillment !== "delivery" || !PAYABLE.includes(intent.status)) {
+    return response.status(404).json({ error: "Checkout not found. Reload the page." });
+  }
+  const given = request.body?.address ?? {};
+  const address = {
+    line1: field(given.line1, 200),
+    line2: field(given.line2, 200),
+    city: field(given.city, 100),
+    state: field(given.state, 50),
+    postal_code: field(given.postal_code, 10),
+    country: field(given.country, 2).toUpperCase() || "US"
+  };
+  const name = field(request.body?.name, 200);
+  const phone = field(request.body?.phone, 40);
+  if (!address.line1 || !address.city || !address.postal_code || !name) {
+    return response.status(400).json({ error: "Enter the delivery name and full address." });
+  }
+  let s;
+  try {
+    s = await delivery.settings();
+  } catch (error) {
+    console.error("Could not load delivery settings:", error.message);
+    return response.status(503).json({ error: "Delivery is unavailable right now. Please try again shortly." });
+  }
+  if (!delivery.offered(s)) return response.status(409).json({ error: "Local delivery isn't available right now." });
+  const result = await delivery.checkAddress(s, address);
+  if (!result.ok) return response.status(422).json({ error: `That address is outside our ${s.radiusMiles}-mile delivery area.` });
+  try {
+    await new Stripe(process.env.STRIPE_SECRET_KEY).paymentIntents.update(id, {
+      shipping: { name, phone: phone || undefined, address },
+      metadata: { address_check: result.check, verified_zip: address.postal_code.slice(0, 5) }
+    });
+  } catch (error) {
+    console.error("Could not set the delivery address:", error.message);
+    return response.status(500).json({ error: "We could not save the address. Please try again." });
+  }
+  response.json({ ok: true });
 });
 
 // -------------------------------------------------------------- cart mutations
@@ -349,7 +451,8 @@ app.get("/", async (request, response) => {
     wlMessage: "",
     wlEmail: "",
     wlQuantity: "1",
-    wlPostalCode: ""
+    wlPostalCode: "",
+    fulfillmentNote: await fulfillmentNote()
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.productPage(vm));
 });
@@ -364,33 +467,41 @@ app.get("/cart", async (request, response) => {
     lineTotal: formatTotal(qty),
     subtotal: formatTotal(qty),
     shipBy: displayDate(batch.shipBy),
-    maxQuantity: stepperLimit(status)
+    maxQuantity: stepperLimit(status),
+    fulfillmentNote: await fulfillmentNote()
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.cartPage(vm));
 });
 
 // Checkout step 1: how to get the house. Shipping is shown but greyed out until
-// USPS pricing is added (docs/design/fulfillment.md); pick-up is the only choice.
+// USPS pricing is added (docs/design/fulfillment.md); the choices are pick-up
+// and, when an admin has switched it on, local delivery (local-delivery.md).
 async function deliveryPage(request, response, error = "") {
   const cart = readCart(request);
-  let slots = [];
-  let available = db.isConfigured();
-  if (available) {
+  let pickupSlots = [];
+  let deliverySlots = [];
+  let settings = null;
+  if (db.isConfigured()) {
     try {
-      slots = await pickup.upcomingSlots();
+      settings = await delivery.settings();
+      [pickupSlots, deliverySlots] = await Promise.all([
+        pickup.upcomingSlots(),
+        delivery.offered(settings) ? delivery.upcomingSlots() : []
+      ]);
     } catch (failure) {
-      console.error("Could not load pick-up slots:", failure.message);
-      available = false;
+      console.error("Could not load delivery choices:", failure.message);
     }
   }
+  const chosen = (method, id) => cart.method === method && cart.slot === id;
   const vm = {
     ...chrome(request),
     quantity: cart.qty,
     total: formatTotal(cart.qty),
     error,
-    slots: available
-      ? slots.map((s) => ({ id: s.id, location: s.name, details: s.details, time: pickup.slotTime(s.starts_at, s.ends_at), selected: s.id === cart.slot }))
-      : []
+    slots: pickupSlots.map((p) => ({ id: p.id, location: p.name, details: p.details, time: pickup.slotTime(p.starts_at, p.ends_at), selected: chosen("pickup", p.id) })),
+    deliveryFee: settings ? formatUsd(settings.feeCents) : "",
+    deliveryRadius: settings ? String(settings.radiusMiles) : "",
+    deliverySlots: deliverySlots.map((d) => ({ id: d.id, time: delivery.slotLabel(d), selected: chosen("delivery", d.id) }))
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.deliveryPage(vm));
 }
@@ -400,36 +511,50 @@ app.get("/checkout", (request, response) => {
   return deliveryPage(request, response);
 });
 
+// The choice posts as "pickup:<slot id>" or "delivery:<slot id>".
 app.post("/checkout/delivery", async (request, response) => {
   const cart = readCart(request);
   if (cart.qty <= 0) return response.redirect(303, "/cart");
-  const slotId = Number.parseInt(request.body?.slot, 10);
+  const [method, id] = String(request.body?.choice ?? "").split(":");
+  const slotId = Number.parseInt(id, 10);
   let slot = null;
   if (Number.isInteger(slotId) && db.isConfigured()) {
     try {
-      slot = await pickup.bookableSlot(slotId);
+      if (method === "delivery") {
+        const s = await delivery.settings();
+        slot = delivery.offered(s) ? await delivery.bookableSlot(slotId) : null;
+      } else if (method === "pickup") {
+        slot = await pickup.bookableSlot(slotId);
+      }
     } catch (error) {
-      console.error("Could not load the pick-up slot:", error.message);
+      console.error("Could not load the chosen slot:", error.message);
     }
   }
-  if (!slot) return deliveryPage(request, response, "Choose a pick-up time from the list.");
-  writeCart(response, { ...cart, slot: slot.id });
+  if (!slot) return deliveryPage(request, response, "Choose a pick-up or delivery time from the list.");
+  writeCart(response, { ...cart, method, slot: slot.id });
   response.redirect(303, "/checkout/pay");
 });
 
-// Checkout step 2: pay, with the delivery choice summarized.
+// Checkout step 2: pay, with the delivery choice summarized. Delivery adds the
+// address (or the wallet's) and the fee; the data attributes only drive the
+// wallet sheet's display, the server sets the amount.
 app.get("/checkout/pay", async (request, response) => {
   const qty = readCart(request).qty;
   if (qty <= 0) return response.redirect(303, "/cart");
-  const slot = await cartSlot(request);
-  if (!slot) return response.redirect(303, "/checkout");
+  const choice = await cartChoice(request);
+  if (!choice) return response.redirect(303, "/checkout");
   const account = auth.accountOf(request);
+  const subtotalCents = qty * UNIT_PRICE_CENTS;
   const vm = {
     ...chrome(request),
     quantity: qty,
     subtotal: formatTotal(qty),
-    total: formatTotal(qty),
-    pickupLabel: pickup.slotLabel(slot),
+    total: formatUsd(subtotalCents + choice.feeCents),
+    fulfillment: choice.method,
+    choiceLabel: choice.label,
+    fee: formatUsd(choice.feeCents),
+    subtotalCents,
+    feeCents: choice.feeCents,
     email: account?.email ?? ""
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.checkoutPage(vm));
@@ -441,7 +566,7 @@ app.get("/order", async (request, response) => {
   const base = chrome(request);
   const vm = order
     ? { ...base, ...formatOrder(order) }
-    : { ...base, status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1, fulfillment: "ship", pickupLabel: "" };
+    : { ...base, status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1, fulfillment: "ship", pickupLabel: "", deliveryLabel: "" };
   response.type("html").send(views.confirmationPage(vm));
 });
 
@@ -470,7 +595,7 @@ app.get("/admin", auth.requireAdmin, async (request, response) => {
       quantity: o.quantity,
       total: formatUsd(o.amount),
       status: o.status,
-      method: o.fulfillment === "pickup" ? `Pick-up: ${o.pickup_label ?? ""}` : "Ship"
+      method: o.fulfillment === "pickup" ? `Pick-up: ${o.pickup_label ?? ""}` : o.fulfillment === "delivery" ? `Delivery: ${o.delivery_label ?? ""}` : "Ship"
     }))
   }));
   response.type("html").send(views.adminOrdersPage({ orders: [], ...vm }));
@@ -490,13 +615,13 @@ app.get("/admin/pickup", auth.requireAdmin, async (request, response) => {
 });
 
 // Runs an admin write, logging failures; every form redirects back regardless.
-async function adminWrite(response, write) {
+async function adminWrite(response, write, back = "/admin/pickup") {
   try {
     if (db.isConfigured()) await write();
   } catch (error) {
     console.error("Admin change failed:", error.message);
   }
-  response.redirect(303, "/admin/pickup");
+  response.redirect(303, back);
 }
 
 app.post("/admin/pickup/locations", auth.requireAdmin, (request, response) => {
@@ -524,6 +649,79 @@ app.post("/admin/pickup/slots", auth.requireAdmin, (request, response) => {
 
 app.post("/admin/pickup/slots/:id/active", auth.requireAdmin, (request, response) =>
   adminWrite(response, () => pickup.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"))
+);
+
+// Local delivery settings, slots and schedule. Saving geocodes a changed base
+// address, so an error re-renders the page with the message instead of
+// redirecting.
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^\d{2}:\d{2}$/;
+
+async function adminDeliveryPage(request, response, notice = "") {
+  const vm = await adminData(request, async () => {
+    const [s, slots, schedule] = await Promise.all([delivery.settings(), delivery.listSlots(), delivery.deliverySchedule()]);
+    const now = new Date();
+    return {
+      enabled: s.enabled,
+      fee: (s.feeCents / 100).toFixed(2),
+      radius: String(s.radiusMiles),
+      baseAddress: s.baseAddress,
+      baseFound: s.base ? `${s.base.lat.toFixed(5)}, ${s.base.lon.toFixed(5)}` : "",
+      slots: slots.map((d) => ({ id: d.id, time: delivery.slotLabel(d), active: d.active, past: d.ends_at < now })),
+      schedule: schedule.map((o) => {
+        const a = o.shipping?.address ?? {};
+        return {
+          slot: o.delivery_label ?? "",
+          number: o.id.slice(-8).toUpperCase(),
+          name: o.shipping?.name ?? "",
+          phone: o.shipping?.phone ?? "",
+          address: [a.line1, a.line2, [a.city, a.state, a.postal_code].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+          quantity: o.quantity,
+          check: o.address_check ?? "none"
+        };
+      })
+    };
+  });
+  const empty = { enabled: false, fee: "0.00", radius: "", baseAddress: "", baseFound: "", slots: [], schedule: [] };
+  response.type("html").send(views.adminDeliveryPage({ ...empty, ...vm, error: notice || vm.error }));
+}
+
+app.get("/admin/delivery", auth.requireAdmin, (request, response) => adminDeliveryPage(request, response));
+
+app.post("/admin/delivery/settings", auth.requireAdmin, async (request, response) => {
+  const fee = Number.parseFloat(request.body?.fee);
+  const radius = Number.parseFloat(request.body?.radius);
+  if (!Number.isFinite(fee) || fee < 0 || fee > 1000 || !Number.isFinite(radius) || radius <= 0 || radius > 500) {
+    return adminDeliveryPage(request, response, "Enter a fee from $0 to $1000 and a radius from 0 to 500 miles.");
+  }
+  let error = "";
+  try {
+    error = await delivery.saveSettings({
+      enabled: request.body?.enabled === "on",
+      feeCents: Math.round(fee * 100),
+      radiusMiles: radius,
+      baseAddress: String(request.body?.baseAddress ?? "").trim().slice(0, 300)
+    });
+  } catch (failure) {
+    console.error("Could not save delivery settings:", failure.message);
+    error = "The database is unavailable. Try again shortly.";
+  }
+  if (error) return adminDeliveryPage(request, response, error);
+  response.redirect(303, "/admin/delivery");
+});
+
+app.post("/admin/delivery/slots", auth.requireAdmin, (request, response) => {
+  const date = String(request.body?.date ?? "");
+  const start = String(request.body?.start ?? "");
+  const end = String(request.body?.end ?? "");
+  const valid = DATE.test(date) && TIME.test(start) && TIME.test(end) && end > start;
+  return adminWrite(response, async () => {
+    if (valid) await delivery.createSlot(date, start, end);
+  }, "/admin/delivery");
+});
+
+app.post("/admin/delivery/slots/:id/active", auth.requireAdmin, (request, response) =>
+  adminWrite(response, () => delivery.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"), "/admin/delivery")
 );
 
 // Anything else: back to the storefront.

@@ -15,7 +15,7 @@ module Server.Render
 import Prelude
 import Data.Array (null)
 import Html (Attr(..), Html, cls, el, elVoid, empty, render, text, whenH)
-import Server.Admin (adminOrdersPage, adminPickupPage)
+import Server.Admin (adminDeliveryPage, adminOrdersPage, adminPickupPage)
 import Server.Layout (Chrome, cartLinkEl, layout)
 
 type WaitlistFields r =
@@ -37,20 +37,44 @@ type ProductVM =
           , remaining :: Int
           , priceEach :: String
           , maxQuantity :: Int
+          , fulfillmentNote :: String
           )
       )
   }
 
 type CartVM =
-  { | Chrome ( lineTotal :: String, subtotal :: String, shipBy :: String, maxQuantity :: Int ) }
+  { | Chrome ( lineTotal :: String, subtotal :: String, shipBy :: String, maxQuantity :: Int, fulfillmentNote :: String ) }
 
 type Slot = { id :: Int, location :: String, details :: String, time :: String, selected :: Boolean }
 
-type DeliveryVM =
-  { | Chrome ( quantity :: Int, total :: String, error :: String, slots :: Array Slot ) }
+type DeliverySlot = { id :: Int, time :: String, selected :: Boolean }
 
+type DeliveryVM =
+  { | Chrome
+      ( quantity :: Int
+      , total :: String
+      , error :: String
+      , slots :: Array Slot
+      , deliveryFee :: String
+      , deliveryRadius :: String
+      , deliverySlots :: Array DeliverySlot
+      )
+  }
+
+-- subtotalCents and feeCents only label the wallet sheet; the server sets the amount.
 type CheckoutVM =
-  { | Chrome ( quantity :: Int, subtotal :: String, total :: String, pickupLabel :: String, email :: String ) }
+  { | Chrome
+      ( quantity :: Int
+      , subtotal :: String
+      , total :: String
+      , fulfillment :: String
+      , choiceLabel :: String
+      , fee :: String
+      , subtotalCents :: Int
+      , feeCents :: Int
+      , email :: String
+      )
+  }
 
 type OrderVM =
   { | Chrome
@@ -66,6 +90,7 @@ type OrderVM =
       , quantity :: Int
       , fulfillment :: String
       , pickupLabel :: String
+      , deliveryLabel :: String
       )
   }
 
@@ -115,7 +140,7 @@ purchase vm =
             [ text (if vm.cartQty > 0 then "Add to cart (" <> show vm.cartQty <> " in cart)" else "Add to cart") ]
         ]
     , el "p" [ cls "fine-print" ]
-        [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> "Local pick-up only for now — shipping coming soon. Taxes not included.") ]
+        [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> vm.fulfillmentNote) ]
     , el "details" [ cls "waitlist-inline" ]
         [ el "summary" [ cls "text-button" ] [ text "Need more? Join the waitlist" ]
         , el "p" [ cls "description" ] [ text "Need more than this batch has? Tell us how many and we'll email you when we can build them." ]
@@ -231,7 +256,7 @@ cartPage vm =
       , el "a" [ cls "buy-button", A "href" "/checkout" ] [ text "Proceed to checkout" ]
       , el "a" [ cls "text-button", A "href" "/" ] [ text "Continue shopping" ]
       , el "p" [ cls "fine-print" ]
-          [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> "Local pick-up only for now — shipping coming soon. Taxes not included.") ]
+          [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> vm.fulfillmentNote) ]
       ]
 
 -- The #cart box, re-rendered in place by the HTMX stepper.
@@ -285,24 +310,33 @@ deliveryPage vm =
                 [ elVoid "input" [ A "type" "radio", A "name" "method", A "value" "ship", B "disabled" ]
                 , el "span" [] [ el "strong" [] [ text "Shipping" ], text " — coming soon" ]
                 ]
-            , el "p" [ cls "delivery-heading" ] [ el "strong" [] [ text "Local pick-up" ], text " — free. Choose a time:" ]
             , whenH (vm.error /= "") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text vm.error ])
+            , el "p" [ cls "delivery-heading" ] [ el "strong" [] [ text "Local pick-up" ], text " — free. Choose a time:" ]
             ]
-              <>
-                if null vm.slots then
-                  [ el "p" [ cls "description" ] [ text "No pick-up times are open right now — check back soon." ] ]
-                else
-                  map slotOption vm.slots
-                    <> [ el "button" [ cls "buy-button", A "type" "submit" ] [ text "Continue to payment" ] ]
+              <> (if null vm.slots then [ el "p" [ cls "description" ] [ text "No pick-up times are open right now — check back soon." ] ] else map slotOption vm.slots)
+              <> deliveryOptions vm
+              <> (if null vm.slots && null vm.deliverySlots then [] else [ el "button" [ cls "buy-button", A "type" "submit" ] [ text "Continue to payment" ] ])
           )
       , el "div" [ cls "checkout-actions" ]
           [ el "a" [ cls "text-button", A "href" "/cart" ] [ text "Back to cart" ] ]
       ]
 
+-- Local delivery appears only while an admin has it switched on and slots open.
+deliveryOptions :: DeliveryVM -> Array Html
+deliveryOptions vm
+  | null vm.deliverySlots = []
+  | otherwise =
+      [ el "p" [ cls "delivery-heading" ]
+          [ el "strong" [] [ text "Local delivery" ]
+          , text (" — " <> vm.deliveryFee <> ", within " <> vm.deliveryRadius <> " miles. Choose a time:")
+          ]
+      ]
+        <> map deliverySlotOption vm.deliverySlots
+
 slotOption :: Slot -> Html
 slotOption slot =
   el "label" [ cls "delivery-option" ]
-    [ elVoid "input" ([ A "type" "radio", A "name" "slot", A "value" (show slot.id), B "required" ] <> (if slot.selected then [ B "checked" ] else []))
+    [ choiceInput ("pickup:" <> show slot.id) slot.selected
     , el "span" []
         [ el "strong" [] [ text slot.location ]
         , text (" — " <> slot.time)
@@ -310,30 +344,59 @@ slotOption slot =
         ]
     ]
 
--- Step 2: pay. Pick-up needs no address, so only the Payment Element mounts.
+deliverySlotOption :: DeliverySlot -> Html
+deliverySlotOption slot =
+  el "label" [ cls "delivery-option" ]
+    [ choiceInput ("delivery:" <> show slot.id) slot.selected
+    , el "span" [] [ el "strong" [] [ text "Delivery" ], text (" — " <> slot.time) ]
+    ]
+
+choiceInput :: String -> Boolean -> Html
+choiceInput value selected =
+  elVoid "input" ([ A "type" "radio", A "name" "choice", A "value" value, B "required" ] <> (if selected then [ B "checked" ] else []))
+
+-- Step 2: pay. Wallet buttons (Express Checkout) sit above the card form. For
+-- delivery the wallet supplies the address, or the card path's Address Element
+-- does; pick-up needs none. The data attributes only label the wallet sheet.
 checkoutPage :: CheckoutVM -> String
 checkoutPage vm =
   layout vm $
-    el "section" [ A "id" "checkout", cls "checkout", A "aria-labelledby" "checkout-title", A "data-quantity" (show vm.quantity) ]
+    el "section"
+      [ A "id" "checkout", cls "checkout", A "aria-labelledby" "checkout-title"
+      , A "data-quantity" (show vm.quantity), A "data-fulfillment" vm.fulfillment, A "data-slot-label" vm.choiceLabel
+      , A "data-subtotal-cents" (show vm.subtotalCents), A "data-fee-cents" (show vm.feeCents)
+      ]
       [ el "h2" [ A "id" "checkout-title" ] [ text "Checkout" ]
       , el "dl" [ cls "order-summary checkout-breakdown" ]
-          [ el "dt" [] [ text (show vm.quantity <> " × Bluebird House") ], el "dd" [] [ text vm.subtotal ]
-          , el "dt" [] [ text "Pick-up" ], el "dd" [] [ text (vm.pickupLabel <> " — free") ]
-          , el "dt" [] [ text "Total" ], el "dd" [] [ text vm.total ]
-          ]
-      , el "p" [ cls "fine-print" ] [ el "a" [ cls "text-link", A "href" "/checkout" ] [ text "Change pick-up time" ] ]
+          ( [ el "dt" [] [ text (show vm.quantity <> " × Bluebird House") ], el "dd" [] [ text vm.subtotal ] ]
+              <> choiceRows
+              <> [ el "dt" [] [ text "Total" ], el "dd" [] [ text vm.total ] ]
+          )
+      , el "p" [ cls "fine-print" ] [ el "a" [ cls "text-link", A "href" "/checkout" ] [ text (if delivering then "Change delivery time" else "Change pick-up time") ] ]
+      , el "div" [ A "id" "express-checkout" ] []
       , el "form" [ A "id" "payment-form" ]
-          [ el "label" [ A "for" "email" ] [ text "Email for receipt" ]
-          , elVoid "input" [ A "id" "email", A "name" "email", A "type" "email", B "required", A "placeholder" "you@example.com", A "value" vm.email ]
-          , el "div" [ A "id" "payment-element" ] []
-          , el "div" [ A "id" "payment-message", A "role" "alert", A "aria-live" "polite" ] []
-          , el "button" [ A "id" "submit-payment", cls "buy-button" ] [ text ("Pay " <> vm.total) ]
-          ]
+          ( [ el "label" [ A "for" "email" ] [ text "Email for receipt" ]
+            , elVoid "input" [ A "id" "email", A "name" "email", A "type" "email", B "required", A "placeholder" "you@example.com", A "value" vm.email ]
+            ]
+              <> (if delivering then [ el "label" [] [ text "Delivery address" ], el "div" [ A "id" "shipping-address" ] [] ] else [])
+              <>
+                [ el "div" [ A "id" "payment-element" ] []
+                , el "div" [ A "id" "payment-message", A "role" "alert", A "aria-live" "polite" ] []
+                , el "button" [ A "id" "submit-payment", cls "buy-button" ] [ text ("Pay " <> vm.total) ]
+                ]
+          )
       , el "div" [ cls "checkout-actions" ]
           [ el "a" [ cls "text-button", A "href" "/cart" ] [ text "Back to cart" ]
           , el "p" [ cls "fine-print" ] [ text "Secure payment by Stripe." ]
           ]
       ]
+  where
+  delivering = vm.fulfillment == "delivery"
+  choiceRows
+    | delivering =
+        [ el "dt" [] [ text "Local delivery" ], el "dd" [] [ text (vm.choiceLabel <> " — " <> vm.fee) ] ]
+    | otherwise =
+        [ el "dt" [] [ text "Pick-up" ], el "dd" [] [ text (vm.choiceLabel <> " — free") ] ]
 
 -- ---------------------------------------------------------------- confirmation
 
@@ -377,6 +440,7 @@ confirmationBody vm = case vm.status of
 succeededLede :: OrderVM -> String
 succeededLede vm
   | vm.fulfillment == "pickup" = "Your payment went through. Your bluebird house will be ready for pick-up: " <> vm.pickupLabel <> "."
+  | vm.fulfillment == "delivery" = "Your payment went through. We'll deliver your bluebird house " <> vm.deliveryLabel <> "."
   | vm.shipBy == "" = "Your payment went through and your bluebird house is on its way to the workshop."
   | otherwise = "Your payment went through. Your bluebird house is on the workshop's list and will ship by " <> vm.shipBy <> "."
 
@@ -387,17 +451,23 @@ orderSummary vm =
       , el "dt" [] [ text "Date" ], el "dd" [] [ text vm.date ]
       , el "dt" [] [ text "Items" ], el "dd" [] [ text vm.items ]
       , el "dt" [] [ text "Total" ], el "dd" [] [ text vm.total ]
-      ] <> (if vm.fulfillment == "pickup" then pickupRows vm.pickupLabel else shipToRows vm.shipTo)
+      ] <> fulfillmentRows vm
     )
+
+fulfillmentRows :: OrderVM -> Array Html
+fulfillmentRows vm = case vm.fulfillment of
+  "pickup" -> pickupRows vm.pickupLabel
+  "delivery" -> [ el "dt" [] [ text "Delivery" ], el "dd" [] [ text vm.deliveryLabel ] ] <> shipToRows "Deliver to" vm.shipTo
+  _ -> shipToRows "Ship to" vm.shipTo
 
 pickupRows :: String -> Array Html
 pickupRows "" = []
 pickupRows label = [ el "dt" [] [ text "Pick-up" ], el "dd" [] [ text label ] ]
 
-shipToRows :: Array String -> Array Html
-shipToRows [] = []
-shipToRows lines =
-  [ el "dt" [] [ text "Ship to" ]
+shipToRows :: String -> Array String -> Array Html
+shipToRows _ [] = []
+shipToRows label lines =
+  [ el "dt" [] [ text label ]
   , el "dd" [ cls "ship-to" ] (map (\line -> el "span" [] [ text line ]) lines)
   ]
 

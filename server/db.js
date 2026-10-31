@@ -66,10 +66,22 @@ export async function paidUnits(batch) {
   return rows[0].units;
 }
 
+// For delivery, address_check says how the radius was verified; a paid address
+// whose ZIP differs from the one /api/delivery/verify passed is a mismatch.
+function addressCheck(intent) {
+  if (intent.metadata.fulfillment !== "delivery") return null;
+  const check = intent.metadata.address_check;
+  if (!check) return "none";
+  const paidZip = String(intent.shipping?.address?.postal_code ?? "").slice(0, 5);
+  return paidZip === intent.metadata.verified_zip ? check : "mismatch";
+}
+
 export async function recordOrder(intent) {
+  const fulfillment = ["pickup", "delivery"].includes(intent.metadata.fulfillment) ? intent.metadata.fulfillment : "ship";
   await query(
-    `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub, fulfillment, pickup_slot_id, pickup_label)
-     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12)
+    `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub, fulfillment,
+       pickup_slot_id, pickup_label, fee_amount, delivery_slot_id, delivery_label, address_check)
+     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12, $13, $14, $15, $16)
      on conflict (id) do nothing`,
     [
       intent.id,
@@ -81,9 +93,13 @@ export async function recordOrder(intent) {
       intent.shipping ? JSON.stringify(intent.shipping) : null,
       intent.created,
       intent.metadata.account_sub || null,
-      intent.metadata.fulfillment === "pickup" ? "pickup" : "ship",
+      fulfillment,
       Number(intent.metadata.pickup_slot_id) || null,
-      intent.metadata.pickup_label || null
+      intent.metadata.pickup_label || null,
+      Number(intent.metadata.fee_cents) || 0,
+      Number(intent.metadata.delivery_slot_id) || null,
+      intent.metadata.delivery_label || null,
+      addressCheck(intent)
     ]
   );
 }
