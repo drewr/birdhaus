@@ -95,10 +95,11 @@ export async function linkOrders(accountSub, email) {
   await query("update orders set account_sub = $1 where email = $2 and account_sub is null", [accountSub, email]);
 }
 
-export async function joinWaitlist(batch, email, quantity, postalCode) {
+export async function joinWaitlist(batch, email, quantity, postalCode, accountSub) {
   await query(
-    `insert into waitlist (batch, email, quantity, postal_code) values ($1, $2, $3, $4)
-     on conflict (batch, email) do update set quantity = excluded.quantity, postal_code = excluded.postal_code, updated_at = now()`,
-    [batch, email, quantity, postalCode]
+    `insert into waitlist (batch, email, quantity, postal_code, account_sub) values ($1, $2, $3, $4, $5)
+     on conflict (batch, email) do update set quantity = excluded.quantity, postal_code = excluded.postal_code,
+       account_sub = coalesce(excluded.account_sub, waitlist.account_sub), updated_at = now()`,
+    [batch, email, quantity, postalCode, accountSub ?? null]
   );
 }

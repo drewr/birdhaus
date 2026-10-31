@@ -111,9 +111,13 @@ export function accountOf(request) {
 
 export function me(request, response) {
   response.set("Cache-Control", "no-store");
+  const authEnabled = isConfigured();
+  // Rauthy's standalone registration page, so the store can deep-link sign-up
+  // past the login dialog. Empty when accounts are off.
+  const signUpUrl = authEnabled ? `${ISSUER}/auth/v1/users/register` : "";
   const account = accountOf(request);
-  if (!account) return response.json({ signedIn: false });
-  response.json({ signedIn: true, id: account.sub, email: account.email, name: account.name });
+  if (!account) return response.json({ signedIn: false, authEnabled, signUpUrl });
+  response.json({ signedIn: true, authEnabled, signUpUrl, id: account.sub, email: account.email, name: account.name });
 }
 
 // The token endpoint prefers basic auth unless it advertises only post.

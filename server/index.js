@@ -100,7 +100,13 @@ app.get("/api/batch", async (_request, response) => {
 });
 
 app.post("/api/waitlist", async (request, response) => {
-  const email = String(request.body?.email ?? "").trim().toLowerCase();
+  // Joining requires an account when sign-in is available, so the waitlist maps
+  // to a verified identity. A guest-only deployment (no auth) still takes an email.
+  const account = auth.accountOf(request);
+  if (auth.isConfigured() && !account) {
+    return response.status(401).json({ error: "Please sign in to join the waitlist." });
+  }
+  const email = account ? account.email : String(request.body?.email ?? "").trim().toLowerCase();
   const quantity = request.body?.quantity;
   const postalCode = String(request.body?.postalCode ?? "").trim().slice(0, 12) || null;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) {
@@ -111,7 +117,7 @@ app.post("/api/waitlist", async (request, response) => {
   }
   if (!db.isConfigured()) return response.status(503).json({ error: "The waitlist is not available yet." });
   try {
-    await db.joinWaitlist(batch.id, email, quantity, postalCode);
+    await db.joinWaitlist(batch.id, email, quantity, postalCode, account?.sub ?? null);
     response.json({ ok: true });
   } catch (error) {
     console.error("Could not save a waitlist entry:", error.message);

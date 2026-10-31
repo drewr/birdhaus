@@ -45,6 +45,8 @@ type Account =
   , id :: String
   , email :: String
   , name :: String
+  , authEnabled :: Boolean
+  , signUpUrl :: String
   }
 
 -- From /api/batch. reason is "open", "sold-out" or "closed"; remaining is -1
@@ -109,7 +111,7 @@ component = H.mkComponent
       , batch: Nothing
       , showWaitlist: false
       , waitlist: { email: "", quantity: "1", postalCode: "", status: Editing }
-      , account: { signedIn: false, id: "", email: "", name: "" }
+      , account: { signedIn: false, id: "", email: "", name: "", authEnabled: true, signUpUrl: "" }
       }
   , render
   , eval: H.mkEval $ H.defaultEval { handleAction = handleAction, initialize = Just Initialize }
@@ -183,7 +185,7 @@ storefront state =
       [ HH.h2_ [ HH.text (if fromBatch "" _.reason == "closed" then "Pre-orders have closed" else "This batch is sold out") ]
       , HH.p [ HP.classes [ HH.ClassName "description" ] ]
           [ HH.text "Join the waitlist and we'll email you first when we can build more. No payment needed." ]
-      , waitlistView state.waitlist
+      , waitlistView state.account state.waitlist
       ]
 
   purchase =
@@ -232,7 +234,7 @@ storefront state =
       , if state.showWaitlist then
           HH.div [ HP.classes [ HH.ClassName "waitlist-inline" ] ]
             [ HH.p [ HP.classes [ HH.ClassName "description" ] ] [ HH.text "Need more than this batch has? Tell us how many and we'll email you when we can build them." ]
-            , waitlistView state.waitlist
+            , waitlistView state.account state.waitlist
             ]
         else
           HH.button [ HP.type_ HP.ButtonButton, HP.classes [ HH.ClassName "text-button" ], HE.onClick \_ -> ShowWaitlist ] [ HH.text "Need more? Join the waitlist" ]
@@ -353,33 +355,71 @@ faqSection =
         ]
     ]
 
-waitlistView :: Waitlist -> H.ComponentHTML Action () Aff
-waitlistView waitlist = case waitlist.status of
+-- Joining requires an account when accounts are on: a signed-in member gets the
+-- form (their verified email is used), a guest gets a sign-up call to action, and
+-- a deployment without accounts falls back to the plain email form.
+waitlistView :: Account -> Waitlist -> H.ComponentHTML Action () Aff
+waitlistView account waitlist = case waitlist.status of
   Joined ->
     HH.p [ HP.classes [ HH.ClassName "waitlist-joined" ], HP.attr (HH.AttrName "role") "status" ]
-      [ HH.text ("You're on the waitlist for " <> waitlist.quantity <> ". We'll email " <> waitlist.email <> " when we can build more.") ]
-  _ ->
+      [ HH.text ("You're on the waitlist for " <> waitlist.quantity <> ". We'll email " <> joinedEmail <> " when we can build more.") ]
+  _
+    | account.signedIn -> memberForm
+    | account.authEnabled -> signUpCta
+    | otherwise -> guestForm
+  where
+  joinedEmail = if account.signedIn && account.email /= "" then account.email else waitlist.email
+  isSending Sending = true
+  isSending _ = false
+
+  quantityZip =
+    HH.div [ HP.classes [ HH.ClassName "waitlist-row" ] ]
+      [ HH.div_
+          [ HH.label [ HP.for "waitlist-quantity" ] [ HH.text "How many" ]
+          , HH.input [ HP.id "waitlist-quantity", HP.type_ HP.InputNumber, HP.required true, HP.min 1.0, HP.max 99.0, HP.value waitlist.quantity, HE.onValueInput SetWaitlistQuantity ]
+          ]
+      , HH.div_
+          [ HH.label [ HP.for "waitlist-zip" ] [ HH.text "ZIP code (optional)" ]
+          , HH.input [ HP.id "waitlist-zip", HP.type_ HP.InputText, HP.attr (HH.AttrName "autocomplete") "postal-code", HP.value waitlist.postalCode, HE.onValueInput SetWaitlistPostalCode ]
+          ]
+      ]
+
+  errorLine = case waitlist.status of
+    Failed message -> HH.p [ HP.classes [ HH.ClassName "waitlist-error" ], HP.attr (HH.AttrName "role") "alert" ] [ HH.text message ]
+    _ -> HH.text ""
+
+  submitButton = HH.button [ HP.classes [ HH.ClassName "buy-button" ], HP.disabled (isSending waitlist.status) ] [ HH.text "Join the waitlist" ]
+
+  memberForm =
+    HH.form [ HP.classes [ HH.ClassName "waitlist-form" ], HE.onSubmit SubmitWaitlist ]
+      [ HH.p [ HP.classes [ HH.ClassName "fine-print" ] ]
+          [ HH.text ("Signed in as " <> (if account.email == "" then account.name else account.email) <> ". We'll email you there.") ]
+      , quantityZip
+      , errorLine
+      , submitButton
+      ]
+
+  guestForm =
     HH.form [ HP.classes [ HH.ClassName "waitlist-form" ], HE.onSubmit SubmitWaitlist ]
       [ HH.label [ HP.for "waitlist-email" ] [ HH.text "Email" ]
       , HH.input [ HP.id "waitlist-email", HP.type_ HP.InputEmail, HP.required true, HP.placeholder "you@example.com", HP.value waitlist.email, HE.onValueInput SetWaitlistEmail ]
-      , HH.div [ HP.classes [ HH.ClassName "waitlist-row" ] ]
-          [ HH.div_
-              [ HH.label [ HP.for "waitlist-quantity" ] [ HH.text "How many" ]
-              , HH.input [ HP.id "waitlist-quantity", HP.type_ HP.InputNumber, HP.required true, HP.min 1.0, HP.max 99.0, HP.value waitlist.quantity, HE.onValueInput SetWaitlistQuantity ]
-              ]
-          , HH.div_
-              [ HH.label [ HP.for "waitlist-zip" ] [ HH.text "ZIP code (optional)" ]
-              , HH.input [ HP.id "waitlist-zip", HP.type_ HP.InputText, HP.attr (HH.AttrName "autocomplete") "postal-code", HP.value waitlist.postalCode, HE.onValueInput SetWaitlistPostalCode ]
-              ]
-          ]
-      , case waitlist.status of
-          Failed message -> HH.p [ HP.classes [ HH.ClassName "waitlist-error" ], HP.attr (HH.AttrName "role") "alert" ] [ HH.text message ]
-          _ -> HH.text ""
-      , HH.button [ HP.classes [ HH.ClassName "buy-button" ], HP.disabled (isSending waitlist.status) ] [ HH.text "Join the waitlist" ]
+      , quantityZip
+      , errorLine
+      , submitButton
       ]
-  where
-  isSending Sending = true
-  isSending _ = false
+
+  signUpCta =
+    HH.div [ HP.classes [ HH.ClassName "waitlist-signup" ] ]
+      [ HH.p [ HP.classes [ HH.ClassName "description" ] ]
+          [ HH.text "Create a free account to join the waitlist, so we can reach you when we build more." ]
+      , HH.a [ HP.classes [ HH.ClassName "buy-button" ], HP.href signUpHref ] [ HH.text "Create an account" ]
+      , HH.p [ HP.classes [ HH.ClassName "fine-print" ] ]
+          [ HH.text "Already have one? "
+          , HH.a [ HP.classes [ HH.ClassName "text-link" ], HP.href "/api/auth/login?next=/" ] [ HH.text "Sign in" ]
+          ]
+      ]
+
+  signUpHref = if account.signUpUrl == "" then "/api/auth/login?next=/" else account.signUpUrl
 
 checkoutView :: Int -> H.ComponentHTML Action () Aff
 checkoutView quantity =

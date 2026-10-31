@@ -5,7 +5,7 @@ const params = new URLSearchParams(window.location.search);
 export const isPaymentComplete = params.get("payment") === "complete";
 
 const emptyOrder = { status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "" };
-const signedOut = { signedIn: false, id: "", email: "", name: "" };
+const signedOut = { signedIn: false, id: "", email: "", name: "", authEnabled: true, signUpUrl: "" };
 
 // Set by fetchMe. Every event carries loggedIn so conversions can be split.
 let account = null;
@@ -37,7 +37,7 @@ export const fetchMe = effectFnAff(async (signal) => {
     const response = await fetch("/api/me", { signal, headers: { accept: "application/json" } });
     if (!response.ok) return signedOut;
     const me = await response.json();
-    if (!me.signedIn) return signedOut;
+    if (!me.signedIn) return { ...signedOut, authEnabled: me.authEnabled !== false, signUpUrl: me.signUpUrl ?? "" };
     account = me;
     try {
       window.umami?.identify({ id: me.id });
@@ -50,7 +50,7 @@ export const fetchMe = effectFnAff(async (signal) => {
       window.history.replaceState({}, "", url);
       window.addEventListener("load", () => track("login"), { once: true });
     }
-    return { signedIn: true, id: me.id ?? "", email: me.email ?? "", name: me.name ?? "" };
+    return { signedIn: true, id: me.id ?? "", email: me.email ?? "", name: me.name ?? "", authEnabled: true, signUpUrl: me.signUpUrl ?? "" };
   } catch {
     return signedOut;
   }
