@@ -63,7 +63,7 @@ browser ──► umami.identify({ id }) + login/signup/logout ──► birdhau
 
 ## Rauthy configuration
 
-- **Public URL and proxy:** `PUB_URL=login.birdhaus.store` (Rauthy rejects a scheme here), `LISTEN_SCHEME=http`, `LISTEN_PORT_HTTP=8080`, `PROXY_MODE=true`. `TRUSTED_PROXIES` is currently the permissive `0.0.0.0/0 ::/0`; narrow it to the Datum edge's source range (open work). With proxy mode on, Rauthy derives the public `https` scheme. TLS terminates at the Datum edge, as it does for the store and Umami.
+- **Public URL and proxy:** `PUB_URL=login.birdhaus.store` (Rauthy rejects a scheme here), `LISTEN_SCHEME=http`, `LISTEN_PORT_HTTP=8080`, `PROXY_MODE=true`. With proxy mode on, Rauthy derives the public `https` scheme. TLS terminates at the Datum edge, as it does for the store and Umami. `PEER_IP_HEADER_NAME=X-Envoy-External-Address` makes Rauthy read the client IP from the one edge header a client cannot forge (see "Client IP and proxy trust"). `TRUSTED_PROXIES` is still the permissive `0.0.0.0/0 ::/0`; with the peer-IP header set that is no longer the spoofing fix, only optional hardening.
 - **Database:** `HIQLITE=false`, `PG_HOST=db.birdhaus.store`, `PG_DB_NAME=auth`, `PG_USER=auth`, `PG_TLS=disable`, with the password from the `birdhaus-db-db` Secret. The `auth` database and role are declared in the Postgres workload's `DATABASES` list, so every boot reconciles them.
 - **WebAuthn:** `RP_ID=login.birdhaus.store`, `RP_ORIGIN=https://login.birdhaus.store:443` (Rauthy rejects it without the port), `RP_NAME=Birdhaus`.
 - **Encryption:** at least one `ENC_KEYS` entry and `ENC_KEY_ACTIVE` in the `birdhaus-auth` Secret. These encrypt client secrets and cookies in the database; losing them means re-creating clients and upstream providers.
@@ -71,6 +71,21 @@ browser ──► umami.identify({ id }) + login/signup/logout ──► birdhau
 - **Email:** SES SMTP (`SMTP_URL`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`). `birdhaus.store` is verified in the `drewr` account, DKIM is `SUCCESS` and SES production access is enabled, so it can send to customers. The SMTP credentials are an IAM user's key and derived SMTP password, stored in `birdhaus-ses`; magic links and account mail come from `info@birdhaus.store`.
 - **Registration:** `OPEN_USER_REG=true`.
 - **Google:** a Web application OAuth client with redirect `https://login.birdhaus.store/auth/v1/providers/callback`; the client ID and secret are entered in Rauthy's Providers page and stored encrypted in Postgres. Publish the OAuth consent screen (External, In production) before customers use it; in Testing only added test users can sign in.
+
+## Client IP and proxy trust (2026-10-31)
+
+The Datum edge is Envoy, and TLS terminates there. We checked what it does to client-supplied headers by deploying a throwaway echo workload (`birdhaus-echo` at `echo.birdhaus.store`) behind the same HTTPProxy and reading back what reached it:
+
+- **`X-Forwarded-For`:** the edge *appends* the real client IP at the end and leaves the client's value at the front, so the first entry is attacker-controlled.
+- **`Forwarded`:** passed through untouched — attacker-controlled.
+- **`X-Real-IP`:** the edge does not set it; passed through untouched — attacker-controlled, so nothing may rely on it.
+- **`X-Envoy-External-Address`:** always overwritten by the edge with the real client IP. Forged values sent repeatedly never survived, so a client cannot spoof it.
+
+Why Rauthy was spoofable: with `PROXY_MODE=true` and no custom IP header configured, Rauthy falls through to actix-web's "real IP", which reads `Forwarded` first and otherwise the first `X-Forwarded-For` entry — both client-controlled. `/auth/v1/whoami` duly echoed a forged `X-Forwarded-For: 203.0.113.7`. That defeats Rauthy's per-IP failed-login throttle and 24h blocklist (keyed on the client IP in `src/service/src/login_delay.rs`), corrupts audit IPs, and weakens `SESSION_VALIDATE_IP`. The per-account failed-login limiter (the max of the IP count and the user count) is *not* defeated by IP spoofing.
+
+The fix: set `PEER_IP_HEADER_NAME=X-Envoy-External-Address`. In Rauthy's `real_ip_from_req` (`src/common/src/utils.rs`) a configured custom header is tried *before* the forgeable actix path, so Rauthy reads the un-forgeable Envoy header. This holds even while `TRUSTED_PROXIES` stays permissive, because an internet attacker can only reach Rauthy through the edge — port 8080 is private on `auth-internal` (`fd20:0:4a::4:0:0`) — and the edge always overwrites that header.
+
+`TRUSTED_PROXIES` is a separate matter. With `PEER_IP_HEADER_NAME` set, Rauthy still runs its trusted-proxy check against the *connecting socket*, not the header, and that passes under the current permissive setting. Narrowing it is defense-in-depth, not the fix — and if done it must include both the edge's internal source range *and* the birdhaus VPC prefix (`fd20:0:4a::/48`), so the store's direct server-side OIDC calls over `auth-internal` are not rejected.
 
 ## Components
 
@@ -111,11 +126,12 @@ All five steps are done (2026-10-29):
 - **Umami identification: code deployed, not confirmed in the dashboard.** Check identified sessions, `login`/`signup` events, and `checkout-start` split by `loggedIn`.
 - **Auth outage: not tested.** Login should fail while guest checkout and the webhook keep working, and the `auth` watch check should report down. Testing it replaces the auth instance, so update `auth-internal` afterwards (see Open work).
 - **Rauthy restart from Postgres: not tested.** Users, clients and providers should come back; the private address will not.
+- **Edge header behavior: verified (2026-10-31).** The `birdhaus-echo` workload confirmed what the Datum edge does to `X-Forwarded-For`, `Forwarded`, `X-Real-IP` and `X-Envoy-External-Address` (see "Client IP and proxy trust"). With `PEER_IP_HEADER_NAME` set, a forged `X-Forwarded-For`/`Forwarded` no longer changes the IP Rauthy records.
 - **Branding: partially done.** The client logo is uploaded; the theme still has 5px corners and the palette should be confirmed, and the default `rauthy` client is unbranded.
 
 ## Open work
 
-- Narrow `TRUSTED_PROXIES` from `0.0.0.0/0 ::/0` to the Datum edge range.
+- The client-IP spoof is fixed by `PEER_IP_HEADER_NAME=X-Envoy-External-Address` (see "Client IP and proxy trust"). Narrowing `TRUSTED_PROXIES` from `0.0.0.0/0 ::/0` is now optional hardening only, and must include both the Datum edge's internal source range and the birdhaus VPC prefix (`fd20:0:4a::/48`) so the store's server-side OIDC calls over `auth-internal` keep working.
 - Force MFA on the bootstrap admin and retire `BOOTSTRAP_ADMIN_PASSWORD_PLAIN` from the `birdhaus-auth` Secret.
 - Publish the Google OAuth consent screen (External, In production).
 - Run the unexercised verification items above, especially guest-order linking, the magic link, and the auth-down path.
@@ -128,7 +144,7 @@ All five steps are done (2026-10-29):
 
 - **Rauthy is a small project.** The upstream-provider docs cover GitHub only; Google and generic OIDC exist in the admin UI but need a hands-on check. Fallback is Zitadel v4.
 - **Passkey loss.** A passkey-only user who loses every device needs an admin reset. Offer the password option and document the recovery path.
-- **Proxy trust.** With edge-terminated TLS, Rauthy must trust the edge's forwarded headers; a wrong `TRUSTED_PROXIES` either blocks requests or lets clients spoof their address. It is **still the permissive default** (`0.0.0.0/0 ::/0`); narrowing it is open work. `SESSION_VALIDATE_IP` is left on so a bad range shows up in the Admin UI.
+- **Proxy trust.** With edge-terminated TLS, Rauthy must trust the edge's forwarded headers. Client IP spoofing was **confirmed** on 2026-10-31 (a forged `X-Forwarded-For` reached `/auth/v1/whoami`); `PEER_IP_HEADER_NAME=X-Envoy-External-Address` fixes it by reading the one header the edge always overwrites (see "Client IP and proxy trust"). `TRUSTED_PROXIES` is still the permissive default (`0.0.0.0/0 ::/0`); with the peer-IP header set, narrowing it is optional hardening, not the fix. `SESSION_VALIDATE_IP` is left on so a bad range shows up in the Admin UI.
 - **Admin surface.** The Admin UI is public at `login.birdhaus.store`. Admin MFA must be enforced, and the bootstrap password retired; both are open work.
 - **Private address.** `birdhaus-auth` uses `reclaimPolicy: Delete`, so a replacement changes its IPv6. The store's server-side OIDC calls depend on `auth-internal`, which is a hand-written AAAA record; miss the update and sign-in fails while the store keeps selling.
 - **SMTP dependency.** Email login needs SES SMTP; Google login and the store do not. SES SMTP credentials need an IAM user, and the `drewr` user cannot create one, so an admin (root) has to do it.

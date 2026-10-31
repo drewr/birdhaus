@@ -115,6 +115,12 @@ main = do
                 , "LISTEN_PORT_HTTP" .= ("8080" :: Text)
                 , "PROXY_MODE" .= ("true" :: Text)
                 , "TRUSTED_PROXIES" .= proxies
+                -- The Datum edge is Envoy: it overwrites X-Envoy-External-Address
+                -- with the real client IP (unspoofable), while X-Forwarded-For and
+                -- Forwarded carry the client's values through. Rauthy reads this
+                -- header first, so a client cannot forge the IP used for the
+                -- failed-login throttle, the blocklist or the audit log.
+                , "PEER_IP_HEADER_NAME" .= ("X-Envoy-External-Address" :: Text)
                 , "HTTP_WORKERS" .= ("1" :: Text)
                 , "ENC_KEYS" .= (encId <> "/" <> encKey)
                 , "ENC_KEY_ACTIVE" .= encId
