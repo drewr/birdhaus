@@ -52,7 +52,7 @@ type CartVM =
   { | Chrome ( lineTotal :: String, subtotal :: String, shipBy :: String, maxQuantity :: Int ) }
 
 type CheckoutVM =
-  { | Chrome ( quantity :: Int, total :: String ) }
+  { | Chrome ( quantity :: Int, total :: String, email :: String ) }
 
 type OrderVM =
   { | Chrome
@@ -346,7 +346,7 @@ checkoutPage vm =
       , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × Bluebird House · " <> vm.total) ]
       , el "form" [ A "id" "payment-form" ]
           [ el "label" [ A "for" "email" ] [ text "Email for receipt" ]
-          , elVoid "input" [ A "id" "email", A "name" "email", A "type" "email", B "required", A "placeholder" "you@example.com" ]
+          , elVoid "input" [ A "id" "email", A "name" "email", A "type" "email", B "required", A "placeholder" "you@example.com", A "value" vm.email ]
           , el "label" [] [ text "Shipping address" ]
           , el "div" [ A "id" "shipping-address" ] []
           , el "div" [ A "id" "payment-element" ] []

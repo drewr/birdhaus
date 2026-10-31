@@ -341,7 +341,8 @@ app.get("/cart", async (request, response) => {
 app.get("/checkout", (request, response) => {
   const qty = readCart(request).qty;
   if (qty <= 0) return response.redirect(303, "/cart");
-  const vm = { ...chrome(request), quantity: qty, total: formatTotal(qty) };
+  const account = auth.accountOf(request);
+  const vm = { ...chrome(request), quantity: qty, total: formatTotal(qty), email: account?.email ?? "" };
   response.set("Cache-Control", "no-cache").type("html").send(views.checkoutPage(vm));
 });
 
