@@ -2,9 +2,10 @@
 #! nix-shell -i runghc -p "haskellPackages.ghcWithPackages (pkgs: [ pkgs.turtle pkgs.aeson pkgs.base64-bytestring ])"
 #! nix-shell -p curl
 
--- Create the store's Secret birdhaus-store-db: Postgres settings (PG*) for the
--- `birdhaus` database, and STRIPE_WEBHOOK_SECRET for a webhook endpoint this
--- script registers with Stripe for https://birdhaus.store/api/stripe-webhook.
+-- Create a store database Secret: Postgres settings (PG*) for the --db-name
+-- database (default `birdhaus`), and STRIPE_WEBHOOK_SECRET for a webhook
+-- endpoint this script registers with Stripe for --webhook-url. The dev store
+-- reuses it with --name birdhaus-store-dev-db --db-name birdhausdev.
 --
 -- The database password and the Stripe secret key are read from their Datum
 -- Secrets and the signing secret from Stripe's response; none of them touch
@@ -31,6 +32,7 @@ data Opts = Opts
   , project :: Text
   , secretName :: Text
   , dbSecret :: Text
+  , dbName :: Text
   , dbHost :: Text
   , stripeSecret :: Text
   , webhookUrl :: Text
@@ -43,6 +45,7 @@ parser =
     <*> optText "project" 'p' "Datum Cloud project"
     <*> opt "name" 'n' "birdhaus-store-db" "Secret to create"
     <*> opt "db-secret" 'D' "birdhaus-db-db" "Secret holding the database passwords"
+    <*> opt "db-name" 'd' "birdhaus" "Database and role name (also the password key in --db-secret)"
     <*> opt "db-host" 'H' "db.birdhaus.store" "Postgres hostname"
     <*> opt "stripe-secret" 'k' "birdhaus-stripe" "Secret holding STRIPE_SECRET_KEY"
     <*> opt "webhook-url" 'u' "https://birdhaus.store/api/stripe-webhook" "Webhook endpoint URL"
@@ -68,7 +71,7 @@ main = do
   when (exists == ExitSuccess) $
     die ("Secret " <> secretName o <> " already exists; delete it (and its Stripe webhook endpoint) to recreate it")
 
-  password <- secretValue (dbSecret o) "birdhaus"
+  password <- secretValue (dbSecret o) (dbName o)
   stripeKey <- secretValue (stripeSecret o) "STRIPE_SECRET_KEY"
 
   endpoints <- stripe stripeKey "GET" "webhook_endpoints?limit=100" []
@@ -95,8 +98,8 @@ main = do
         , "stringData" .= A.object
             [ "PGHOST" .= dbHost o
             , "PGPORT" .= ("5432" :: Text)
-            , "PGUSER" .= ("birdhaus" :: Text)
-            , "PGDATABASE" .= ("birdhaus" :: Text)
+            , "PGUSER" .= dbName o
+            , "PGDATABASE" .= dbName o
             , "PGPASSWORD" .= password
             , "STRIPE_WEBHOOK_SECRET" .= signing
             ]
