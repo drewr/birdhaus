@@ -120,8 +120,8 @@ render state =
   HH.div_
     [ HH.header [ HP.classes [ HH.ClassName "site-header" ] ]
         [ HH.a [ HP.classes [ HH.ClassName "wordmark" ], HP.href "/" ]
-            [ HH.img [ HP.classes [ HH.ClassName "wordmark-mark" ], HP.src "/favicon-48.png", HP.alt "" ]
-            , HH.text "BIRDHAUS"
+            [ HH.img [ HP.classes [ HH.ClassName "wordmark-mark" ], HP.src "/mark-512.png", HP.alt "" ]
+            , HH.text "birdhaus"
             ]
         , accountNav state.account
         ]
