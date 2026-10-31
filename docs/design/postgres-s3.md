@@ -1,6 +1,6 @@
 # Design: S3-backed PostgreSQL on Datum Compute
 
-Status: built and deployed as `birdhaus-db` in project `drewr-y4nd1b` (us-east-1). The store and Umami are consumers.
+Status: built and deployed as `birdhaus-db` in project `drewr-y4nd1b` (us-east-1). The store, Umami and Rauthy are consumers.
 
 ## Problem
 
@@ -78,10 +78,11 @@ Non-goals: high availability or automatic failover (restore takes minutes), read
 
 ### Consumers
 
-One cluster, one database and role per consumer (for example `umami` and `birdhaus`), declared by a `DATABASES` list with a password per database in the secret. Roles cannot read each other's databases.
+One cluster, one database and role per consumer (`birdhaus`, `umami`, `auth`), declared by a `DATABASES` list with a password per database in the secret. Roles cannot read each other's databases.
 
 - **Umami:** a separate workload pointing at the database address.
-- **Birdhaus orders:** a schema migration and a `POST /api/stripe-webhook` handler that verifies Stripe's signature and records `payment_intent.succeeded`. This also closes the webhook gap noted in `AGENTS.md`.
+- **Birdhaus:** orders, the waitlist and account links, written by the store and the signature-verified Stripe webhook (see `server/migrations/`).
+- **Rauthy:** the `auth` database holds users, clients, providers and the login branding; see [`auth/README.md`](../../auth/README.md).
 
 ## Durability and the loss window
 
@@ -126,8 +127,8 @@ A throwaway `general-purpose` workload in us-east-1 (`datumcloud-d1-standard-2`)
 2. **Bucket and shared policy: done**, and `test-isolation` passes. Per-deployment users and secrets are created on demand with `bootstrap.hs deployment`.
 3. **Image and entrypoint: done**, and tested (see below).
 4. **`deploy.hs` and the deploy: done.**
-5. **Restore drill on Datum: done** (see below). The loss-bound and consumer-path drills have not been run on Datum.
-6. Connect a consumer, then build the Umami and order-record work.
+5. **Restore drill on Datum: done** (see below). The consumer-path drill is done: the store, Umami and Rauthy all connect with scram and cannot read each other's databases. The loss-bound drill has not been run on Datum.
+6. **Done.** Consumers are connected, the store records orders and the waitlist, and accounts added the `auth` database.
 
 ## Image test results (2026-10-26)
 
@@ -168,7 +169,7 @@ The backup bucket and the watcher moved from the sandbox account to the owner's 
 - **Archiving works:** the workload logs show archiving, `pg_stat_archiver.failed_count` is 0, and `wal-g backup-list` shows a base backup.
 - **Restore drill:** create rows, run `pg_switch_wal()`, then `datumctl compute restart` so the instance is replaced and its disk is lost. After boot the rows are back and the address is unchanged. Record the restore time.
 - **Loss bound:** write rows and stop the instance abruptly. The loss must be under about 60 seconds of writes.
-- **Consumer path:** a second workload on the same network connects with scram, and a role cannot reach another consumer's database.
+- **Consumer path: done.** The store, Umami and Rauthy connect with scram over the `birdhaus` Network, and a role cannot reach another consumer's database.
 - **Security:** `git grep` finds no keys or passwords, the bucket blocks public access, and the IAM policy denies access outside its prefix (test with a second prefix).
 - **Cost:** record the bucket size after a day of use.
 

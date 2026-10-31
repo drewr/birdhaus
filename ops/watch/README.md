@@ -55,3 +55,7 @@ export AWS_PROFILE=<profile>
 
 - **WAL failure:** detaching the IAM policy from the database's AWS user made archiving fail. The watchdog reported "WAL archiving to S3 is failing" 4.5 minutes later. After reattaching, archiving caught up (no WAL left queued) and the check recovered at the next report.
 - **Real outage:** on its first sweep the watcher found birdhaus.store returning 503. A platform event had replaced the database instance and left the store's network attachment unprogrammed ("the attachment has no network advertisement"). `datumctl compute restart birdhaus-store` fixed it.
+
+## Added 2026-10-29
+
+- The `auth` probe watches `https://login.birdhaus.store/auth/v1/health`; it reports up. The failure path has not been exercised: stopping `birdhaus-auth` replaces the instance and changes its private address, so `auth-internal` in `dns/aaaa.yaml` must be updated afterwards.

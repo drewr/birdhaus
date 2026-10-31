@@ -1,6 +1,6 @@
 # Design: accounts, sign-in with Google and email
 
-Status: proposed (2026-10-29). Phase 1 is Google plus a passkey-first email account.
+Status: built and deployed (2026-10-29; updated 2026-10-31). Phase 1 is live: Google plus a passkey-first email account. The verification section records what has and has not been exercised.
 
 ## Problem
 
@@ -47,7 +47,7 @@ browser ──► birdhaus.store (session cookie; guest checkout unchanged)
 browser ──► umami.identify({ id }) + login/signup/logout ──► birdhaus-umami
 ```
 
-`birdhaus-auth` is a general-purpose workload on the `birdhaus` Network. It is stateless behind Postgres, so it uses `reclaimPolicy: Delete` and an image pinned by digest, like Umami. Datum programs the `login.birdhaus.store` record from the HTTPProxy, as it does for `stats.birdhaus.store`.
+`birdhaus-auth` is a general-purpose workload on the `birdhaus` Network. It is stateless behind Postgres, so it uses `reclaimPolicy: Delete` and an image pinned by digest, like Umami. Datum programs the `login.birdhaus.store` record from the HTTPProxy, as it does for `stats.birdhaus.store`. Because the address is not retained, replacing the instance changes its private IPv6; the store's internal OIDC client follows `auth-internal` in `dns/aaaa.yaml`, so that record must be updated (see `auth/README.md`).
 
 ## Account model
 
@@ -63,14 +63,14 @@ browser ──► umami.identify({ id }) + login/signup/logout ──► birdhau
 
 ## Rauthy configuration
 
-- **Public URL and proxy:** `PUB_URL=login.birdhaus.store` (Rauthy rejects a scheme here), `LISTEN_SCHEME=http`, `PORT_HTTP=8080`, `PROXY_MODE=true`, `TRUSTED_PROXIES` set to the edge's source range once observed in the spike. With proxy mode on, Rauthy derives the public `https` scheme. TLS terminates at the Datum edge, as it does for the store and Umami.
+- **Public URL and proxy:** `PUB_URL=login.birdhaus.store` (Rauthy rejects a scheme here), `LISTEN_SCHEME=http`, `LISTEN_PORT_HTTP=8080`, `PROXY_MODE=true`. `TRUSTED_PROXIES` is currently the permissive `0.0.0.0/0 ::/0`; narrow it to the Datum edge's source range (open work). With proxy mode on, Rauthy derives the public `https` scheme. TLS terminates at the Datum edge, as it does for the store and Umami.
 - **Database:** `HIQLITE=false`, `PG_HOST=db.birdhaus.store`, `PG_DB_NAME=auth`, `PG_USER=auth`, `PG_TLS=disable`, with the password from the `birdhaus-db-db` Secret. The `auth` database and role are declared in the Postgres workload's `DATABASES` list, so every boot reconciles them.
-- **WebAuthn:** `RP_ID=login.birdhaus.store`, `RP_ORIGIN=https://login.birdhaus.store`, `RP_NAME=Birdhaus`.
+- **WebAuthn:** `RP_ID=login.birdhaus.store`, `RP_ORIGIN=https://login.birdhaus.store:443` (Rauthy rejects it without the port), `RP_NAME=Birdhaus`.
 - **Encryption:** at least one `ENC_KEYS` entry and `ENC_KEY_ACTIVE` in the `birdhaus-auth` Secret. These encrypt client secrets and cookies in the database; losing them means re-creating clients and upstream providers.
-- **Admin:** bootstrap the first admin with `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_PLAIN` from the Secret, then force MFA on the Admin UI.
+- **Admin:** bootstrap the first admin with `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_PLAIN` from the Secret, then force MFA on the Admin UI and retire the bootstrap password (open work).
 - **Email:** SES SMTP (`SMTP_URL`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`). `birdhaus.store` is verified in the `drewr` account, DKIM is `SUCCESS` and SES production access is enabled, so it can send to customers. The SMTP credentials are an IAM user's key and derived SMTP password, stored in `birdhaus-ses`; magic links and account mail come from `info@birdhaus.store`.
 - **Registration:** `OPEN_USER_REG=true`.
-- **Google:** a Web application OAuth client with redirect `https://login.birdhaus.store/auth/v1/providers/callback`; the client ID and secret are entered in Rauthy's Providers page and stored encrypted in Postgres.
+- **Google:** a Web application OAuth client with redirect `https://login.birdhaus.store/auth/v1/providers/callback`; the client ID and secret are entered in Rauthy's Providers page and stored encrypted in Postgres. Publish the OAuth consent screen (External, In production) before customers use it; in Testing only added test users can sign in.
 
 ## Components
 
@@ -94,26 +94,43 @@ Changed:
 
 ## Rollout
 
-1. Add the `auth` password to `birdhaus-db-db`, recreate the Secret with all keys, and redeploy `birdhaus-pg` with the new `DATABASES`. The stop is graceful and the restore is seconds; no committed write is lost.
-2. Create the `birdhaus-auth` Secret and deploy the workload; verify the login page and the health probe. This is the spike for proxy headers, IPv6 binding, Postgres mode and SMTP.
-3. Manual, once: Google OAuth client, Rauthy admin bootstrap, force MFA, Google provider, the `birdhaus-store` OIDC client (PKCE S256, redirect `https://birdhaus.store/api/auth/callback`), branding.
-4. Store release: migration, auth routes, UI, analytics. Local test against a `LOCAL_TEST=true` Rauthy container; then `run.hs`, which replaces the production store instance.
-5. Add the watch check and update the docs.
+All five steps are done (2026-10-29):
+
+1. **Done:** the `auth` password is in `birdhaus-db-db`, and Postgres reconciles the database and role on boot.
+2. **Done:** `birdhaus-auth` is deployed behind `login.birdhaus.store`, on the internal AAAA `auth-internal.birdhaus.store`, with SES SMTP.
+3. **Done:** Google provider and the `birdhaus-store` client exist; the logo is uploaded (theme and the default `rauthy` client are still open).
+4. **Done:** migration `003_account_attribution.sql`, the store's auth routes and UI, and analytics are live.
+5. **Done:** the `auth` probe is in `ops/watch/checks.json` and reports up.
 
 ## Verification
 
-- Google round-trips to `birdhaus.store` and `/api/me` returns the account; a passkey registration survives a logout.
-- A magic link through SES activates a new account (DKIM pass).
-- A previous guest order with the same verified email appears in the account after login.
-- Umami shows identified sessions and `login`/`signup` events; `checkout-start` splits by `loggedIn`.
-- With `birdhaus-auth` stopped: login fails, guest checkout and the webhook still work, and the watch probe reports the auth service down.
-- A Rauthy restart (no local disk) comes back from Postgres with users and clients intact.
+- **Google round-trip: verified.** Sign-in returns to `birdhaus.store`, `/api/me` returns the account, and the account control appears.
+- **Passkey survives a logout: not yet exercised.** The email account path still needs a real passkey registration and a logout/login round-trip.
+- **Magic link through SES: not yet exercised.** SES production access and DKIM are in place; send one to a fresh address.
+- **Guest order linking: not yet exercised.** Place a guest order, then sign in with the same verified email and check the account history.
+- **Umami identification: code deployed, not confirmed in the dashboard.** Check identified sessions, `login`/`signup` events, and `checkout-start` split by `loggedIn`.
+- **Auth outage: not tested.** Login should fail while guest checkout and the webhook keep working, and the `auth` watch check should report down. Testing it replaces the auth instance, so update `auth-internal` afterwards (see Open work).
+- **Rauthy restart from Postgres: not tested.** Users, clients and providers should come back; the private address will not.
+- **Branding: partially done.** The client logo is uploaded; the theme still has 5px corners and the palette should be confirmed, and the default `rauthy` client is unbranded.
+
+## Open work
+
+- Narrow `TRUSTED_PROXIES` from `0.0.0.0/0 ::/0` to the Datum edge range.
+- Force MFA on the bootstrap admin and retire `BOOTSTRAP_ADMIN_PASSWORD_PLAIN` from the `birdhaus-auth` Secret.
+- Publish the Google OAuth consent screen (External, In production).
+- Run the unexercised verification items above, especially guest-order linking, the magic link, and the auth-down path.
+- Finish branding: 0px corners, the store's black/white palette, and the default `rauthy` client; document it in `auth/README.md`.
+- Update `auth-internal` in `dns/aaaa.yaml` when `birdhaus-auth` is replaced, or switch the workload to a retained interface so the address is stable.
+- Add an SES SMTP credential rotation runbook (`scripts/ses-smtp.hs --rotate`); it needs an IAM admin.
+- **Phase 2:** Microsoft Entra and Login with Amazon as generic OIDC providers.
 
 ## Risks
 
 - **Rauthy is a small project.** The upstream-provider docs cover GitHub only; Google and generic OIDC exist in the admin UI but need a hands-on check. Fallback is Zitadel v4.
 - **Passkey loss.** A passkey-only user who loses every device needs an admin reset. Offer the password option and document the recovery path.
-- **Proxy trust.** With edge-terminated TLS, Rauthy must trust the edge's forwarded headers; a wrong `TRUSTED_PROXIES` either blocks requests or lets clients spoof their address. The spike pins the range, and `SESSION_VALIDATE_IP` is left on so a bad setup shows up in the Admin UI.
+- **Proxy trust.** With edge-terminated TLS, Rauthy must trust the edge's forwarded headers; a wrong `TRUSTED_PROXIES` either blocks requests or lets clients spoof their address. It is **still the permissive default** (`0.0.0.0/0 ::/0`); narrowing it is open work. `SESSION_VALIDATE_IP` is left on so a bad range shows up in the Admin UI.
+- **Admin surface.** The Admin UI is public at `login.birdhaus.store`. Admin MFA must be enforced, and the bootstrap password retired; both are open work.
+- **Private address.** `birdhaus-auth` uses `reclaimPolicy: Delete`, so a replacement changes its IPv6. The store's server-side OIDC calls depend on `auth-internal`, which is a hand-written AAAA record; miss the update and sign-in fails while the store keeps selling.
 - **SMTP dependency.** Email login needs SES SMTP; Google login and the store do not. SES SMTP credentials need an IAM user, and the `drewr` user cannot create one, so an admin (root) has to do it.
 - **Auth outage** blocks sign-in but not sales; the store's auth calls must time out quickly and never gate checkout.
 - **Umami SSO is not possible** on self-hosted Umami; the dashboard login stays separate.

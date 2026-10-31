@@ -85,6 +85,10 @@ Additions to the existing scripts:
 
 The move ran as: `setup` (drewr) → apply `dns/ses.yaml` and click verify → `copy-data --from-profile datum-sandbox-admin --project P` → `switch --project P` → check → `destroy` (sandbox).
 
+## Operational note (2026-10-31)
+
+The `drewr-admin` profile is the `drewr` IAM user. It can use S3, Lambda, DynamoDB, Scheduler and SES, but it has no IAM permissions, so `setup`, `destroy` and a full `ops/watch/deploy.hs deploy` need an IAM admin (`drewr-root`, the account root, or the SSO administrator). Checks-only watcher changes use `ops/watch/deploy.hs code`, which needs only Lambda.
+
 ## Rollback
 
 Rollback was available until the sandbox resources were deleted on 2026-10-29: recreate `birdhaus-db-aws` with the sandbox key (`bootstrap.hs rotate` with the sandbox profile) and restart Postgres. It restored from the old bucket, which had everything up to the switch. That path is now closed.

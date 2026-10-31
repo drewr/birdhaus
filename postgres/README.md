@@ -1,6 +1,6 @@
 # Postgres on Datum Compute, durable in S3
 
-One Postgres per deployment (default `birdhaus-db`) runs on a general-purpose instance's local disk and continuously archives to S3 with WAL-G. A replacement instance restores itself from S3 on boot. Design and test results: [`docs/design/postgres-s3.md`](../docs/design/postgres-s3.md).
+One Postgres per deployment (default `birdhaus-db`) runs on a general-purpose instance's local disk and continuously archives to S3 with WAL-G. A replacement instance restores itself from S3 on boot. The store, Umami and Rauthy are consumers. Design and test results: [`docs/design/postgres-s3.md`](../docs/design/postgres-s3.md).
 
 ## Deploy
 

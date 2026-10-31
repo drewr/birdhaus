@@ -34,13 +34,13 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `bi
 
    It prints the admin bootstrap password command, the Google callback URL and the store callback URL. Re-running keeps the existing Secret; delete it and re-run to regenerate the encryption keys and admin password (which invalidates encrypted client secrets, so prefer the admin UI).
 
-4. **Admin and MFA.** Read the bootstrap password, sign in at `https://login.birdhaus.store/admin`, change it, and enable the admin MFA requirement in the security settings.
+4. **Admin and MFA.** Read the bootstrap password, sign in at `https://login.birdhaus.store/admin`, change it, and enable the admin MFA requirement in the security settings. Confirm MFA is enforced, then retire `BOOTSTRAP_ADMIN_PASSWORD_PLAIN` (see Open hardening).
 
 5. **Google.** In Google Cloud Console create an OAuth consent screen (External) and a Web application client:
 
    - Authorized redirect URI: `https://login.birdhaus.store/auth/v1/providers/callback`
 
-   Then in Rauthy's **Providers** page add a Google provider with the client ID and secret, and upload the Birdhaus logo.
+   Publish the consent screen (External, In production) before customers use it; while it is in Testing, only added test users can sign in. Then in Rauthy's **Providers** page add a Google provider with the client ID and secret. The provider's **name** is what the login button says, so keep it `Google`. Client branding is separate (see Branding).
 
 6. **The store client.** In Rauthy's **Clients** page create `birdhaus-store`:
 
@@ -48,6 +48,26 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `bi
    - PKCE S256, scopes `openid email profile`
 
    Put the client ID and secret into the store's Secret `birdhaus-store-auth` (`scripts/store-auth-secret.hs`).
+
+## Branding
+
+The store's login page uses the `birdhaus-store` client; Rauthy's own admin and user-account pages use the default `rauthy` client.
+
+1. Admin UI → **Clients** → **Birdhaus Storefront** → **Branding**.
+2. Upload `public/mark-login.png` as the logo. It is a 4:1 canvas with the house mark centred; Rauthy caps client logos at 4× height and left-aligns a logo that hugs its image, so the wide canvas is what puts the mark in the middle of the card. `public/logo-login.png` is the wordmark variant, but the text is small at the 84px display height.
+3. Set the theme to the store's palette: background `#ffffff`, background-high `#f1f1f1`, text `#111111`, action `#111111`, button text `#ffffff`, error `#aa1111`, border radius `0px`. Set the dark theme to the same values; the store has no dark mode, and the logo padding is white.
+4. Repeat the logo and theme on the **`rauthy`** client if the admin and account pages should match.
+
+The logo and theme live in the `auth` database (`client_logos`, and binary `themes` rows — use the UI, not SQL). A Postgres restore brings them back; a fresh auth database starts unbranded.
+
+## Open hardening (2026-10-31)
+
+- **Proxy trust:** `TRUSTED_PROXIES` is still the permissive `0.0.0.0/0 ::/0`; narrow it to the Datum edge range.
+- **Admin:** enforce MFA and remove the plaintext bootstrap password from the Secret.
+- **Google:** publish the consent screen (In production); Testing blocks everyone except test users.
+- **Private address:** `birdhaus-auth` uses `reclaimPolicy: Delete`; update `auth-internal` in `dns/aaaa.yaml` when the instance is replaced.
+- **SMTP rotation:** rotate the SES SMTP key with `scripts/ses-smtp.hs --rotate`; the `drewr` user has no IAM, so an admin must run it.
+- **Verification:** the passkey round-trip, magic-link email, guest-order linking, Umami events, auth-down path and restart-from-Postgres are not yet exercised; see `docs/design/accounts.md`.
 
 ## Configuration notes
 
@@ -64,7 +84,7 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `bi
 - **Upgrade:** change `rauthyImage` in `auth/deploy.hs` to the new digest and re-run. Rauthy runs its own migrations on start.
 - **Encryption keys:** `ENC_KEYS` / `ENC_KEY_ACTIVE` in `birdhaus-auth` encrypt client secrets, upstream provider secrets and cookies in the database. Do not change or lose them without following Rauthy's key-rotation procedure; losing them means re-creating clients and providers.
 - **Lost passkey:** a passkey-only user who loses every device needs an admin-assisted reset in the Admin UI. Users who chose a password can reset it by email.
-- **Proxy trust:** TLS terminates at the Datum edge, so `PROXY_MODE=true` and `TRUSTED_PROXIES` must include the edge's source range. The first deploy trusts everything (`0.0.0.0/0 ::/0`); narrow it after checking the peer addresses in the instance logs, or Rauthy will either block requests or accept spoofed client IPs. `SESSION_VALIDATE_IP` is on, so a wrong range shows up as sessions with the proxy's IP in the Admin UI.
+- **Proxy trust:** TLS terminates at the Datum edge, so `PROXY_MODE=true` and `TRUSTED_PROXIES` must include the edge's source range. The deployed value is still the permissive `0.0.0.0/0 ::/0`; narrow it after checking the peer addresses in the instance logs, or Rauthy will accept spoofed client IPs. `SESSION_VALIDATE_IP` is on, so a wrong range shows up as sessions with the proxy's IP in the Admin UI.
 
 - **The public hostname hairpins:** from inside the `birdhaus` Network, `https://login.birdhaus.store` times out through the edge. The store's server-side OIDC calls therefore use `OIDC_INTERNAL_URL=http://auth-internal.birdhaus.store:8080`; `auth-internal` is the AAAA record in `dns/aaaa.yaml` for the auth instance's private address. The browser still uses the public issuer. If the auth instance is replaced with a new address, update that record (and the Secret) or sign-in fails while the site keeps selling.
 

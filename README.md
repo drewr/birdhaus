@@ -45,7 +45,7 @@ Production caching: hashed files under `/assets` are immutable for a year; `inde
 
 ## AWS account setup
 
-`ops/aws-account.hs` creates, migrates and tears down every Birdhaus AWS resource: the Postgres backup bucket and its IAM user, and `ops/watch/` alerting. Run it from the repository root with an admin AWS profile for the target account:
+`ops/aws-account.hs` creates, migrates and tears down every Birdhaus AWS resource: the Postgres backup bucket and its IAM user, and `ops/watch/` alerting. Run it from the repository root with an admin AWS profile for the target account. The `drewr-admin` profile has S3/Lambda/DynamoDB/Scheduler/SES but no IAM, so bucket/IAM setup, `destroy` and a full watcher deploy need `drewr-root` (root) or another IAM admin; `ops/watch/deploy.hs code` handles checks-only watcher changes.
 
 ```
 export AWS_PROFILE=<admin-profile>
@@ -75,20 +75,26 @@ The store sells in batches. Each pre-order is charged at checkout and promises a
 
 To raise the cap or move a date, redeploy with new `run.hs` options.
 
+## Accounts
+
+Sign-in is optional at https://login.birdhaus.store: Google, or an email account that a magic link activates and that uses a passkey (a password remains available). Guest checkout stays the default, and nothing about buying requires an account. A signed-in customer gets order history, and past guest orders with the same verified email are linked on first sign-in. Analytics identify the visitor by Rauthy's internal ID, never the email. If the identity service is down, sign-in fails but checkout and the Stripe webhook keep working.
+
+Setup and operations are in [`auth/README.md`](auth/README.md); the design and open work are in [`docs/design/accounts.md`](docs/design/accounts.md). Microsoft and Amazon sign-in are phase 2.
+
 ## Stripe
 
 Stripe test mode is enabled by supplying test keys. Before launch, add live keys in the deployment environment and configure Stripe's payment methods in the Dashboard. The current checkout charges $40 USD and collects an email and shipping address. Shipping cost and tax are not added to the amount yet. Orders are recorded from verified webhooks, not the browser return page (see Pre-orders).
 
 ## Analytics
 
-Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`umami/README.md`](umami/README.md).
+Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`umami/README.md`](umami/README.md). Signed-in visitors are identified with `umami.identify` (Rauthy's internal ID, not an email), and the store records `login`, `signup` and `logout` plus `loggedIn` on the checkout events.
 
 ## Operator alerts
 
-`ops/watch/` is a small heartbeat and probe monitor in AWS that emails the operator when Postgres stops archiving or backing up, or when the store, checkout or Umami stop answering. See [`ops/watch/README.md`](ops/watch/README.md).
+`ops/watch/` is a small heartbeat and probe monitor in AWS that emails the operator when Postgres stops archiving or backing up, or when the store, checkout, auth or Umami stop answering. See [`ops/watch/README.md`](ops/watch/README.md).
 
 ## Design docs
 
 - [A reproducible AWS account, and moving off the sandbox](docs/design/aws-account.md) (built): one script to set up, migrate and tear down every Birdhaus AWS resource.
-- [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md) : persistence for orders and analytics. Deployed; operations in [`postgres/README.md`](postgres/README.md).
-- [Accounts and sign-in with Google and email](docs/design/accounts.md) (proposed): a self-hosted Rauthy identity service in the `birdhaus` Network, wired into the store and Umami analytics.
+- [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md): persistence for orders, analytics and accounts. Deployed; operations in [`postgres/README.md`](postgres/README.md).
+- [Accounts and sign-in with Google and email](docs/design/accounts.md) (built): a self-hosted Rauthy identity service in the `birdhaus` Network, wired into the store and Umami analytics.
