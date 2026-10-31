@@ -65,6 +65,19 @@ async function metadata() {
 // the login dialog. Empty when accounts are off.
 export const signUpUrl = () => (isConfigured() ? `${ISSUER}/auth/v1/users/register` : "");
 
+// The session outlives the ID token (minutes, the client's token lifetime), and
+// Rauthy rejects an id_token_hint more than ten minutes past its expiry. The
+// token was verified at sign-in, so reading its exp unverified is enough here.
+const HINT_GRACE = 600 - 60;
+function hintUsable(idToken) {
+  try {
+    const { exp } = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+    return Number.isInteger(exp) && exp + HINT_GRACE > now();
+  } catch {
+    return false;
+  }
+}
+
 // Only same-site paths, so a crafted link cannot bounce a fresh login off-site.
 function safeNext(value) {
   const next = typeof value === "string" ? value : "";
@@ -221,8 +234,15 @@ export function routes() {
       const found = await metadata();
       if (!found.end_session_endpoint) return response.redirect("/");
       const url = new URL(found.end_session_endpoint);
-      url.searchParams.set("id_token_hint", session.id_token);
-      url.searchParams.set("post_logout_redirect_uri", new URL("/", new URL(REDIRECT_URI).origin).toString());
+      if (hintUsable(session.id_token)) {
+        url.searchParams.set("id_token_hint", session.id_token);
+        url.searchParams.set("post_logout_redirect_uri", new URL("/", new URL(REDIRECT_URI).origin).toString());
+      } else {
+        // An expired hint is an error page. Without one, Rauthy shows its own
+        // sign-out page: the identity session still ends, but it can't send
+        // the browser back here.
+        url.searchParams.set("client_id", CLIENT_ID);
+      }
       response.redirect(url.toString());
     } catch (error) {
       console.error("Could not end the identity session:", error.message);
