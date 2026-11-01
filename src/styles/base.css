@@ -1,0 +1,16 @@
+:root {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+body { min-width: 320px; }
+a { color: inherit; }
+
+/* Each page's h1; the page sets its margin. */
+.page-title {
+  font-size: var(--title-size);
+  line-height: var(--font-lineheight-0);
+  letter-spacing: var(--title-tracking);
+}

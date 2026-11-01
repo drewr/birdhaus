@@ -1,0 +1,43 @@
+/* Breakpoints: 760px stacks the product page, 520px is phone width. */
+.site-header {
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--line);
+}
+.header-actions { display: inline-flex; align-items: center; gap: var(--size-px-3); }
+.account-nav { display: inline-flex; align-items: center; gap: 12px; font-size: 14px; }
+.account-email { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--body-text); }
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  font-family: var(--font-hand);
+  font-size: 30px;
+  font-weight: var(--font-weight-4);
+  letter-spacing: .01em;
+  text-decoration: none;
+}
+.wordmark-mark { width: 52px; height: 52px; }
+
+main {
+  width: min(100% - 48px, 1040px);
+  margin: var(--size-px-8) var(--gutter) var(--size-px-10);
+
+  @media (max-width: 520px) {
+    width: min(100% - 32px, 960px);
+    margin: var(--gutter) var(--size-px-3) var(--size-px-10);
+  }
+}
+
+.site-footer {
+  padding: var(--size-px-3) var(--gutter);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--font-size-0);
+  font-variant-numeric: tabular-nums;
+}

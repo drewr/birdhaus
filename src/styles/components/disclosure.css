@@ -1,0 +1,29 @@
+/* <details> without the browser's marker. The FAQ draws its own +/−. */
+details.waitlist-inline > summary {
+  list-style: none;
+  cursor: pointer;
+
+  &::-webkit-details-marker { display: none; }
+}
+
+.faq-list { border-bottom: 1px solid var(--line); }
+.faq-item {
+  border-top: 1px solid var(--line);
+
+  & summary {
+    padding: var(--size-px-3) 0;
+    font-size: 15px;
+    font-weight: var(--font-weight-7);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--size-px-3);
+
+    &::-webkit-details-marker { display: none; }
+    &::after { content: "+"; font-weight: var(--font-weight-4); font-size: var(--font-size-3); line-height: 1; }
+  }
+  &[open] summary::after { content: "−"; }
+}
+.faq-answer { margin: 0 0 18px; color: var(--body-text); font-size: 14px; line-height: 1.6; }

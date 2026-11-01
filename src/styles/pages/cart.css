@@ -1,0 +1,16 @@
+.cart-screen {
+  max-width: 560px;
+
+  & .page-title { margin: 0 0 var(--gutter); }
+  & .buy-button { margin-top: var(--size-px-2); }
+  & .text-button { display: block; margin-top: var(--size-px-2); }
+}
+.cart {
+  margin: 0 0 var(--size-px-4);
+  padding: var(--size-px-3);
+  border: 1px solid var(--line);
+
+  & h2 { margin: 0 0 14px; font-size: var(--font-size-1); }
+}
+.cart-line { display: flex; justify-content: space-between; gap: var(--size-px-3); font-size: 14px; }
+.cart-total { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; font-weight: var(--font-weight-7); }

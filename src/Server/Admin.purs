@@ -82,7 +82,7 @@ adminOrdersPage :: OrdersVM -> String
 adminOrdersPage vm =
   layout vm $
     el "section" [ cls "admin" ]
-      [ el "h1" [] [ text "Admin" ]
+      [ el "h1" [ cls "page-title" ] [ text "Admin" ]
       , adminNav "/admin"
       , el "h2" [ cls "section-title" ] [ text "Recent orders" ]
       , errorLine vm.error
@@ -98,7 +98,7 @@ adminPickupPage :: PickupVM -> String
 adminPickupPage vm =
   layout vm $
     el "section" [ cls "admin" ]
-      [ el "h1" [] [ text "Admin" ]
+      [ el "h1" [ cls "page-title" ] [ text "Admin" ]
       , adminNav "/admin/pickup"
       , errorLine vm.error
       , el "h2" [ cls "section-title" ] [ text "Pick-up schedule" ]
@@ -161,7 +161,7 @@ adminDeliveryPage :: DeliveryVM -> String
 adminDeliveryPage vm =
   layout vm $
     el "section" [ cls "admin" ]
-      [ el "h1" [] [ text "Admin" ]
+      [ el "h1" [ cls "page-title" ] [ text "Admin" ]
       , adminNav "/admin/delivery"
       , errorLine vm.error
       , el "h2" [ cls "section-title" ] [ text "Delivery schedule" ]

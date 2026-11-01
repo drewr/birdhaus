@@ -1,0 +1,19 @@
+/* The store's styles, by cascade layer. A later layer wins over an earlier one
+   whatever the selectors' specificity, so a page can adjust a component without
+   ids or !important. Each file holds one layer; add new layers to this list. */
+@layer reset, tokens, base, layout, components, pages;
+
+@import "./reset.css" layer(reset);
+@import "./tokens.css" layer(tokens);
+@import "./base.css" layer(base);
+@import "./layout.css" layer(layout);
+@import "./components/buttons.css" layer(components);
+@import "./components/forms.css" layer(components);
+@import "./components/lists.css" layer(components);
+@import "./components/notes.css" layer(components);
+@import "./components/disclosure.css" layer(components);
+@import "./pages/product.css" layer(pages);
+@import "./pages/cart.css" layer(pages);
+@import "./pages/checkout.css" layer(pages);
+@import "./pages/confirmation.css" layer(pages);
+@import "./pages/admin.css" layer(pages);

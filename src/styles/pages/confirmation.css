@@ -1,0 +1,7 @@
+.confirmation {
+  max-width: 560px;
+
+  & .page-title { margin: 0 0 12px; }
+  & .fine-print { margin: 0 0 var(--size-px-6); font-size: 14px; }
+}
+.confirmation-lede { margin: 0 0 var(--size-px-6); color: var(--body-text); line-height: var(--font-lineheight-3); }

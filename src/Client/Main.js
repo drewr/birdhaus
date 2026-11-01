@@ -64,6 +64,23 @@ let stripe;
 let clientSecret;
 let addressElement;
 
+// Stripe's iframes can't see our CSS, so hand them the tokens from
+// src/styles/tokens.css.
+function stripeAppearance() {
+  const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return {
+    theme: "flat",
+    variables: {
+      fontFamily: token("--font-body"),
+      colorPrimary: token("--ink"),
+      colorText: token("--ink"),
+      colorTextSecondary: token("--muted"),
+      colorDanger: token("--danger"),
+      borderRadius: "0px"
+    }
+  };
+}
+
 // The pay page: wallet buttons (Express Checkout) above the card form. The
 // server set the amount (houses plus any delivery fee) from the cart; the
 // page's data attributes only label the wallet sheet. A delivery address comes
@@ -92,12 +109,13 @@ async function initializeCheckout() {
     if (!stripe) throw new Error("Stripe could not be loaded. Please try again.");
 
     clientSecret = result.clientSecret;
-    elements = stripe.elements({ clientSecret, appearance: { theme: "flat" } });
+    const appearance = stripeAppearance();
+    elements = stripe.elements({ clientSecret, appearance });
     mountExpressCheckout(section, delivering);
     if (delivering) {
       // Its own group, so confirming doesn't attach it: the server sets the
       // shipping address it verified.
-      addressElement = stripe.elements({ appearance: { theme: "flat" } }).create("address", {
+      addressElement = stripe.elements({ appearance }).create("address", {
         mode: "shipping",
         allowedCountries: ["US"],
         fields: { phone: "always" },

@@ -1,0 +1,15 @@
+/* Small print, badges and inline messages. */
+.fine-print { margin: 10px 0 0; color: var(--muted); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+.description { margin: 0 0 var(--size-px-4); color: var(--body-text); line-height: var(--font-lineheight-3); }
+.preorder-note {
+  display: inline-block;
+  margin: 0 0 var(--size-px-3);
+  padding: var(--size-px-1) 10px;
+  border: 1px solid var(--ink);
+  font-size: 13px;
+  font-weight: var(--font-weight-7);
+  letter-spacing: .02em;
+}
+.stock-note { margin: 0 0 12px; color: var(--danger); font-size: 14px; font-weight: var(--font-weight-7); }
+.waitlist-error { margin: 0 0 12px; color: var(--danger); font-size: 14px; }
+.waitlist-joined { margin: 0; padding: var(--size-px-3); border: 1px solid var(--line); line-height: var(--font-lineheight-3); }

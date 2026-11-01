@@ -1,0 +1,42 @@
+/* The delivery step (/checkout) and the pay page (/checkout/pay). */
+.delivery-form { margin: 0 0 var(--size-px-4); }
+.delivery-heading { margin: var(--size-px-4) 0 10px; }
+.delivery-option {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  margin: 0 0 var(--size-px-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  line-height: 1.4;
+
+  & input { margin-top: 3px; }
+}
+.delivery-option-disabled { color: var(--muted); cursor: not-allowed; background: var(--wash); }
+.delivery-details { display: block; color: var(--muted); font-size: 13px; white-space: pre-line; }
+
+.checkout {
+  margin-top: 36px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+
+  &[hidden] { display: none; }
+  & h2 { margin: 0 0 var(--size-px-2); font-size: var(--font-size-4); }
+}
+.checkout-total { margin: 0 0 var(--gutter); color: var(--ink-hover); font-size: 14px; }
+.checkout-breakdown { margin-bottom: var(--size-px-2); }
+.checkout-actions {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--size-px-3);
+
+  & .fine-print { margin-top: 10px; }
+}
+
+/* Stripe Elements mount points */
+#express-checkout { margin: 0 0 var(--size-px-4); }
+#shipping-address { margin: 0 0 22px; }
+#payment-element { margin: 22px 0; }
+#payment-message { min-height: var(--size-px-5); margin-bottom: var(--size-px-2); color: var(--danger); font-size: 14px; }

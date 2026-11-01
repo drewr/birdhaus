@@ -1,0 +1,56 @@
+/* Square, ink-bordered controls; the primary one is filled. */
+.buy-button {
+  width: 100%;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 15px 18px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: var(--font-weight-7);
+  cursor: pointer;
+
+  &:hover { background: var(--ink-hover); }
+  &:disabled { opacity: .55; cursor: wait; }
+}
+a.buy-button { display: block; text-align: center; text-decoration: none; }
+
+.cart-link {
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  padding: var(--size-px-2) 14px;
+  font-size: 14px;
+  font-weight: var(--font-weight-7);
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover { background: var(--wash-hover); }
+}
+a.cart-link { text-decoration: none; }
+
+.quantity-button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--font-size-3);
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { background: var(--wash-hover); }
+  &:disabled { opacity: .45; cursor: not-allowed; }
+}
+
+.text-button {
+  border: 0;
+  padding: var(--size-px-2) 0;
+  background: none;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.text-link { display: inline-block; font-weight: var(--font-weight-7); text-underline-offset: 3px; }

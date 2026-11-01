@@ -105,7 +105,7 @@ productPage vm =
       [ el "section" [ cls "product", A "aria-labelledby" "product-title" ]
           [ productMedia
           , el "div" [ cls "product-details" ]
-              [ el "h1" [ A "id" "product-title" ] [ text "Bluebird House" ]
+              [ el "h1" [ cls "page-title", A "id" "product-title" ] [ text "Bluebird House" ]
               , el "p" [ cls "price" ] [ text (vm.priceEach <> " each") ]
               , whenH (vm.shipBy /= "") (el "p" [ cls "preorder-note" ] [ text ("Pre-order · ships by " <> vm.shipBy) ])
               , el "p" [ cls "description" ] [ text "A simple home for backyard bluebirds." ]
@@ -251,7 +251,7 @@ cartPage :: CartVM -> String
 cartPage vm =
   layout vm $
     el "section" [ cls "cart-screen", A "aria-labelledby" "cart-title" ]
-      [ el "h1" [ A "id" "cart-title" ] [ text "Your cart" ]
+      [ el "h1" [ cls "page-title", A "id" "cart-title" ] [ text "Your cart" ]
       , cartBox vm
       , el "a" [ cls "buy-button", A "href" "/checkout" ] [ text "Proceed to checkout" ]
       , el "a" [ cls "text-button", A "href" "/" ] [ text "Continue shopping" ]
@@ -412,7 +412,7 @@ confirmationPage vm =
 confirmationBody :: OrderVM -> Array Html
 confirmationBody vm = case vm.status of
   "succeeded" ->
-    [ el "h1" [] [ text (if vm.shipBy == "" then "Thank you for your order" else "Thank you for your pre-order") ]
+    [ el "h1" [ cls "page-title" ] [ text (if vm.shipBy == "" then "Thank you for your order" else "Thank you for your pre-order") ]
     , el "p" [ cls "confirmation-lede" ]
         [ text (succeededLede vm) ]
     , orderSummary vm
@@ -420,19 +420,19 @@ confirmationBody vm = case vm.status of
     , backToStore "Back to the store"
     ]
   "processing" ->
-    [ el "h1" [] [ text "Your payment is processing" ]
+    [ el "h1" [ cls "page-title" ] [ text "Your payment is processing" ]
     , el "p" [ cls "confirmation-lede" ] [ text "We've received your order. Your bank is still confirming the payment, which usually takes a moment." ]
     , orderSummary vm
     , receiptNote vm "We'll send a receipt to "
     , backToStore "Back to the store"
     ]
   "failed" ->
-    [ el "h1" [] [ text "Your payment didn't go through" ]
+    [ el "h1" [ cls "page-title" ] [ text "Your payment didn't go through" ]
     , el "p" [ cls "confirmation-lede" ] [ text (if vm.message == "" then "You have not been charged." else vm.message <> " You have not been charged.") ]
     , backToStore "Return to the store to try again"
     ]
   _ ->
-    [ el "h1" [] [ text "Thank you for your order" ]
+    [ el "h1" [ cls "page-title" ] [ text "Thank you for your order" ]
     , el "p" [ cls "confirmation-lede" ] [ text "We couldn't load your order details right now. If your payment went through, a receipt is on its way to your email." ]
     , backToStore "Back to the store"
     ]

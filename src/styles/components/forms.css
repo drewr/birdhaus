@@ -1,0 +1,19 @@
+/* Bold labels over full-width square inputs. */
+.waitlist-form {
+  & label { display: block; margin: 0 0 6px; font-size: 14px; font-weight: var(--font-weight-7); }
+  & input { display: block; width: 100%; padding: 12px; border: 1px solid var(--field-border); margin-bottom: var(--size-px-3); }
+}
+.waitlist-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--size-px-3); }
+
+.quantity-field {
+  margin: 0 0 var(--size-px-3);
+
+  & label { display: block; margin: 0 0 6px; font-size: 14px; font-weight: var(--font-weight-7); }
+  & input { width: 96px; padding: 10px 12px; border: 1px solid var(--field-border); }
+}
+.quantity-control { display: inline-flex; align-items: center; gap: 14px; margin-top: 14px; }
+
+#payment-form {
+  & label { display: block; margin: 0 0 var(--size-px-2); font-size: 14px; font-weight: var(--font-weight-7); }
+  & input { display: block; width: 100%; padding: 13px; border: 1px solid var(--field-border); margin-bottom: 22px; }
+}
