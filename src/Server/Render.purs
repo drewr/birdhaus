@@ -2,7 +2,9 @@
 -- called from server/index.js. Node does all IO and formatting and passes flat,
 -- JS-friendly records; these modules touch no browser types.
 module Server.Render
-  ( productPage
+  ( homePage
+  , productsPage
+  , productPage
   , cartPage
   , cartFragment
   , deliveryPage
@@ -16,7 +18,7 @@ import Prelude
 import Data.Array (null)
 import Html (Attr(..), Html, cls, el, elVoid, empty, render, text, whenH)
 import Server.Admin (adminDeliveryPage, adminOrdersPage, adminPickupPage)
-import Server.Layout (Chrome, cartLinkEl, layout)
+import Server.Layout (Chrome, cartLinkEl, layout, layoutWithHero)
 
 type WaitlistFields r =
   ( wlState :: String        -- "editing" | "joined" | "error"
@@ -29,10 +31,22 @@ type WaitlistFields r =
   | r
   )
 
+type HomeVM = { | Chrome () }
+
+-- One listing card; price and availability are formatted by the server.
+type ProductCard =
+  { href :: String, name :: String, summary :: String, image :: String, imageAlt :: String, price :: String, availability :: String }
+
+type ProductsVM = { | Chrome ( products :: Array ProductCard ) }
+
 type ProductVM =
   { | Chrome
       ( WaitlistFields
-          ( open :: Boolean
+          ( name :: String
+          , summary :: String
+          , image :: String
+          , imageAlt :: String
+          , open :: Boolean
           , shipBy :: String
           , remaining :: Int
           , priceEach :: String
@@ -96,6 +110,47 @@ type OrderVM =
 
 type WaitlistVM = { | WaitlistFields ( signedIn :: Boolean, accountLabel :: String ) }
 
+-- ---------------------------------------------------------------- home
+
+-- The copy and image are placeholders until the owner writes them.
+homePage :: HomeVM -> String
+homePage vm = layoutWithHero vm hero empty
+  where
+  hero =
+    el "section" [ cls "hero", A "aria-labelledby" "hero-title" ]
+      [ el "div" [ cls "hero-inner" ]
+          [ el "div" [ cls "hero-copy" ]
+              [ el "h1" [ cls "hero-title", A "id" "hero-title" ] [ text "[Headline about Birdhaus and backyard birds]" ]
+              , el "p" [ cls "hero-lede" ] [ text "[A sentence or two on who makes these houses, how, and why bluebirds need them.]" ]
+              , el "a" [ cls "buy-button hero-action", A "href" "/products" ] [ text "Shop bluebird houses" ]
+              ]
+          , el "figure" [ cls "hero-figure" ]
+              [ elVoid "img" [ cls "hero-image", A "src" "/product-illustration.svg", A "alt" "[Describe the hero image]" ] ]
+          ]
+      ]
+
+-- ---------------------------------------------------------------- products
+
+productsPage :: ProductsVM -> String
+productsPage vm =
+  layout vm $
+    el "section" [ cls "products", A "aria-labelledby" "products-title" ]
+      [ el "h1" [ cls "page-title", A "id" "products-title" ] [ text "Products" ]
+      , el "ul" [ cls "product-grid" ] (map card vm.products)
+      ]
+  where
+  card p =
+    el "li" []
+      [ el "a" [ cls "product-card", A "href" p.href ]
+          [ el "span" [ cls "product-card-figure" ]
+              [ elVoid "img" [ cls "product-card-image", A "src" p.image, A "alt" p.imageAlt ] ]
+          , el "span" [ cls "product-card-name" ] [ text p.name ]
+          , el "span" [ cls "product-card-summary" ] [ text p.summary ]
+          , el "span" [ cls "product-card-price" ] [ text p.price ]
+          , el "span" [ cls "product-card-availability" ] [ text p.availability ]
+          ]
+      ]
+
 -- ---------------------------------------------------------------- product
 
 productPage :: ProductVM -> String
@@ -103,12 +158,12 @@ productPage vm =
   layout vm $
     el "div" []
       [ el "section" [ cls "product", A "aria-labelledby" "product-title" ]
-          [ productMedia
+          [ productMedia vm
           , el "div" [ cls "product-details" ]
-              [ el "h1" [ cls "page-title", A "id" "product-title" ] [ text "Bluebird House" ]
+              [ el "h1" [ cls "page-title", A "id" "product-title" ] [ text vm.name ]
               , el "p" [ cls "price" ] [ text (vm.priceEach <> " each") ]
               , whenH (vm.shipBy /= "") (el "p" [ cls "preorder-note" ] [ text ("Pre-order · ships by " <> vm.shipBy) ])
-              , el "p" [ cls "description" ] [ text "A simple home for backyard bluebirds." ]
+              , el "p" [ cls "description" ] [ text vm.summary ]
               , if vm.open then purchase vm else soldOut vm
               ]
           ]
@@ -118,11 +173,11 @@ productPage vm =
       , faqSection
       ]
 
-productMedia :: Html
-productMedia =
+productMedia :: ProductVM -> Html
+productMedia vm =
   el "div" [ cls "product-media" ]
     [ el "figure" [ cls "product-figure" ]
-        [ elVoid "img" [ cls "product-illustration", A "src" "/product-illustration.svg", A "alt" "Illustration of a bluebird house" ]
+        [ elVoid "img" [ cls "product-illustration", A "src" vm.image, A "alt" vm.imageAlt ]
         , el "figcaption" [ cls "product-figcaption" ] [ text "Illustration — product photos coming soon." ]
         ]
     ]
@@ -254,7 +309,7 @@ cartPage vm =
       [ el "h1" [ cls "page-title", A "id" "cart-title" ] [ text "Your cart" ]
       , cartBox vm
       , el "a" [ cls "buy-button", A "href" "/checkout" ] [ text "Proceed to checkout" ]
-      , el "a" [ cls "text-button", A "href" "/" ] [ text "Continue shopping" ]
+      , el "a" [ cls "text-button", A "href" "/products" ] [ text "Continue shopping" ]
       , el "p" [ cls "fine-print" ]
           [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> vm.fulfillmentNote) ]
       ]
@@ -477,7 +532,7 @@ receiptNote vm prefix =
   else el "p" [ cls "fine-print" ] [ text prefix, el "strong" [] [ text vm.email ], text "." ]
 
 backToStore :: String -> Html
-backToStore label = el "a" [ cls "text-link", A "href" "/" ] [ text label ]
+backToStore label = el "a" [ cls "text-link", A "href" "/products" ] [ text label ]
 
 -- ---------------------------------------------------------------- waitlist
 

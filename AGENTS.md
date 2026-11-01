@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository. See `README.md` for us
 
 ## What this is
 
-A single-product Stripe storefront (Bluebird House, $40). Pages (`/`, `/cart`, `/checkout`, `/checkout/pay`, `/order`, `/admin/*`) are server-rendered by PureScript (`src/Html.purs`, `src/Server/*.purs`, bundled to `server/views.js`) with HTMX; the only client code is `src/Client/*` (Stripe Elements and Umami), bundled by Vite. An Express 5 server (`server/index.js`) serves both. Deployed as a unikernel on Datum Cloud with `run.hs`.
+A single-product Stripe storefront (Bluebird House, $40). Pages (`/` hero, `/products` listing, `/products/:slug` detail, `/cart`, `/checkout`, `/checkout/pay`, `/order`, `/admin/*`) are server-rendered by PureScript (`src/Html.purs`, `src/Server/*.purs`, bundled to `server/views.js`) with HTMX; the only client code is `src/Client/*` (Stripe Elements and Umami), bundled by Vite. An Express 5 server (`server/index.js`) serves both. Deployed as a unikernel on Datum Cloud with `run.hs`.
 
 ## Commands
 
@@ -28,6 +28,7 @@ A single-product Stripe storefront (Bluebird House, $40). Pages (`/`, `/cart`, `
 - Keep pages `no-cache` (`/order` and `/admin` `no-store`) and hashed `/assets` immutable; the server links the hashed client bundle from Vite's manifest.
 - Add PureScript dependencies in `spago.yaml`; `spago.lock` is generated and committed.
 - Match the existing style: terse comments that explain why, no dead code.
+- Products are listed in `server/products.js` (slug, name, summary, image); price stays in `server/price.js` and availability in the batch. The homepage hero copy and image are in `homePage` (`src/Server/Render.purs`), placeholders in brackets until the owner writes them (docs/design/storefront-pages.md).
 - Styles live in `src/styles/` (docs/design/styles.md): `index.css` sets the cascade-layer order (reset, tokens, base, layout, components, pages) and imports one file per component or page into its layer. Colours, fonts and sizes come from `tokens.css` and Open Props' px scales (`postcss-jit-props` in `vite.config.js` emits only the variables used); keep a literal only where the design sits between scale steps. Page titles share `page-title`, and Stripe Elements get the same tokens through `stripeAppearance()` in `src/Client/Main.js`. A rule whose class no view emits is dead: delete it.
 
 - Brand images in `public/` are generated from `brand/` by `scripts/brand-assets.hs`; edit the script or sources, not the outputs.

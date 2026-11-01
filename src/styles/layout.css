@@ -6,10 +6,33 @@
   justify-content: space-between;
   padding: 0 var(--gutter);
   border-bottom: 1px solid var(--line);
+
+  /* Phones: links get their own line under the wordmark. */
+  @media (max-width: 520px) {
+    height: auto;
+    flex-wrap: wrap;
+    gap: var(--size-px-2);
+    padding: 12px var(--size-px-3);
+  }
 }
-.header-actions { display: inline-flex; align-items: center; gap: var(--size-px-3); }
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-px-3);
+  white-space: nowrap;
+
+  @media (max-width: 520px) { width: 100%; gap: 12px; }
+}
 .account-nav { display: inline-flex; align-items: center; gap: 12px; font-size: 14px; }
-.account-email { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--body-text); }
+.account-email {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--body-text);
+
+  @media (max-width: 520px) { display: none; }
+}
 
 .wordmark {
   display: inline-flex;
@@ -33,6 +56,9 @@ main {
     margin: var(--gutter) var(--size-px-3) var(--size-px-10);
   }
 }
+
+/* The homepage is all hero, so its <main> is empty. */
+main:empty { display: none; }
 
 .site-footer {
   padding: var(--size-px-3) var(--gutter);

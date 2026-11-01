@@ -17,6 +17,10 @@ Without `PGHOST` the store still runs, but orders and the waitlist are not recor
 
 Spago's macOS cache is redirected to `.cache/spago-home/Library/Caches/spago-nodejs`, which is ignored by Git. Halogen and the rest of the PureScript dependencies are resolved through Spago.
 
+## Pages
+
+`/` is a full-width hero that links to `/products`, which lists the products in `server/products.js`; each product's page is `/products/<slug>` (the Bluebird House is `/products/bluebird-house`). The hero's headline, text and image are written in `homePage` in `src/Server/Render.purs`; bracketed text there is a placeholder. Put new images in `public/` and reference them by path.
+
 ## Brand assets
 
 The pencil sketches in `brand/` are the source. `./scripts/brand-assets.hs` levels the scanned paper to pure white and regenerates everything in `public/`: the wide `logo.png`, `mark-512.png`, `apple-touch-icon.png`, `favicon.ico` and PNG favicons, and the `og-image.png` link preview. It also writes `brand/logo-large.png` (2400px wide) and `brand/mark-large.png` (2048px square), upscaled from the sketches and each under 512 KB; they are not served by the site. Vite copies `public/` into `dist/`. To brand Stripe's receipt emails, upload `public/mark-512.png` as the icon and `public/logo.png` as the logo in Dashboard → Settings → Branding.

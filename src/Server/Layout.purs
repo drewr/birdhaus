@@ -3,11 +3,12 @@
 module Server.Layout
   ( Chrome
   , layout
+  , layoutWithHero
   , cartLinkEl
   ) where
 
 import Prelude
-import Html (Attr(..), Html, cls, el, elVoid, render, text, whenH)
+import Html (Attr(..), Html, cls, el, elVoid, empty, render, text, whenH)
 
 -- Fields shared by every full page (header + <head> asset links + analytics).
 type Chrome r =
@@ -25,7 +26,12 @@ type Chrome r =
   )
 
 layout :: forall r. { | Chrome r } -> Html -> String
-layout c content =
+layout c = layoutWithHero c empty
+
+-- The hero sits between the header and <main>, so it spans the window rather
+-- than main's column.
+layoutWithHero :: forall r. { | Chrome r } -> Html -> Html -> String
+layoutWithHero c hero content =
   "<!doctype html>" <> render
     ( el "html" [ A "lang" "en" ]
         [ el "head" []
@@ -56,6 +62,7 @@ layout c content =
             ]
         , el "body" [ A "data-account-id" c.accountId, A "data-batch-reason" c.reason ]
             [ header c
+            , hero
             , el "main" [] [ content ]
             , footer c
             ]
@@ -79,7 +86,8 @@ header c =
         , text "birdhaus"
         ]
     , el "div" [ cls "header-actions" ]
-        [ whenH (c.cartQty > 0) (cartLinkEl false c.cartQty)
+        [ el "a" [ cls "text-link", A "href" "/products" ] [ text "Products" ]
+        , whenH (c.cartQty > 0) (cartLinkEl false c.cartQty)
         , el "nav" [ cls "account-nav" ]
             ( if c.signedIn then
                 ( if c.isAdmin then [ el "a" [ cls "text-link", A "href" "/admin" ] [ text "Admin" ] ] else [] )

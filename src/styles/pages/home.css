@@ -1,0 +1,34 @@
+/* The homepage hero spans the window; its content lines up with <main>. */
+.hero {
+  background: var(--wash);
+  border-bottom: 1px solid var(--line);
+}
+.hero-inner {
+  width: min(100% - 48px, 1040px);
+  margin: 0 var(--gutter);
+  padding: var(--size-px-9) 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--size-px-8);
+
+  @media (max-width: 760px) { grid-template-columns: 1fr; gap: var(--size-px-7); padding: var(--size-px-8) 0; }
+  @media (max-width: 520px) { width: min(100% - 32px, 960px); margin: 0 var(--size-px-3); }
+}
+.hero-title {
+  margin: 0 0 var(--size-px-4);
+  font-size: var(--font-size-fluid-3);
+  line-height: var(--font-lineheight-0);
+  letter-spacing: var(--title-tracking);
+}
+.hero-lede { max-width: 36em; margin: 0 0 var(--size-px-7); color: var(--body-text); font-size: 18px; line-height: var(--font-lineheight-3); }
+.hero-action { display: inline-block; width: auto; padding-inline: var(--size-px-7); }
+.hero-figure {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 40px;
+  display: grid;
+  place-items: center;
+}
+.hero-image { width: 100%; max-width: 340px; height: auto; display: block; }

@@ -9,6 +9,7 @@ import { batchStatus, currentBatch, displayDate } from "./batch.js";
 import { UNIT_PRICE_CENTS, formatUsd, formatTotal } from "./price.js";
 import { readCart, writeCart, clearCart } from "./cart.js";
 import { formatOrder } from "./order-format.js";
+import { products, productBySlug } from "./products.js";
 import * as auth from "./auth.js";
 import * as db from "./db.js";
 import * as pickup from "./pickup.js";
@@ -407,10 +408,13 @@ app.post("/cart/update", async (request, response) => {
 
 app.post("/cart/clear", (request, response) => {
   clearCart(response);
-  response.redirect(303, "/");
+  response.redirect(303, "/products");
 });
 
 // -------------------------------------------------------------- waitlist
+
+// The batch and the waitlist are the Bluebird House's, the one product so far.
+const batchProductPath = `/products/${products[0].slug}`;
 
 app.post("/waitlist", async (request, response) => {
   const account = auth.accountOf(request);
@@ -427,7 +431,7 @@ app.post("/waitlist", async (request, response) => {
   const postalCode = String(request.body?.postalCode ?? "").trim().slice(0, 12) || null;
 
   const fail = (message) => {
-    if (!hx) return response.redirect(303, "/");
+    if (!hx) return response.redirect(303, batchProductPath);
     const vm = { ...base, wlState: "error", wlMessage: message, wlEmail: email, wlQuantity: Number.isInteger(quantity) ? String(quantity) : "", wlPostalCode: postalCode ?? "" };
     return response.status(200).type("html").send(views.waitlistFragment(vm));
   };
@@ -444,7 +448,7 @@ app.post("/waitlist", async (request, response) => {
     console.error("Could not save a waitlist entry:", error.message);
     return fail("We could not save your spot. Please try again.");
   }
-  if (!hx) return response.redirect(303, "/");
+  if (!hx) return response.redirect(303, batchProductPath);
   const vm = { ...base, wlState: "joined", wlMessage: "", wlEmail: email, wlQuantity: String(quantity), wlPostalCode: postalCode ?? "" };
   response.type("html").send(views.waitlistFragment(vm));
 });
@@ -461,11 +465,41 @@ app.use(express.static(dist, {
   setHeaders: (response) => response.setHeader("Cache-Control", "no-cache")
 }));
 
-app.get("/", async (request, response) => {
+app.get("/", (request, response) => {
+  response.set("Cache-Control", "no-cache").type("html").send(views.homePage(chrome(request)));
+});
+
+app.get("/products", async (request, response) => {
+  const status = batchStatus(batch, await paidUnits());
+  const availability = status.open
+    ? (batch.shipBy ? `Pre-order · ships by ${displayDate(batch.shipBy)}` : "In stock")
+    : (status.reason === "closed" ? "Pre-orders have closed" : "Sold out · join the waitlist");
+  const vm = {
+    ...chrome(request),
+    products: products.map((product) => ({
+      href: `/products/${product.slug}`,
+      name: product.name,
+      summary: product.summary,
+      image: product.image,
+      imageAlt: product.imageAlt,
+      price: formatUsd(UNIT_PRICE_CENTS),
+      availability
+    }))
+  };
+  response.set("Cache-Control", "no-cache").type("html").send(views.productsPage(vm));
+});
+
+app.get("/products/:slug", async (request, response) => {
+  const product = productBySlug(request.params.slug);
+  if (!product) return response.redirect(303, "/products");
   const status = batchStatus(batch, await paidUnits());
   const showRemaining = status.open && status.remaining !== null && batch.cap > 0 && status.remaining < batch.cap * 0.2;
   const vm = {
     ...chrome(request, status.reason),
+    name: product.name,
+    summary: product.summary,
+    image: product.image,
+    imageAlt: product.imageAlt,
     authEnabled: auth.isConfigured(),
     signUpUrl: auth.signUpUrl(),
     open: status.open,
@@ -485,7 +519,7 @@ app.get("/", async (request, response) => {
 
 app.get("/cart", async (request, response) => {
   const qty = readCart(request).qty;
-  if (qty <= 0) return response.redirect(303, "/");
+  if (qty <= 0) return response.redirect(303, "/products");
   const status = batchStatus(batch, await paidUnits());
   const vm = {
     ...chrome(request),

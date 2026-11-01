@@ -12,6 +12,8 @@
 @import "./components/lists.css" layer(components);
 @import "./components/notes.css" layer(components);
 @import "./components/disclosure.css" layer(components);
+@import "./pages/home.css" layer(pages);
+@import "./pages/products.css" layer(pages);
 @import "./pages/product.css" layer(pages);
 @import "./pages/cart.css" layer(pages);
 @import "./pages/checkout.css" layer(pages);
