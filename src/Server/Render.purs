@@ -120,7 +120,7 @@ homePage vm = layoutWithHero vm hero empty
     el "section" [ cls "hero", A "aria-labelledby" "hero-title" ]
       [ el "div" [ cls "hero-inner" ]
           [ el "div" [ cls "hero-copy" ]
-              [ el "h1" [ cls "hero-title", A "id" "hero-title" ] [ text "[Headline about Birdhaus and backyard birds]" ]
+              [ el "p" [ cls "hero-title", A "id" "hero-title" ] [ text "Hi there! I've started a business..." ]
               , el "p" [ cls "hero-lede" ] [ text "[A sentence or two on who makes these houses, how, and why bluebirds need them.]" ]
               , el "a" [ cls "buy-button hero-action", A "href" "/products" ] [ text "Shop bluebird houses" ]
               ]
