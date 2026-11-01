@@ -47,15 +47,13 @@
 }
 .wordmark-mark { width: var(--size-8); height: var(--size-8); }
 
-/* Content column; the hero's inner block uses the same. */
+/* Content column, centred; the width keeps a gutter on each side. The
+   hero's inner block uses the same. */
 main, .hero-inner {
   width: min(100% - 2 * var(--gutter), var(--page-width));
-  margin-inline: var(--gutter);
+  margin-inline: auto;
 
-  @media (--sm-n-below) {
-    width: calc(100% - 2 * var(--size-3));
-    margin-inline: var(--size-3);
-  }
+  @media (--sm-n-below) { width: calc(100% - 2 * var(--size-3)); }
 }
 main {
   margin-block: var(--size-8) var(--size-10);

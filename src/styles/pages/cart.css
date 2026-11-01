@@ -1,5 +1,6 @@
 .cart-screen {
   max-width: var(--size-content-3);
+  margin-inline: auto;
 
   & .page-title { margin: 0 0 var(--gutter); }
   & .buy-button { margin-top: var(--size-2); }
