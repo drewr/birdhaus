@@ -14,6 +14,23 @@
 }
 a.buy-button { display: block; text-align: center; text-decoration: none; }
 
+/* The buy button's outline twin, for the second choice beside it. */
+.secondary-button {
+  display: block;
+  width: 100%;
+  border: var(--border-size-1) solid var(--ink);
+  border-radius: 0;
+  padding: var(--size-3) var(--size-4);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: var(--font-weight-7);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover { background: var(--wash-hover); }
+}
+
 .cart-link {
   border: var(--border-size-1) solid var(--ink);
   border-radius: 0;

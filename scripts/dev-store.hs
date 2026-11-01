@@ -105,6 +105,7 @@ main = do
       , "--db-secret", storeDbSecret o
       , "--stripe-secret", stripeSecret o
       , "--auth-secret", if haveAuth then authSecret o else authSecret o <> "-absent"
+      , "--rauthy-secret", "birdhaus-store-dev-rauthy"
       , "--pull-secret", pullSecret o
       , "--admin-group", adminGroup o
       -- One instance is enough for dev; a deploy's brief 503 doesn't matter there.

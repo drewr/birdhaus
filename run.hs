@@ -22,11 +22,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import qualified Control.Foldl as Fold
+import Control.Monad (filterM)
 import qualified Data.Aeson as A
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Base64 as Base64
 import Data.Char (isAlphaNum, isDigit)
 import Data.Foldable (for_)
+import Data.List ((\\))
 import Data.Maybe (fromMaybe, isNothing, listToMaybe)
 import Data.Optional (Optional (Specific))
 import qualified Data.Text as T
@@ -46,6 +48,8 @@ data Opts = Opts
   , stripeSecret :: Text
   , dbSecret :: Text
   , authSecret :: Text
+  , mailSecret :: Text
+  , rauthySecret :: Text
   , pullSecret :: Text
   , domain :: Text
   , version :: Maybe Text
@@ -70,6 +74,8 @@ parser =
     <*> opt "stripe-secret" 'k' "birdhaus-stripe" "Secret holding the Stripe keys"
     <*> opt "db-secret" 'b' "birdhaus-store-db" "Secret with PG* settings and STRIPE_WEBHOOK_SECRET (scripts/store-db-secret.hs)"
     <*> opt "auth-secret" 'A' "birdhaus-store-auth" "Secret with the OIDC settings and session key (scripts/store-auth-secret.hs)"
+    <*> opt "mail-secret" 'M' "birdhaus-ses" "Secret with the SES SMTP settings, for emailed sign-in codes"
+    <*> opt "rauthy-secret" 'R' "birdhaus-store-rauthy" "Secret with the Rauthy API key (scripts/store-rauthy-key.hs)"
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
     <*> opt "domain" 'd' "birdhaus.store" "Public hostname"
     <*> optional (optText "version" 'V' "Version and image tag; vX.Y.Z needs that tag on HEAD (default: from git)")
@@ -125,6 +131,10 @@ main = do
   -- storefront (scripts/store-auth-secret.hs creates it).
   haveAuth <- dcQuiet ["get", "secret", authSecret o]
   unless haveAuth $ T.putStrLn ("No Secret " <> authSecret o <> ": deploying without accounts.")
+  -- Email sign-in needs both; without them only Google sign-in is offered.
+  optionalSecrets <- filterM (\n -> dcQuiet ["get", "secret", n]) [mailSecret o, rauthySecret o]
+  for_ ([mailSecret o, rauthySecret o] \\ optionalSecrets) $ \n ->
+    T.putStrLn ("No Secret " <> n <> ": deploying without email sign-in.")
 
   echo "Building the storefront..."
   procs "npm" ["ci"] empty
@@ -152,7 +162,7 @@ main = do
   with (mktempdir tmp "birdhaus") $ \dir -> do
     let workloadFile = dir </> "workload.yaml"
         serviceFile = dir </> "service.yaml"
-    T.writeFile workloadFile (workloadManifest o haveAuth ver commit digestRef)
+    T.writeFile workloadFile (workloadManifest o haveAuth optionalSecrets ver commit digestRef)
     T.writeFile serviceFile (serviceManifest o)
     printf ("Deploying " % s % " to " % s % " in " % s % "...\n") digestRef (location o) (project o)
     dc ["compute", "deploy", "-f", T.pack workloadFile, "--yes"]
@@ -238,8 +248,8 @@ pushedDigest out =
     , not (T.null rest)
     ]
 
-workloadManifest :: Opts -> Bool -> Text -> Text -> Text -> Text
-workloadManifest o auth ver commit image =
+workloadManifest :: Opts -> Bool -> [Text] -> Text -> Text -> Text -> Text
+workloadManifest o auth extraSecrets ver commit image =
   T.unlines $
     [ "apiVersion: compute.datumapis.com/v1alpha"
     , "kind: Workload"
@@ -293,7 +303,7 @@ workloadManifest o auth ver commit image =
     , "            - secretRef:"
     , "                name: " <> dbSecret o
     ]
-      <> (if auth then ["            - secretRef:", "                name: " <> authSecret o] else [])
+      <> concat [["            - secretRef:", "                name: " <> n] | n <- [authSecret o | auth] <> extraSecrets]
       <> [ "            ports:"
          , "            - name: http"
          , "              port: 8080"

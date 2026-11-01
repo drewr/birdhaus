@@ -15,6 +15,8 @@ The server requires `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`. `VITE_STRI
 
 Without `PGHOST` the store still runs, but orders and the waitlist are not recorded. To exercise them locally, point the `PG*` variables at a throwaway Postgres and forward Stripe events with `stripe listen --forward-to localhost:8080/api/stripe-webhook`, setting `STRIPE_WEBHOOK_SECRET` to the secret it prints.
 
+Email sign-in needs `RAUTHY_API_KEY`, the `SMTP_*` settings and Postgres. Locally, `MAIL_LOG=1` prints each sign-in code to the server log instead of sending it.
+
 Spago's macOS cache is redirected to `.cache/spago-home/Library/Caches/spago-nodejs`, which is ignored by Git. Halogen and the rest of the PureScript dependencies are resolved through Spago.
 
 ## Pages
@@ -103,7 +105,7 @@ To raise the cap or move a date, redeploy with new `run.hs` options.
 
 ## Accounts
 
-Sign-in is optional at https://login.birdhaus.store: Google, or an email account that a magic link activates and that uses a passkey (a password remains available). Guest checkout stays the default, and nothing about buying requires an account. A signed-in customer gets order history, and past guest orders with the same verified email are linked on first sign-in. Analytics identify the visitor by Rauthy's internal ID, never the email. If the identity service is down, sign-in fails but checkout and the Stripe webhook keep working.
+Customers sign in on the store's `/login` page with Google or an emailed 6-digit code, and need an account to check out or join the waitlist; browsing and the cart are open. Rauthy at https://login.birdhaus.store holds the accounts but customers never see its pages. A signed-in customer gets order history, and past guest orders with the same verified email are linked on first sign-in. Analytics identify the visitor by Rauthy's internal ID, never the email. If the identity service is down, customers can browse but not sign in or check out; the Stripe webhook keeps recording orders.
 
 Setup and operations are in [`auth/README.md`](auth/README.md); the design and open work are in [`docs/design/accounts.md`](docs/design/accounts.md). Microsoft and Amazon sign-in are phase 2.
 

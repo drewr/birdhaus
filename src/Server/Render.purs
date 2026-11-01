@@ -3,6 +3,8 @@
 -- JS-friendly records; these modules touch no browser types.
 module Server.Render
   ( homePage
+  , loginPage
+  , codePage
   , productsPage
   , productPage
   , cartPage
@@ -26,12 +28,30 @@ type WaitlistFields r =
   , wlEmail :: String
   , wlQuantity :: String
   , wlPostalCode :: String
-  , authEnabled :: Boolean
-  , signUpUrl :: String
+  , signInHref :: String
+  , signUpHref :: String
   | r
   )
 
-type HomeVM = { | Chrome ( signUpUrl :: String ) }
+type HomeVM = { | Chrome () }
+
+-- The server builds every href, so next is encoded once, in JavaScript.
+type LoginVM =
+  { | Chrome
+      ( authEnabled :: Boolean
+      , emailEnabled :: Boolean
+      , next :: String
+      , googleHref :: String
+      , loginEmail :: String
+      , loginError :: String
+      , signupName :: String
+      , signupEmail :: String
+      , signupError :: String
+      )
+  }
+
+-- signingUp only changes the wording; the server knows which it is.
+type CodeVM = { | Chrome ( email :: String, signingUp :: Boolean, error :: String, notice :: String ) }
 
 -- One listing card; price and availability are formatted by the server.
 type ProductCard =
@@ -116,7 +136,6 @@ type WaitlistVM = { | WaitlistFields ( signedIn :: Boolean, accountLabel :: Stri
 homePage :: HomeVM -> String
 homePage vm = layoutWithHero vm hero empty
   where
-  signUpHref = if vm.signUpUrl == "" then "/api/auth/login?next=/" else vm.signUpUrl
   hero =
     el "section" [ cls "hero", A "aria-label" "Welcome" ]
       [ el "div" [ cls "hero-inner" ]
@@ -128,13 +147,108 @@ homePage vm = layoutWithHero vm hero empty
                   ]
               , el "p" [ cls "description" ] [ text "It's very ", el "em" [] [ text "easy" ], text ":" ]
               , el "ol" [ cls "description" ]
-                  [ el "li" [] [ el "a" [ A "href" signUpHref ] [ text "Sign up" ], text " to create your free account," ]
+                  [ el "li" [] [ el "a" [ A "href" "/login#create" ] [ text "Sign up" ], text " to create your free account," ]
                   , el "li" [] [ el "a" [ A "href" "/products" ] [ text "Shop" ], text " to get yours today, and" ]
                   , el "li" [] [ text "Add yourself to the waiting list to get notified when new birdhouses are available" ]
                   ]
               ]
           , el "figure" [ cls "hero-figure" ]
-              [ elVoid "img" [ cls "hero-image", A "src" "/product-illustration.svg", A "alt" "[Describe the hero image]" ] ]
+              [ elVoid "img" [ cls "hero-image", A "src" "/hero-birdhaus.jpg", A "width" "1400", A "height" "1180", A "alt" "A Birdhaus bluebird house held up in a backyard" ] ]
+          ]
+      ]
+
+-- ---------------------------------------------------------------- login
+
+-- Two clear choices, log in or create an account, each with Google or an
+-- emailed code. Everything happens here: Google passes through Rauthy without
+-- stopping, and email accounts live in Rauthy behind the store's API calls.
+loginPage :: LoginVM -> String
+loginPage vm =
+  layout vm $
+    el "section" [ cls "login", A "aria-labelledby" "login-title" ]
+      [ el "h1" [ cls "page-title", A "id" "login-title" ] [ text "Welcome to Birdhaus" ]
+      , if vm.signedIn then signedInNote else if vm.authEnabled then panels else accountsOff
+      ]
+  where
+  panels =
+    el "div" [ cls "login-panels" ]
+      [ el "div" [ cls "login-panel" ]
+          [ el "h2" [ cls "login-heading" ] [ text "Log in" ]
+          , el "a" [ cls "secondary-button", A "href" vm.googleHref ] [ text "Continue with Google" ]
+          , whenH vm.emailEnabled $
+              emailForm "/login/email" "login"
+                [ field "login-email" "email" "Email" "email" vm.loginEmail ]
+                vm.loginError
+                "Email me a code"
+          ]
+      , el "p" [ cls "login-or", A "aria-hidden" "true" ] [ text "or" ]
+      , el "div" [ cls "login-panel", A "id" "create" ]
+          [ el "h2" [ cls "login-heading" ] [ text "Create your account" ]
+          , el "p" [ cls "description" ] [ text "You'll need one to check out and to join the waitlist. It also keeps your orders in one place." ]
+          , el "a" [ cls "secondary-button", A "href" vm.googleHref ] [ text "Sign up with Google" ]
+          , whenH vm.emailEnabled $
+              emailForm "/signup/email" "signup"
+                [ field "signup-name" "name" "Name" "name" vm.signupName
+                , field "signup-email" "email" "Email" "email" vm.signupEmail
+                ]
+                vm.signupError
+                "Email me a code"
+          ]
+      ]
+
+  emailForm action purpose fields error label =
+    el "form" [ cls "login-email", A "method" "post", A "action" action ]
+      ( [ elVoid "input" [ A "type" "hidden", A "name" "next", A "value" vm.next ] ]
+          <> fields
+          <> [ whenH (error /= "") (el "p" [ cls "waitlist-error", A "role" "alert", A "id" (purpose <> "-error") ] [ text error ])
+             , el "button" [ cls "buy-button", A "type" "submit" ] [ text label ]
+             , el "p" [ cls "fine-print" ] [ text "We'll email you a 6-digit code. No password needed." ]
+             ]
+      )
+
+  field id name label kind value =
+    el "div" []
+      [ el "label" [ A "for" id ] [ text label ]
+      , elVoid "input"
+          ( [ A "id" id, A "name" name, A "type" (if kind == "email" then "email" else "text"), A "autocomplete" kind, B "required", A "value" value ]
+              <> (if kind == "email" then [ A "placeholder" "you@example.com" ] else [ A "maxlength" "32" ])
+          )
+      ]
+
+  signedInNote =
+    el "div" [ cls "login-signed-in" ]
+      [ el "p" [ cls "description" ] [ text ("You're signed in as " <> vm.accountLabel <> ".") ]
+      , el "a" [ cls "buy-button", A "href" vm.next ] [ text "Continue" ]
+      , el "a" [ cls "text-button", A "href" "/api/auth/logout", B "data-signout" ] [ text "Sign out" ]
+      ]
+
+  accountsOff =
+    el "p" [ cls "description" ]
+      [ text "Accounts aren't available right now. Please try again shortly, or "
+      , el "a" [ cls "text-link", A "href" "/products" ] [ text "browse the products" ]
+      , text "."
+      ]
+
+codePage :: CodeVM -> String
+codePage vm =
+  layout vm $
+    el "section" [ cls "login login-code", A "aria-labelledby" "code-title" ]
+      [ el "h1" [ cls "page-title", A "id" "code-title" ] [ text "Check your email" ]
+      , el "p" [ cls "description" ]
+          [ text "We sent a 6-digit code to ", el "strong" [] [ text vm.email ], text (if vm.signingUp then ". Enter it to create your account." else ". Enter it to log in.") ]
+      , whenH (vm.notice /= "") (el "p" [ cls "login-notice", A "role" "status" ] [ text vm.notice ])
+      , el "form" [ cls "login-email", A "method" "post", A "action" "/login/code" ]
+          [ el "label" [ A "for" "login-code" ] [ text "Code" ]
+          , elVoid "input"
+              [ A "id" "login-code", A "name" "code", A "type" "text", A "inputmode" "numeric", A "pattern" "[0-9 ]*"
+              , A "autocomplete" "one-time-code", A "maxlength" "7", B "required", B "autofocus"
+              ]
+          , whenH (vm.error /= "") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text vm.error ])
+          , el "button" [ cls "buy-button", A "type" "submit" ] [ text (if vm.signingUp then "Create account" else "Log in") ]
+          ]
+      , el "form" [ cls "login-resend", A "method" "post", A "action" "/login/resend" ]
+          [ el "button" [ cls "text-button", A "type" "submit" ] [ text "Send a new code" ]
+          , el "a" [ cls "text-button", A "href" "/login" ] [ text "Use a different email" ]
           ]
       ]
 
@@ -223,7 +337,7 @@ soldOut vm =
 toWaitlist :: ProductVM -> WaitlistVM
 toWaitlist vm =
   { wlState: vm.wlState, wlMessage: vm.wlMessage, wlEmail: vm.wlEmail, wlQuantity: vm.wlQuantity, wlPostalCode: vm.wlPostalCode
-  , authEnabled: vm.authEnabled, signUpUrl: vm.signUpUrl, signedIn: vm.signedIn, accountLabel: vm.accountLabel
+  , signInHref: vm.signInHref, signUpHref: vm.signUpHref, signedIn: vm.signedIn, accountLabel: vm.accountLabel
   }
 
 featureSection :: Html
@@ -557,12 +671,10 @@ waitlistView vm =
             [ text ("You're on the waitlist for " <> vm.wlQuantity <> ". We'll email " <> joinedEmail <> " when we can build more.") ]
         _
           | vm.signedIn -> memberForm
-          | vm.authEnabled -> signUpCta
-          | otherwise -> guestForm
+          | otherwise -> signUpCta
     ]
   where
   joinedEmail = if vm.signedIn && vm.accountLabel /= "" then vm.accountLabel else vm.wlEmail
-  signUpHref = if vm.signUpUrl == "" then "/api/auth/login?next=/" else vm.signUpUrl
 
   wlForm kids =
     el "form"
@@ -597,21 +709,12 @@ waitlistView vm =
       , submitButton
       ]
 
-  guestForm =
-    wlForm
-      [ el "label" [ A "for" "waitlist-email" ] [ text "Email" ]
-      , elVoid "input" [ A "id" "waitlist-email", A "name" "email", A "type" "email", B "required", A "placeholder" "you@example.com", A "value" vm.wlEmail ]
-      , quantityZip
-      , errorLine
-      , submitButton
-      ]
-
   signUpCta =
     el "div" [ cls "waitlist-signup" ]
       [ el "p" [ cls "description" ] [ text "Create a free account to join the waitlist, so we can reach you when we build more." ]
-      , el "a" [ cls "buy-button", A "href" signUpHref ] [ text "Create an account" ]
+      , el "a" [ cls "buy-button", A "href" vm.signUpHref ] [ text "Create an account" ]
       , el "p" [ cls "fine-print" ]
           [ text "Already have one? "
-          , el "a" [ cls "text-link", A "href" "/api/auth/login?next=/" ] [ text "Sign in" ]
+          , el "a" [ cls "text-link", A "href" vm.signInHref ] [ text "Sign in" ]
           ]
       ]

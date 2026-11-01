@@ -1,8 +1,8 @@
 /* Bold labels over full-width square inputs. */
-.waitlist-form, .quantity-field, #payment-form, .admin-form {
+.waitlist-form, .quantity-field, #payment-form, .admin-form, .login-email {
   & label:not(.admin-check) { display: block; margin: 0 0 var(--size-2); font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
 }
-.waitlist-form input, #payment-form input,
+.waitlist-form input, #payment-form input, .login-email input:not([type="hidden"]),
 .admin-form :is(input:not([type="checkbox"], [type="hidden"]), select, textarea) {
   display: block;
   width: 100%;

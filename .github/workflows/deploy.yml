@@ -71,7 +71,8 @@ jobs:
         run: >-
           ./run.hs -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER"
           -w birdhaus-store-dev -d dev.birdhaus.store -b birdhaus-store-dev-db
-          -k birdhaus-stripe-test -A birdhaus-store-dev-auth --replicas 1
+          -k birdhaus-stripe-test -A birdhaus-store-dev-auth -R birdhaus-store-dev-rauthy
+          --replicas 1
 
   prod:
     # A prerelease is for trying a tag, not for customers.

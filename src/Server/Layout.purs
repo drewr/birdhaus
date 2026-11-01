@@ -96,7 +96,7 @@ header c =
                     , el "a" [ cls "text-button", A "href" "/api/auth/logout", B "data-signout" ] [ text "Sign out" ]
                     ]
               else
-                [ el "a" [ cls "text-link", A "href" "/api/auth/login?next=/" ] [ text "Sign in" ] ]
+                [ el "a" [ cls "text-link", A "href" "/login" ] [ text "Sign in" ] ]
             )
         ]
     ]

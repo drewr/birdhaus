@@ -130,3 +130,48 @@ export async function joinWaitlist(batch, email, quantity, postalCode, accountSu
     [batch, email, quantity, postalCode, accountSub ?? null]
   );
 }
+
+// Sign-in codes (docs/design/login-page.md): at most five sent per address an
+// hour, ten minutes and five tries each, and a new code replaces older ones.
+// Returns false when the address has hit the limit.
+export async function saveLoginCode(email, codeHash, purpose) {
+  await query("delete from login_codes where created_at < now() - interval '1 day'");
+  const { rows } = await query("select count(*)::int as sent from login_codes where email = $1 and created_at > now() - interval '1 hour'", [email]);
+  if (rows[0].sent >= 5) return false;
+  await query("update login_codes set used_at = now() where email = $1 and used_at is null", [email]);
+  await query("insert into login_codes (email, code_hash, purpose, expires_at) values ($1, $2, $3, now() + interval '10 minutes')", [email, codeHash, purpose]);
+  return true;
+}
+
+// "ok", "wrong" (one try spent) or "expired" (no live code, or out of tries).
+// The row is locked so parallel guesses can't exceed the tries.
+export async function useLoginCode(email, purpose, matches) {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    const { rows } = await client.query(
+      `select id, code_hash, attempts from login_codes
+       where email = $1 and purpose = $2 and used_at is null and expires_at > now()
+       order by created_at desc limit 1 for update`,
+      [email, purpose]
+    );
+    const row = rows[0];
+    let result;
+    if (!row || row.attempts >= 5) {
+      result = "expired";
+    } else if (matches(row.code_hash)) {
+      await client.query("update login_codes set used_at = now() where id = $1", [row.id]);
+      result = "ok";
+    } else {
+      await client.query("update login_codes set attempts = attempts + 1 where id = $1", [row.id]);
+      result = row.attempts + 1 >= 5 ? "expired" : "wrong";
+    }
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}

@@ -1,0 +1,61 @@
+/* /login: two panels, log in and create an account, with "or" between them;
+   stacked on narrow screens. Centred, like the providers' own pages. */
+.login {
+  max-width: var(--size-md);
+  margin-inline: auto;
+
+  & .page-title { margin: 0 0 var(--size-7); text-align: center; }
+}
+.login-notice {
+  margin: 0 0 var(--size-7);
+  padding: var(--size-3);
+  border: var(--rule);
+  background: var(--wash);
+  line-height: var(--font-lineheight-3);
+}
+.login-panels {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: var(--size-7);
+
+  @media (--md-n-below) { grid-template-columns: 1fr; gap: var(--size-5); }
+}
+.login-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-3);
+
+  & .description, & .fine-print { margin: 0; }
+}
+.login-heading { margin: 0; font-size: var(--font-size-3); }
+.login-email input { margin-bottom: var(--size-3); }
+.login-or {
+  align-self: center;
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--font-size-0);
+  letter-spacing: var(--font-letterspacing-3);
+  text-transform: uppercase;
+}
+.login-signed-in {
+  max-width: var(--size-content-2);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--size-3);
+  text-align: center;
+
+  & .description { margin: 0; }
+}
+/* The code step: one narrow column. */
+.login-code {
+  max-width: var(--size-content-2);
+
+  & .page-title { text-align: start; }
+  & .description { margin: 0 0 var(--size-5); }
+  & #login-code { font-size: var(--font-size-4); letter-spacing: var(--font-letterspacing-4); font-variant-numeric: tabular-nums; }
+}
+.login-resend { display: flex; flex-wrap: wrap; gap: var(--size-5); margin-top: var(--size-3); }

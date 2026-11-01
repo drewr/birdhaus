@@ -11,6 +11,7 @@ import { readCart, writeCart, clearCart } from "./cart.js";
 import { formatOrder } from "./order-format.js";
 import { products, productBySlug } from "./products.js";
 import * as auth from "./auth.js";
+import * as emailLogin from "./email-login.js";
 import * as db from "./db.js";
 import * as pickup from "./pickup.js";
 import * as delivery from "./delivery.js";
@@ -206,8 +207,17 @@ app.get("/api/health", async (_request, response) => {
   response.status(ok ? 200 : 503).json(health);
 });
 
+// Checkout and the waitlist need an account (docs/design/login-page.md). Pages
+// send a signed-out buyer to /login and back; the APIs answer 401.
+function requireAccount(request, response, next) {
+  if (auth.accountOf(request)) return next();
+  if (request.path.startsWith("/api/")) return response.status(401).json({ error: "Please sign in to check out." });
+  const back = request.method === "GET" ? request.originalUrl : "/checkout";
+  response.redirect(303, `/login?next=${encodeURIComponent(auth.safeNext(back))}`);
+}
+
 // The quantity is the server's cart cookie, never a browser-supplied amount.
-app.post("/api/create-payment-intent", async (request, response) => {
+app.post("/api/create-payment-intent", requireAccount, async (request, response) => {
   const quantity = readCart(request).qty;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
     return response.status(400).json({ error: "Your cart is empty." });
@@ -312,7 +322,7 @@ app.get("/api/order/:id", async (request, response) => {
 
 // The wallet sheet's check while open: only city, state and ZIP are revealed
 // until the buyer confirms, so this tests the ZIP centroid.
-app.post("/api/delivery/check-zip", async (request, response) => {
+app.post("/api/delivery/check-zip", requireAccount, async (request, response) => {
   response.set("Cache-Control", "no-store");
   try {
     const s = db.isConfigured() ? await delivery.settings() : null;
@@ -330,7 +340,7 @@ const field = (value, max) => String(value ?? "").trim().slice(0, max);
 // address and, if it's in range, set it on the PaymentIntent from the server so
 // the order records the address that passed. The client secret proves the
 // caller is the buyer, as on /order.
-app.post("/api/delivery/verify", async (request, response) => {
+app.post("/api/delivery/verify", requireAccount, async (request, response) => {
   response.set("Cache-Control", "no-store");
   const clientSecret = request.body?.clientSecret;
   const id = typeof clientSecret === "string" ? clientSecret.split("_secret_")[0] : "";
@@ -415,18 +425,19 @@ app.post("/cart/clear", (request, response) => {
 
 // The batch and the waitlist are the Bluebird House's, the one product so far.
 const batchProductPath = `/products/${products[0].slug}`;
+// The waitlist needs an account; both links come back to the product.
+const waitlistLogin = `/login?next=${encodeURIComponent(batchProductPath)}`;
+const waitlistLinks = { signInHref: waitlistLogin, signUpHref: `${waitlistLogin}#create` };
 
 app.post("/waitlist", async (request, response) => {
   const account = auth.accountOf(request);
-  const authEnabled = auth.isConfigured();
   const base = {
-    authEnabled,
-    signUpUrl: auth.signUpUrl(),
+    ...waitlistLinks,
     signedIn: Boolean(account),
     accountLabel: account ? account.name || account.email : ""
   };
   const hx = Boolean(request.get("HX-Request"));
-  const email = account ? account.email : String(request.body?.email ?? "").trim().toLowerCase();
+  const email = account?.email ?? "";
   const quantity = Number.parseInt(request.body?.quantity, 10);
   const postalCode = String(request.body?.postalCode ?? "").trim().slice(0, 12) || null;
 
@@ -436,10 +447,8 @@ app.post("/waitlist", async (request, response) => {
     return response.status(200).type("html").send(views.waitlistFragment(vm));
   };
 
-  // Joining requires an account when sign-in is available. A guest-only
-  // deployment (no auth) still takes an email.
-  if (authEnabled && !account) return fail("Please sign in to join the waitlist.");
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return fail("Enter a valid email address.");
+  // Joining requires an account; we email the address it was verified with.
+  if (!account) return fail("Please sign in to join the waitlist.");
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) return fail("Choose a quantity from 1 to 99.");
   if (!db.isConfigured()) return fail("The waitlist is not available yet.");
   try {
@@ -466,7 +475,112 @@ app.use(express.static(dist, {
 }));
 
 app.get("/", (request, response) => {
-  response.set("Cache-Control", "no-cache").type("html").send(views.homePage({ ...chrome(request), signUpUrl: auth.signUpUrl() }));
+  response.set("Cache-Control", "no-cache").type("html").send(views.homePage(chrome(request)));
+});
+
+// The store's own sign-in (docs/design/login-page.md): log in or create an
+// account, with Google (through Rauthy, nothing to do there) or an emailed
+// code. A signed-in visitor is told so rather than bounced, since links like
+// the hero's "Sign up" reach them too.
+function loginView(request, extra = {}) {
+  const next = auth.safeNext(extra.next ?? request.query.next);
+  return {
+    ...chrome(request),
+    authEnabled: auth.isConfigured(),
+    emailEnabled: emailLogin.isAvailable(),
+    googleHref: auth.loginUrl(next, { provider: "google" }),
+    loginEmail: "",
+    loginError: "",
+    signupName: "",
+    signupEmail: "",
+    signupError: "",
+    ...extra,
+    next
+  };
+}
+
+const sendPage = (response, html, status = 200) => response.status(status).set("Cache-Control", "no-store").type("html").send(html);
+
+app.get("/login", (request, response) => sendPage(response, views.loginPage(loginView(request))));
+
+async function startEmail(request, response, purpose) {
+  if (!auth.sameOrigin(request)) return response.status(403).type("text").send("Forbidden");
+  const next = auth.safeNext(request.body?.next);
+  const typedEmail = String(request.body?.email ?? "").trim().slice(0, 254);
+  const typedName = String(request.body?.name ?? "").trim().slice(0, 64);
+  const email = emailLogin.normalEmail(typedEmail);
+  const name = emailLogin.normalName(typedName);
+  const form = purpose === "login" ? { loginEmail: typedEmail } : { signupEmail: typedEmail, signupName: typedName };
+  const fail = (message, extra = {}) =>
+    sendPage(response, views.loginPage(loginView(request, { next, ...form, [`${purpose}Error`]: message, ...extra })), 400);
+
+  if (!emailLogin.isAvailable()) return fail("Email sign-in isn't available right now. Please use Google, or try again shortly.");
+  if (!email) return fail("Enter a valid email address.");
+  if (purpose === "signup" && !name) return fail("Enter your name: up to 32 letters, spaces, hyphens or apostrophes.");
+  let outcome;
+  try {
+    outcome = await emailLogin.start(email, purpose);
+  } catch (error) {
+    console.error("Could not send a sign-in code:", error.message);
+    return fail("We couldn't send a code just now. Please try again.");
+  }
+  if (outcome === "unknown") return fail("There's no account with that email yet. You can create one here.", { signupEmail: typedEmail });
+  if (outcome === "exists") return fail("You already have an account with that email. Log in with it here.", { loginEmail: typedEmail });
+  if (outcome === "limited") return fail("We've sent several codes to that address. Please wait a while, then try again.");
+  emailLogin.setPending(response, { email, purpose, name, next });
+  response.redirect(303, "/login/code");
+}
+
+app.post("/login/email", (request, response) => startEmail(request, response, "login"));
+app.post("/signup/email", (request, response) => startEmail(request, response, "signup"));
+
+function codeView(request, pending, extra = {}) {
+  return { ...chrome(request), email: pending.email, signingUp: pending.purpose === "signup", error: "", notice: "", ...extra };
+}
+
+app.get("/login/code", (request, response) => {
+  const pending = emailLogin.readPending(request);
+  if (!pending) return response.redirect(303, "/login");
+  sendPage(response, views.codePage(codeView(request, pending)));
+});
+
+app.post("/login/code", async (request, response) => {
+  if (!auth.sameOrigin(request)) return response.status(403).type("text").send("Forbidden");
+  const pending = emailLogin.readPending(request);
+  if (!pending) return response.redirect(303, "/login");
+  const again = (error) => sendPage(response, views.codePage(codeView(request, pending, { error })), 400);
+  const code = String(request.body?.code ?? "").replace(/\D/g, "");
+  if (code.length !== 6) return again("Enter the 6-digit code from the email.");
+  let checked;
+  try {
+    checked = await emailLogin.checkCode(pending, code);
+  } catch (error) {
+    console.error("Could not check a sign-in code:", error.message);
+    return again("We couldn't check the code just now. Please try again.");
+  }
+  if (checked.result === "wrong") return again("That code isn't right. Check the email and try again.");
+  if (checked.result !== "ok") return again("That code has expired or had too many tries. Send a new one below.");
+  emailLogin.clearPending(response);
+  await auth.startSession(response, checked.account);
+  response.redirect(303, auth.landing(pending.next));
+});
+
+app.post("/login/resend", async (request, response) => {
+  if (!auth.sameOrigin(request)) return response.status(403).type("text").send("Forbidden");
+  const pending = emailLogin.readPending(request);
+  if (!pending) return response.redirect(303, "/login");
+  let outcome;
+  try {
+    outcome = await emailLogin.sendCode(pending.email, pending.purpose);
+  } catch (error) {
+    console.error("Could not resend a sign-in code:", error.message);
+    return sendPage(response, views.codePage(codeView(request, pending, { error: "We couldn't send a code just now. Please try again." })), 400);
+  }
+  if (outcome === "limited") {
+    return sendPage(response, views.codePage(codeView(request, pending, { error: "We've sent several codes already. Please wait a while, then try again." })), 400);
+  }
+  emailLogin.setPending(response, pending);
+  sendPage(response, views.codePage(codeView(request, pending, { notice: "We sent a new code. Only the newest one works." })));
 });
 
 app.get("/products", async (request, response) => {
@@ -500,8 +614,7 @@ app.get("/products/:slug", async (request, response) => {
     summary: product.summary,
     image: product.image,
     imageAlt: product.imageAlt,
-    authEnabled: auth.isConfigured(),
-    signUpUrl: auth.signUpUrl(),
+    ...waitlistLinks,
     open: status.open,
     shipBy: displayDate(batch.shipBy),
     remaining: showRemaining ? status.remaining : -1,
@@ -566,13 +679,13 @@ async function deliveryPage(request, response, error = "") {
   response.set("Cache-Control", "no-cache").type("html").send(views.deliveryPage(vm));
 }
 
-app.get("/checkout", (request, response) => {
+app.get("/checkout", requireAccount, (request, response) => {
   if (readCart(request).qty <= 0) return response.redirect(303, "/cart");
   return deliveryPage(request, response);
 });
 
 // The choice posts as "pickup:<slot id>" or "delivery:<slot id>".
-app.post("/checkout/delivery", async (request, response) => {
+app.post("/checkout/delivery", requireAccount, async (request, response) => {
   const cart = readCart(request);
   if (cart.qty <= 0) return response.redirect(303, "/cart");
   const [method, id] = String(request.body?.choice ?? "").split(":");
@@ -598,7 +711,7 @@ app.post("/checkout/delivery", async (request, response) => {
 // Checkout step 2: pay, with the delivery choice summarized. Delivery adds the
 // address (or the wallet's) and the fee; the data attributes only drive the
 // wallet sheet's display, the server sets the amount.
-app.get("/checkout/pay", async (request, response) => {
+app.get("/checkout/pay", requireAccount, async (request, response) => {
   const qty = readCart(request).qty;
   if (qty <= 0) return response.redirect(303, "/cart");
   const choice = await cartChoice(request);

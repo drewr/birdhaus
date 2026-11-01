@@ -49,6 +49,23 @@ Prerequisites: `datumctl` on PATH, the Postgres workload is running, and the `bi
 
    Put the client ID and secret into the store's Secret `birdhaus-store-auth` (`scripts/store-auth-secret.hs`).
 
+## The store's /login page
+
+Customers sign in on the store's own `/login` page (docs/design/login-page.md) and never see Rauthy's pages:
+
+- **Google** goes through Rauthy with `idp_hint`, using the provider named `Google`, so Rauthy's page passes straight on to Google and back.
+- **Email** is passwordless and run by the store: it emails a 6-digit code itself and creates, finds and verifies accounts through Rauthy's admin API. Accounts created that way have no password or passkey; customers log in with a new code each time.
+
+The store needs an API key for that. Admin UI → **API Keys** → new key with **Users: read, create, update**, one per store, then:
+
+```
+read -rs RAUTHY_API_KEY && export RAUTHY_API_KEY
+./scripts/store-rauthy-key.hs --project <project>                                   # prod: birdhaus-store-rauthy
+./scripts/store-rauthy-key.hs --project <project> --name birdhaus-store-dev-rauthy  # dev
+```
+
+Redeploy the store; `run.hs` mounts the key Secret and `birdhaus-ses` when they exist, and email sign-in stays hidden until both are there.
+
 ## Branding
 
 The store's login page uses the `birdhaus-store` client; Rauthy's own admin and user-account pages use the default `rauthy` client.
