@@ -31,7 +31,7 @@ type WaitlistFields r =
   | r
   )
 
-type HomeVM = { | Chrome () }
+type HomeVM = { | Chrome ( signUpUrl :: String ) }
 
 -- One listing card; price and availability are formatted by the server.
 type ProductCard =
@@ -116,13 +116,22 @@ type WaitlistVM = { | WaitlistFields ( signedIn :: Boolean, accountLabel :: Stri
 homePage :: HomeVM -> String
 homePage vm = layoutWithHero vm hero empty
   where
+  signUpHref = if vm.signUpUrl == "" then "/api/auth/login?next=/" else vm.signUpUrl
   hero =
-    el "section" [ cls "hero", A "aria-labelledby" "hero-title" ]
+    el "section" [ cls "hero", A "aria-label" "Welcome" ]
       [ el "div" [ cls "hero-inner" ]
           [ el "div" [ cls "hero-copy" ]
-              [ el "p" [ cls "hero-title", A "id" "hero-title" ] [ text "Hi there! I've started a business..." ]
-              , el "p" [ cls "hero-lede" ] [ text "[A sentence or two on who makes these houses, how, and why bluebirds need them.]" ]
-              , el "a" [ cls "buy-button hero-action", A "href" "/products" ] [ text "Shop bluebird houses" ]
+              [ el "p" [ cls "description" ]
+                  [ text "Hi there! Haven't you wanted your own "
+                  , el "strong" [] [ text "birdhouse" ]
+                  , text " for Eastern Bluebirds?"
+                  ]
+              , el "p" [ cls "description" ] [ text "It's very ", el "em" [] [ text "easy" ], text ":" ]
+              , el "ol" [ cls "description" ]
+                  [ el "li" [] [ el "a" [ A "href" signUpHref ] [ text "Sign up" ], text " to create your free account," ]
+                  , el "li" [] [ el "a" [ A "href" "/products" ] [ text "Shop" ], text " to get yours today, and" ]
+                  , el "li" [] [ text "Add yourself to the waiting list to get notified when new birdhouses are available" ]
+                  ]
               ]
           , el "figure" [ cls "hero-figure" ]
               [ elVoid "img" [ cls "hero-image", A "src" "/product-illustration.svg", A "alt" "[Describe the hero image]" ] ]

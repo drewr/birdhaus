@@ -466,7 +466,7 @@ app.use(express.static(dist, {
 }));
 
 app.get("/", (request, response) => {
-  response.set("Cache-Control", "no-cache").type("html").send(views.homePage(chrome(request)));
+  response.set("Cache-Control", "no-cache").type("html").send(views.homePage({ ...chrome(request), signUpUrl: auth.signUpUrl() }));
 });
 
 app.get("/products", async (request, response) => {
