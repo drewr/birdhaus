@@ -41,5 +41,6 @@ export async function create(email, name) {
 }
 
 export async function markVerified(id) {
-  await call("PATCH", `/users/${encodeURIComponent(id)}`, { put: [{ key: "email_verified", value: true }] });
+  // Rauthy requires both lists, even when nothing is deleted.
+  await call("PATCH", `/users/${encodeURIComponent(id)}`, { put: [{ key: "email_verified", value: true }], del: [] });
 }
