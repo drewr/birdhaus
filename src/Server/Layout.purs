@@ -19,6 +19,8 @@ type Chrome r =
   , isAdmin :: Boolean
   , cartQty :: Int
   , reason :: String
+  , version :: String
+  , commit :: String
   | r
   )
 
@@ -55,9 +57,19 @@ layout c content =
         , el "body" [ A "data-account-id" c.accountId, A "data-batch-reason" c.reason ]
             [ header c
             , el "main" [] [ content ]
+            , footer c
             ]
         ]
     )
+
+-- Which build is serving, for bug reports; the same values as /api/health.
+footer :: forall r. { | Chrome r } -> Html
+footer c =
+  el "footer" [ cls "site-footer" ]
+    [ el "span" [ A "title" "Version" ] [ text c.version ]
+    , text " · "
+    , el "span" [ A "title" "Commit" ] [ text c.commit ]
+    ]
 
 header :: forall r. { | Chrome r } -> Html
 header c =

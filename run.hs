@@ -1,6 +1,6 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i runghc -p "haskellPackages.ghcWithPackages (pkgs: [ pkgs.turtle pkgs.base64-bytestring ])"
-#! nix-shell -p nodejs_22 gh git
+#! nix-shell -i runghc -p "haskellPackages.ghcWithPackages (pkgs: [ pkgs.turtle pkgs.base64-bytestring pkgs.aeson ])"
+#! nix-shell -p nodejs_22 gh git curl
 
 -- Build the storefront, push it to GHCR as a Compute image, and deploy it to
 -- Datum Compute behind https://birdhaus.store.
@@ -14,18 +14,24 @@
 --
 -- The pre-order batch is set here: --cap, --closes and --ship-by. Raising the
 -- cap or moving a date is a redeploy.
+--
+-- The version (also the image tag) comes from git: vX.Y.Z at a release tag,
+-- otherwise vX.Y.(Z+1)-dev.N. The deploy finishes when the domain serves that
+-- version with its migrations applied (/api/health).
 
 {-# LANGUAGE OverloadedStrings #-}
 
 import qualified Control.Foldl as Fold
+import qualified Data.Aeson as A
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Base64 as Base64
+import Data.Char (isAlphaNum, isDigit)
 import Data.Foldable (for_)
 import Data.Maybe (fromMaybe, isNothing, listToMaybe)
 import Data.Optional (Optional (Specific))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
-import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
 import System.Directory (findExecutable, getTemporaryDirectory)
 import System.FilePath ((</>))
 import Turtle hiding (FilePath, (</>))
@@ -42,13 +48,14 @@ data Opts = Opts
   , authSecret :: Text
   , pullSecret :: Text
   , domain :: Text
-  , imageTag :: Maybe Text
+  , version :: Maybe Text
   , batch :: Text
   , cap :: Maybe Text
   , closes :: Text
   , shipBy :: Text
   , adminGroup :: Text
   , replicas :: Text
+  , registryUser :: Maybe Text
   }
 
 parser :: Parser Opts
@@ -65,7 +72,7 @@ parser =
     <*> opt "auth-secret" 'A' "birdhaus-store-auth" "Secret with the OIDC settings and session key (scripts/store-auth-secret.hs)"
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
     <*> opt "domain" 'd' "birdhaus.store" "Public hostname"
-    <*> optional (optText "tag" 't' "Image tag (default: UTC timestamp)")
+    <*> optional (optText "version" 'V' "Version and image tag; vX.Y.Z needs that tag on HEAD (default: from git)")
     <*> opt "batch" 'B' "xmas-2026" "Pre-order batch ID"
     <*> (Just <$> opt "cap" 'c' "20" "Units the batch can sell")
     <*> opt "closes" 'C' "2026-12-01" "Last day of pre-orders, YYYY-MM-DD (US Central)"
@@ -74,6 +81,8 @@ parser =
     -- Two instances so a rollout replaces one while the other keeps serving;
     -- with one, every deploy is a short 503 from the edge.
     <*> opt "replicas" 'n' "2" "Instances to run"
+    -- A CI token can't call `gh api user`, so Actions passes the repo owner.
+    <*> optional (optText "registry-user" 'u' "GHCR owner to push to (default: the signed-in gh user)")
   where
     opt name short def help =
       optText name short (Specific (HelpMessage (help <> " (default: " <> def <> ")"))) <|> pure def
@@ -103,6 +112,15 @@ main = do
   for_ [stripeSecret o, dbSecret o, pullSecret o] $ \s -> do
     ok <- dcQuiet ["get", "secret", s]
     unless ok $ die ("Secret " <> s <> " not found in project " <> project o)
+  ver <- maybe gitVersion pure (version o)
+  unless (T.isPrefixOf "v" ver && T.all (\c -> isAlphaNum c || c `elem` (".-" :: String)) ver) $
+    die ("Not a version: " <> ver)
+  -- A release version must be what's checked out: prod runs exactly the tag.
+  unless ("-" `T.isInfixOf` ver) $ do
+    (_, tags) <- procStrict "git" ["tag", "--points-at", "HEAD"] empty
+    unless (ver `elem` map T.strip (T.lines tags)) $ die (ver <> " is a release version, but HEAD is not tagged " <> ver)
+  commit <- T.strip . snd <$> procStrict "git" ["rev-parse", "HEAD"] empty
+  T.putStrLn ("Version " <> ver <> " (" <> commit <> ")")
   -- Accounts are optional: without the Secret the store runs as a guest-only
   -- storefront (scripts/store-auth-secret.hs creates it).
   haveAuth <- dcQuiet ["get", "secret", authSecret o]
@@ -112,9 +130,10 @@ main = do
   procs "npm" ["ci"] empty
   procs "npm" ["run", "build"] empty
 
-  ghUser <- T.toLower . T.strip . snd <$> procStrict "gh" ["api", "user", "--jq", ".login"] empty
-  tag <- maybe timestamp pure (imageTag o)
-  let image = "ghcr.io/" <> ghUser <> "/" <> imageName o <> ":" <> tag
+  ghUser <- T.toLower . T.strip <$> case registryUser o of
+    Just user -> pure user
+    Nothing -> snd <$> procStrict "gh" ["api", "user", "--jq", ".login"] empty
+  let image = "ghcr.io/" <> ghUser <> "/" <> imageName o <> ":" <> ver
 
   tmp <- getTemporaryDirectory
   digestRef <- with (mktempdir tmp "birdhaus") $ \dir -> do
@@ -133,7 +152,7 @@ main = do
   with (mktempdir tmp "birdhaus") $ \dir -> do
     let workloadFile = dir </> "workload.yaml"
         serviceFile = dir </> "service.yaml"
-    T.writeFile workloadFile (workloadManifest o haveAuth digestRef)
+    T.writeFile workloadFile (workloadManifest o haveAuth ver commit digestRef)
     T.writeFile serviceFile (serviceManifest o)
     printf ("Deploying " % s % " to " % s % " in " % s % "...\n") digestRef (location o) (project o)
     dc ["compute", "deploy", "-f", T.pack workloadFile, "--yes"]
@@ -141,7 +160,59 @@ main = do
 
   (_, canonical) <- procStrict datumctl
     ["get", "httpproxy", workload o, "-o", "jsonpath={.status.canonicalHostname}", "--project", project o] empty
-  printf ("Deployed: https://" % s % " (also https://" % s % ")\n") (domain o) canonical
+  printf ("Waiting for https://" % s % " to serve " % s % " with migrations applied...\n") (domain o) ver
+  awaitRollout (domain o) ver
+  printf ("Deployed " % s % ": https://" % s % " (also https://" % s % ")\n") ver (domain o) canonical
+
+-- vX.Y.Z on a release tag. Past one, the next patch plus the commit count, so
+-- every commit on main has its own version; uncommitted changes add .dirty so
+-- a local deploy is never mistaken for a commit.
+gitVersion :: IO Text
+gitVersion = do
+  (found, described, _) <- procStrictWithErr "git"
+    ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "--exclude", "*-*"] empty
+  let tag = if found == ExitSuccess then Just (T.strip described) else Nothing
+  (major, minor, patch) <- case tag of
+    Nothing -> pure (0, 0, 0)
+    Just t -> maybe (die ("Release tag " <> t <> " is not vX.Y.Z")) pure (parseVersion t)
+  (_, count) <- procStrict "git" ["rev-list", "--count", maybe "HEAD" (<> "..HEAD") tag] empty
+  (_, changes) <- procStrict "git" ["status", "--porcelain", "--untracked-files=no"] empty
+  let n = T.strip count
+      v = case tag of
+        Just t | n == "0" -> t
+        _ -> "v" <> T.intercalate "." (map (T.pack . show) [major, minor, patch + 1]) <> "-dev." <> n
+  pure (if T.null (T.strip changes) then v else v <> ".dirty")
+
+parseVersion :: Text -> Maybe (Int, Int, Int)
+parseVersion t = do
+  parts <- traverse number . T.splitOn "." =<< T.stripPrefix "v" t
+  case parts of
+    [x, y, z] -> Just (x, y, z)
+    _ -> Nothing
+  where
+    number n
+      | not (T.null n) && T.all isDigit n = Just (read (T.unpack n))
+      | otherwise = Nothing
+
+-- The instances share the domain, so eight answers in a row must report the
+-- new version before the old ones count as gone. Gives up after ten minutes.
+awaitRollout :: Text -> Text -> IO ()
+awaitRollout host want = go (120 :: Int) (0 :: Int) ""
+  where
+    go 0 _ seen = die ("Gave up waiting for " <> want <> " on " <> host <> "; /api/health last said: " <> seen)
+    go tries streak seen = do
+      (_, body, _) <- procStrictWithErr "curl" ["-s", "--max-time", "5", "https://" <> host <> "/api/health"] empty
+      let field k = case A.decodeStrict (T.encodeUtf8 body) of
+            Just (A.Object m) | Just (A.String v) <- KM.lookup k m -> Just v
+            _ -> Nothing
+          done = field "version" == Just want && field "migrations" == Just "ok"
+          now = maybe (T.take 200 (T.strip body)) (\v -> v <> ", migrations " <> fromMaybe "?" (field "migrations")) (field "version")
+      when (now /= seen) $ T.putStrLn ("  " <> now)
+      if done && streak >= 7
+        then pure ()
+        else do
+          sleep 5
+          go (tries - 1) (if done then streak + 1 else 0) now
 
 -- A throwaway Docker config so datumctl can push to GHCR with the gh token.
 writeDockerConfig :: FilePath -> Text -> Text -> IO ()
@@ -167,11 +238,8 @@ pushedDigest out =
     , not (T.null rest)
     ]
 
-timestamp :: IO Text
-timestamp = T.pack . formatTime defaultTimeLocale "%Y%m%d%H%M%S" <$> getCurrentTime
-
-workloadManifest :: Opts -> Bool -> Text -> Text
-workloadManifest o auth image =
+workloadManifest :: Opts -> Bool -> Text -> Text -> Text -> Text
+workloadManifest o auth ver commit image =
   T.unlines $
     [ "apiVersion: compute.datumapis.com/v1alpha"
     , "kind: Workload"
@@ -215,6 +283,10 @@ workloadManifest o auth image =
     , "              value: \"" <> shipBy o <> "\""
     , "            - name: ADMIN_GROUP"
     , "              value: \"" <> adminGroup o <> "\""
+    , "            - name: APP_VERSION"
+    , "              value: \"" <> ver <> "\""
+    , "            - name: APP_COMMIT"
+    , "              value: \"" <> commit <> "\""
     , "            envFrom:"
     , "            - secretRef:"
     , "                name: " <> stripeSecret o

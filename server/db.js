@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 // from stalling requests: callers decide what to do when it is unreachable.
 const migrationsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "migrations");
 let pool;
+let migrations = "pending";
 
 export const isConfigured = () => Boolean(process.env.PGHOST);
 
@@ -53,13 +54,20 @@ export async function migrate() {
 export function migrateInBackground() {
   if (!isConfigured()) {
     console.warn("PGHOST is not set: orders and the waitlist are disabled.");
+    migrations = "not configured";
     return;
   }
-  migrate().catch((error) => {
+  migrate().then(() => {
+    migrations = "ok";
+  }, (error) => {
     console.error("Migrations failed, retrying in 15s:", error.message);
+    migrations = `failing: ${error.message}`;
     setTimeout(migrateInBackground, 15000);
   });
 }
+
+// For /api/health: a deploy is finished only once its migrations are applied.
+export const migrationStatus = () => migrations;
 
 export async function paidUnits(batch) {
   const { rows } = await query("select coalesce(sum(quantity), 0)::int as units from orders where batch = $1 and status = 'paid'", [batch]);

@@ -56,6 +56,7 @@ main { width: min(100% - 48px, 1040px); margin: 48px 24px 80px; }
 .buy-button:disabled { opacity: .55; cursor: wait; }
 a.buy-button { display: block; text-align: center; text-decoration: none; }
 .waitlist-signup .description { margin-bottom: 16px; }
+.site-footer { padding: 16px 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .fine-print { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .checkout { margin-top: 36px; padding-top: 26px; border-top: 1px solid var(--line); }
 .checkout[hidden] { display: none; }

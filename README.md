@@ -33,13 +33,35 @@ After payment Stripe redirects to `/order?payment_intent=…&payment_intent_clie
 ./run.hs --project <project> --pull-secret <secret>
 ```
 
+### Versions and releases
+
+Every deploy has a version, which is also its image tag and is reported by `/api/health` with the commit. `run.hs` derives it from git: a commit tagged `vX.Y.Z` is `vX.Y.Z`; any other commit is the next patch plus the number of commits since the last release, `vX.Y.(Z+1)-dev.N`, with `.dirty` added when the working tree has uncommitted changes. `--version` overrides it, and a release version is refused unless `HEAD` carries that tag.
+
+A deploy finishes only when the domain serves the new version with its migrations applied (`/api/health` says `"migrations": "ok"`); the server applies them at startup. `run.hs` gives up after ten minutes.
+
+### From GitHub Actions
+
+`.github/workflows/deploy.yml` runs `run.hs` on GitHub's runners:
+
+- Every push to `main` deploys `dev.birdhaus.store` as `vX.Y.Z-dev.N`.
+- Publishing a GitHub release deploys its tag to `birdhaus.store`. The tag must be `vX.Y.Z` and on `main`; prereleases are not deployed. For example, `gh release create v1.0.0 --target main --generate-notes`.
+- To roll back, re-run the deploy workflow of an earlier release.
+
+One-time setup:
+
+1. In the Datum Cloud portal, create a service account with rights to deploy in the project, download its credentials JSON, and save it as the repository secret `DATUM_CREDENTIALS`.
+2. Create the environments `development` and `production` (Settings → Environments). Limit `production` to tags matching `v*` so only a release can deploy there.
+3. In the `birdhaus-store` package settings on GHCR, under "Manage Actions access", give this repository write access so `GITHUB_TOKEN` can push the image.
+
+The workflow pins `datumctl` by release and checksum and the `compute` plugin by version; bump them in the workflow's `env`.
+
 - `--pull-secret` names an existing image-pull secret in the project holding a GHCR token that can read the image.
 - The Stripe keys come from a secret in the project (default `birdhaus-stripe`, override with `--stripe-secret`), exposed to the workload as environment variables. Create it from test keys, never from `.env.production`.
 - The database and webhook settings come from a second secret (default `birdhaus-store-db`, override with `--db-secret`), created once by `./scripts/store-db-secret.hs --project <project>`.
 - The pre-order batch is set with `--batch` (default `xmas-2026`), `--cap` (default `20`, the Christmas 2026 batch), `--closes` (default `2026-12-01`) and `--ship-by` (default `2026-12-15`).
-- Other options (`--location`, `--workload`, `--image-name`, `--domain`, `--tag`, `--session`) have defaults; run `./run.hs --help`.
+- Other options (`--location`, `--workload`, `--image-name`, `--domain`, `--version`, `--session`) have defaults; run `./run.hs --help`.
 - Image builds use `datumctl compute build`, which uses the container engine's BuildKit (Docker, OrbStack, Colima, …) and honors `DOCKER_HOST`/`DOCKER_CONTEXT`; set `BUILDKIT_HOST` to use a different BuildKit.
-- Every run replaces the running instance with the new image digest; expect a few seconds of rollout.
+- Every run with a new version replaces the running instances one at a time.
 
 Production caching: hashed files under `/assets` are immutable for a year; `index.html` is served from memory with a content-hash ETag and `no-cache`. Reproducible image builds pin file mtimes, so Express's default size+mtime ETags cannot tell builds apart.
 

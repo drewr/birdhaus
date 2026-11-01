@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import Stripe from "stripe";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,6 +47,22 @@ function assets() {
   return { js: entry.file ? `/${entry.file}` : "", css: entry.css?.[0] ? `/${entry.css[0]}` : "" };
 }
 
+// Set by run.hs on the workload; /api/health and the footer report them. A
+// local run asks git instead, marking uncommitted changes, so a screenshot
+// from a dev machine is never mistaken for a deploy.
+const appVersion = process.env.APP_VERSION || "local";
+const appCommit = process.env.APP_COMMIT || localCommit();
+
+function localCommit() {
+  try {
+    const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const sha = git("rev-parse", "HEAD");
+    return git("status", "--porcelain", "--untracked-files=no") ? `${sha}-dirty` : sha;
+  } catch {
+    return "unknown";
+  }
+}
+
 // The shared header/head/analytics fields every full page needs.
 function chrome(request, reason = "open") {
   const account = auth.accountOf(request);
@@ -58,7 +75,9 @@ function chrome(request, reason = "open") {
     signedIn: Boolean(account),
     isAdmin: Boolean(account?.admin),
     cartQty: readCart(request).qty,
-    reason
+    reason,
+    version: appVersion,
+    commit: appCommit.replace(/^([0-9a-f]{7})[0-9a-f]*/, "$1")
   };
 }
 
@@ -158,7 +177,14 @@ app.get("/api/me", auth.me);
 // Probed every 5 minutes by birdhaus-watch (ops/watch). 503 names what failed.
 app.get("/api/health", async (_request, response) => {
   response.set("Cache-Control", "no-store");
-  const health = { db: "not configured", webhook: "ok" };
+  // run.hs waits for the version it deployed, so it knows the rollout is done.
+  const health = {
+    version: appVersion,
+    commit: appCommit,
+    migrations: db.migrationStatus(),
+    db: "not configured",
+    webhook: "ok",
+  };
   if (db.isConfigured()) {
     try {
       await Promise.race([db.query("select 1"), new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 3000))]);
@@ -175,7 +201,7 @@ app.get("/api/health", async (_request, response) => {
   health.geocoder = Date.now() - lastGeocodeFailure < 15 * 60 * 1000
     ? `failing: the Census geocoder could not be reached at ${new Date(lastGeocodeFailure).toISOString()}`
     : "ok";
-  const ok = health.db !== "not configured" && !health.db.startsWith("failing") && health.webhook === "ok" && health.geocoder === "ok";
+  const ok = health.db !== "not configured" && !health.db.startsWith("failing") && health.migrations === "ok" && health.webhook === "ok" && health.geocoder === "ok";
   response.status(ok ? 200 : 503).json(health);
 });
 

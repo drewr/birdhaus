@@ -1,0 +1,91 @@
+# Deploy the store with run.hs. Every push to main deploys dev as
+# vX.Y.Z-dev.N; publishing a GitHub release vX.Y.Z deploys that tag to prod.
+# run.hs waits until the new version is serving with its migrations applied
+# (the server runs them at startup), so a green run means the rollout is done.
+#
+# Needs, in the repo settings:
+#   - secret DATUM_CREDENTIALS: a Datum service account's credentials JSON,
+#     with rights to deploy workloads in the project;
+#   - environments "development" and "production" (production limited to
+#     v* tags);
+#   - the ghcr.io/drewr/birdhaus-store package giving this repo write access
+#     (package settings, "Manage Actions access"), so GITHUB_TOKEN can push.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DATUM_PROJECT: drewr-y4nd1b
+  REGISTRY_USER: ${{ github.repository_owner }}
+  DATUMCTL_VERSION: v0.23.3
+  DATUMCTL_SHA256: 9af908ebdfade0c4dbb0afd4ac96c485fdeaef66f78ebe294b1891ade50bd5fe
+  COMPUTE_PLUGIN: datum/compute@v0.12.8
+
+jobs:
+  dev:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    environment: development
+    concurrency: { group: deploy-dev, cancel-in-progress: false }
+    steps:
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # run.hs counts commits since the last release tag for the version.
+          fetch-depth: 0
+      - &nix
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          nix_path: nixpkgs=channel:nixpkgs-unstable
+      - &datumctl
+        name: Install datumctl and sign in
+        env:
+          DATUM_CREDENTIALS: ${{ secrets.DATUM_CREDENTIALS }}
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/datumctl.tgz" "https://github.com/datum-cloud/datumctl/releases/download/$DATUMCTL_VERSION/datumctl_Linux_x86_64.tar.gz"
+          echo "$DATUMCTL_SHA256  $RUNNER_TEMP/datumctl.tgz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin" && tar -xzf "$RUNNER_TEMP/datumctl.tgz" -C "$HOME/.local/bin" datumctl
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/datumctl" plugin install "$COMPUTE_PLUGIN"
+          umask 077 && printf '%s' "$DATUM_CREDENTIALS" > "$RUNNER_TEMP/datum.json"
+          "$HOME/.local/bin/datumctl" login --credentials "$RUNNER_TEMP/datum.json"
+          rm -f "$RUNNER_TEMP/datum.json"
+      - name: Deploy dev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          ./run.hs -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER"
+          -w birdhaus-store-dev -d dev.birdhaus.store -b birdhaus-store-dev-db
+          -k birdhaus-stripe-test -A birdhaus-store-dev-auth --replicas 1
+
+  prod:
+    # A prerelease is for trying a tag, not for customers.
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency: { group: deploy-prod, cancel-in-progress: false }
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - *checkout
+      - name: Check the release
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Release tags are vX.Y.Z, not $TAG"; exit 1; }
+          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$TAG is not on main, so dev never ran it"; exit 1; }
+      - *nix
+      - *datumctl
+      # Batch terms (--cap/--closes/--ship-by) are run.hs defaults; changing
+      # the batch is a commit and a release.
+      - name: Deploy prod
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./run.hs -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER" --version "$TAG"
