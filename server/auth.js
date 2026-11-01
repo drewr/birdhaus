@@ -22,9 +22,10 @@ const SESSION_COOKIE = "bh_session";
 const STATE_COOKIE = "bh_auth";
 const SESSION_TTL = 7 * 24 * 60 * 60;
 // Store admins are members of this Rauthy group (not Rauthy's own admin role).
-// Membership is read from the id_token at sign-in, so the admin flag lapses
-// sooner than the session and is refreshed by signing in again.
-const ADMIN_GROUP = process.env.ADMIN_GROUP || "birdhaus-admins";
+// Membership is read from the id_token at sign-in, so the admin flag (and the
+// groups that make products visible) lapses sooner than the session and is
+// refreshed by signing in again.
+export const ADMIN_GROUP = process.env.ADMIN_GROUP || "birdhaus-admins";
 const ADMIN_TTL = 12 * 60 * 60;
 
 export const isConfigured = () => Boolean(ISSUER && CLIENT_ID && CLIENT_SECRET && REDIRECT_URI && SESSION_SECRET);
@@ -110,8 +111,10 @@ export function accountOf(request) {
   if (!isConfigured()) return null;
   const session = unsign(cookies(request)[SESSION_COOKIE]);
   if (!session || typeof session.sub !== "string") return null;
-  const admin = session.admin === true && Number(session.adminUntil) > now();
-  return { sub: session.sub, email: session.email || "", name: session.name || "", admin };
+  const fresh = Number(session.adminUntil) > now();
+  const admin = session.admin === true && fresh;
+  const groups = fresh && Array.isArray(session.groups) ? session.groups : [];
+  return { sub: session.sub, email: session.email || "", name: session.name || "", admin, groups };
 }
 
 // Gate for /admin. Signed-out visitors sign in (which also refreshes a lapsed
@@ -147,10 +150,11 @@ export async function startSession(response, { sub, email, name, groups, emailVe
       console.error("Could not link past orders:", error.message);
     }
   }
-  const admin = Array.isArray(groups) && groups.includes(ADMIN_GROUP);
+  const memberOf = Array.isArray(groups) ? groups.filter((group) => typeof group === "string").slice(0, 20) : [];
+  const admin = memberOf.includes(ADMIN_GROUP);
   response.cookie(
     SESSION_COOKIE,
-    sign({ sub, email, name, admin, adminUntil: now() + ADMIN_TTL, ...(idToken ? { id_token: idToken } : {}), exp: now() + SESSION_TTL }),
+    sign({ sub, email, name, admin, groups: memberOf, adminUntil: now() + ADMIN_TTL, ...(idToken ? { id_token: idToken } : {}), exp: now() + SESSION_TTL }),
     cookieOptions(SESSION_TTL)
   );
 }

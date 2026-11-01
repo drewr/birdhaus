@@ -114,7 +114,7 @@ export async function setSlotActive(id, active) {
 // Paid delivery orders for slots that haven't ended long ago, by slot time.
 export async function deliverySchedule() {
   const { rows } = await query(
-    `select o.id, o.email, o.quantity, o.delivery_label, o.shipping, o.address_check, s.starts_at
+    `select o.id, o.email, o.product, o.quantity, o.delivery_label, o.shipping, o.address_check, s.starts_at
      from orders o left join delivery_slots s on s.id = o.delivery_slot_id
      where o.fulfillment = 'delivery' and o.status = 'paid' and (s.ends_at is null or s.ends_at > now() - interval '7 days')
      order by s.starts_at nulls last, o.created_at`

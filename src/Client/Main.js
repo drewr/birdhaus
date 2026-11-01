@@ -150,7 +150,7 @@ function mountExpressCheckout(section, delivering) {
       // fee is a line item; a priced rate would count it twice.
       shippingRates: [{ id: "local-delivery", displayName: `Local delivery — ${section.dataset.slotLabel}`, amount: 0 }],
       lineItems: [
-        { name: `${quantity} × Bluebird House`, amount: Number(section.dataset.subtotalCents) || 0 },
+        { name: `${quantity} × ${section.dataset.productName}`, amount: Number(section.dataset.subtotalCents) || 0 },
         { name: "Local delivery", amount: Number(section.dataset.feeCents) || 0 }
       ]
     });

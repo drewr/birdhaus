@@ -62,11 +62,15 @@ type ProductsVM = { | Chrome ( products :: Array ProductCard ) }
 type ProductVM =
   { | Chrome
       ( WaitlistFields
-          ( name :: String
+          ( slug :: String
+          , name :: String
           , summary :: String
           , image :: String
           , imageAlt :: String
           , open :: Boolean
+          , batched :: Boolean -- sold through the pre-order batch, with its waitlist
+          , details :: Boolean -- the Bluebird House's feature, spec and FAQ sections
+          , inCart :: Int -- this product's quantity in the cart
           , shipBy :: String
           , remaining :: Int
           , priceEach :: String
@@ -77,7 +81,7 @@ type ProductVM =
   }
 
 type CartVM =
-  { | Chrome ( lineTotal :: String, subtotal :: String, shipBy :: String, maxQuantity :: Int, fulfillmentNote :: String ) }
+  { | Chrome ( productName :: String, lineTotal :: String, subtotal :: String, shipBy :: String, maxQuantity :: Int, fulfillmentNote :: String ) }
 
 type Slot = { id :: Int, location :: String, details :: String, time :: String, selected :: Boolean }
 
@@ -86,6 +90,7 @@ type DeliverySlot = { id :: Int, time :: String, selected :: Boolean }
 type DeliveryVM =
   { | Chrome
       ( quantity :: Int
+      , productName :: String
       , total :: String
       , error :: String
       , slots :: Array Slot
@@ -99,6 +104,7 @@ type DeliveryVM =
 type CheckoutVM =
   { | Chrome
       ( quantity :: Int
+      , productName :: String
       , subtotal :: String
       , total :: String
       , fulfillment :: String
@@ -117,6 +123,7 @@ type OrderVM =
       , number :: String
       , date :: String
       , items :: String
+      , productName :: String
       , total :: String
       , email :: String
       , shipTo :: Array String
@@ -290,10 +297,7 @@ productPage vm =
               , if vm.open then purchase vm else soldOut vm
               ]
           ]
-      , featureSection
-      , specSection
-      , trustStrip
-      , faqSection
+      , whenH vm.details (featureSection <> specSection <> trustStrip <> faqSection)
       ]
 
 productMedia :: ProductVM -> Html
@@ -310,20 +314,22 @@ purchase vm =
   el "div" []
     [ whenH (vm.remaining >= 0) (el "p" [ cls "stock-note" ] [ text ("Only " <> show vm.remaining <> " left in this batch") ])
     , el "form" [ cls "add-form", A "method" "post", A "action" "/cart/add" ]
-        [ el "div" [ cls "quantity-field" ]
+        [ elVoid "input" [ A "type" "hidden", A "name" "product", A "value" vm.slug ]
+        , el "div" [ cls "quantity-field" ]
             [ el "label" [ A "for" "qty" ] [ text "Quantity" ]
             , elVoid "input" [ A "id" "qty", A "name" "quantity", A "type" "number", A "min" "1", A "max" (show vm.maxQuantity), A "value" "1", B "required" ]
             ]
         , el "button" [ cls "buy-button", A "type" "submit" ]
-            [ text (if vm.cartQty > 0 then "Add to cart (" <> show vm.cartQty <> " in cart)" else "Add to cart") ]
+            [ text (if vm.inCart > 0 then "Add to cart (" <> show vm.inCart <> " in cart)" else "Add to cart") ]
         ]
     , el "p" [ cls "fine-print" ]
         [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> vm.fulfillmentNote) ]
-    , el "details" [ cls "waitlist-inline" ]
-        [ el "summary" [ cls "text-button" ] [ text "Need more? Join the waitlist" ]
-        , el "p" [ cls "description" ] [ text "Need more than this batch has? Tell us how many and we'll email you when we can build them." ]
-        , waitlistView (toWaitlist vm)
-        ]
+    , whenH vm.batched $
+        el "details" [ cls "waitlist-inline" ]
+          [ el "summary" [ cls "text-button" ] [ text "Need more? Join the waitlist" ]
+          , el "p" [ cls "description" ] [ text "Need more than this batch has? Tell us how many and we'll email you when we can build them." ]
+          , waitlistView (toWaitlist vm)
+          ]
     ]
 
 soldOut :: ProductVM -> Html
@@ -442,7 +448,7 @@ cartBox :: CartVM -> Html
 cartBox vm =
   el "div" [ A "id" "cart", cls "cart" ]
     [ el "div" [ cls "cart-line" ]
-        [ el "span" [] [ text "Bluebird House" ]
+        [ el "span" [] [ text vm.productName ]
         , el "span" [] [ text vm.lineTotal ]
         ]
     , stepper vm.cartQty vm.maxQuantity
@@ -482,7 +488,7 @@ deliveryPage vm =
   layout vm $
     el "section" [ cls "checkout", A "aria-labelledby" "delivery-title" ]
       [ el "h2" [ A "id" "delivery-title" ] [ text "Delivery" ]
-      , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × Bluebird House · " <> vm.total) ]
+      , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × " <> vm.productName <> " · " <> vm.total) ]
       , el "form" [ cls "delivery-form", A "method" "post", A "action" "/checkout/delivery" ]
           ( [ el "label" [ cls "delivery-option delivery-option-disabled" ]
                 [ elVoid "input" [ A "type" "radio", A "name" "method", A "value" "ship", B "disabled" ]
@@ -542,11 +548,11 @@ checkoutPage vm =
     el "section"
       [ A "id" "checkout", cls "checkout", A "aria-labelledby" "checkout-title"
       , A "data-quantity" (show vm.quantity), A "data-fulfillment" vm.fulfillment, A "data-slot-label" vm.choiceLabel
-      , A "data-subtotal-cents" (show vm.subtotalCents), A "data-fee-cents" (show vm.feeCents)
+      , A "data-product-name" vm.productName, A "data-subtotal-cents" (show vm.subtotalCents), A "data-fee-cents" (show vm.feeCents)
       ]
       [ el "h2" [ A "id" "checkout-title" ] [ text "Checkout" ]
       , el "dl" [ cls "order-summary checkout-breakdown" ]
-          ( [ el "dt" [] [ text (show vm.quantity <> " × Bluebird House") ], el "dd" [] [ text vm.subtotal ] ]
+          ( [ el "dt" [] [ text (show vm.quantity <> " × " <> vm.productName) ], el "dd" [] [ text vm.subtotal ] ]
               <> choiceRows
               <> [ el "dt" [] [ text "Total" ], el "dd" [] [ text vm.total ] ]
           )
@@ -617,10 +623,10 @@ confirmationBody vm = case vm.status of
 
 succeededLede :: OrderVM -> String
 succeededLede vm
-  | vm.fulfillment == "pickup" = "Your payment went through. Your bluebird house will be ready for pick-up: " <> vm.pickupLabel <> "."
-  | vm.fulfillment == "delivery" = "Your payment went through. We'll deliver your bluebird house " <> vm.deliveryLabel <> "."
-  | vm.shipBy == "" = "Your payment went through and your bluebird house is on its way to the workshop."
-  | otherwise = "Your payment went through. Your bluebird house is on the workshop's list and will ship by " <> vm.shipBy <> "."
+  | vm.fulfillment == "pickup" = "Your payment went through. Your " <> vm.productName <> " will be ready for pick-up: " <> vm.pickupLabel <> "."
+  | vm.fulfillment == "delivery" = "Your payment went through. We'll deliver your " <> vm.productName <> " " <> vm.deliveryLabel <> "."
+  | vm.shipBy == "" = "Your payment went through and your " <> vm.productName <> " is on its way to the workshop."
+  | otherwise = "Your payment went through. Your " <> vm.productName <> " is on the workshop's list and will ship by " <> vm.shipBy <> "."
 
 orderSummary :: OrderVM -> Html
 orderSummary vm =

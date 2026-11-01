@@ -6,10 +6,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { batchStatus, currentBatch, displayDate } from "./batch.js";
-import { UNIT_PRICE_CENTS, formatUsd, formatTotal } from "./price.js";
+import { unitPrice, formatUsd, formatTotal } from "./price.js";
 import { readCart, writeCart, clearCart } from "./cart.js";
 import { formatOrder } from "./order-format.js";
-import { products, productBySlug } from "./products.js";
+import { products, productName, visibleProduct, visibleTo } from "./products.js";
 import * as auth from "./auth.js";
 import * as emailLogin from "./email-login.js";
 import * as db from "./db.js";
@@ -76,11 +76,19 @@ function chrome(request, reason = "open") {
     accountLabel: account ? account.name || account.email : "",
     signedIn: Boolean(account),
     isAdmin: Boolean(account?.admin),
-    cartQty: readCart(request).qty,
+    cartQty: cartLine(request).qty,
     reason,
     version: appVersion,
     commit: appCommit.replace(/^([0-9a-f]{7})[0-9a-f]*/, "$1")
   };
+}
+
+// The cart's product and quantity, or { product: null, qty: 0 } when it's empty
+// or holds a product this visitor can no longer see (an admin's groups lapse).
+function cartLine(request) {
+  const cart = readCart(request);
+  const product = visibleProduct(cart.product, auth.accountOf(request));
+  return product && cart.qty > 0 ? { product, qty: cart.qty } : { product: null, qty: 0 };
 }
 
 // The cart's delivery choice if it can still be booked: { method, slot, label,
@@ -115,6 +123,13 @@ async function fulfillmentNote() {
   }
   return "Local pick-up only for now — shipping coming soon. Taxes not included.";
 }
+
+// Only batched products are capped and close; the rest are always open.
+async function availability(product) {
+  return product.batched ? batchStatus(batch, await paidUnits()) : { open: true, reason: "open", remaining: null };
+}
+
+const shipByFor = (product) => (product.batched ? displayDate(batch.shipBy) : "");
 
 // Units the stepper may reach: the batch cap (when nearly gone) or 99.
 function stepperLimit(status) {
@@ -216,10 +231,11 @@ function requireAccount(request, response, next) {
   response.redirect(303, `/login?next=${encodeURIComponent(auth.safeNext(back))}`);
 }
 
-// The quantity is the server's cart cookie, never a browser-supplied amount.
+// The product and quantity are the server's cart cookie, never a
+// browser-supplied amount.
 app.post("/api/create-payment-intent", requireAccount, async (request, response) => {
-  const quantity = readCart(request).qty;
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+  const { product, qty: quantity } = cartLine(request);
+  if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
     return response.status(400).json({ error: "Your cart is empty." });
   }
 
@@ -229,7 +245,7 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
     return response.status(503).json({ error: "Checkout is not configured yet. Please try again later." });
   }
 
-  const status = batchStatus(batch, await paidUnits());
+  const status = await availability(product);
   if (!status.open) {
     return response.status(409).json({ soldOut: true, error: status.reason === "closed" ? "Pre-orders for this batch have closed." : "This batch has sold out." });
   }
@@ -242,15 +258,15 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
   const choice = await cartChoice(request);
   if (!choice) return response.status(409).json({ error: "Choose a new delivery or pick-up time." });
 
-  const shipBy = displayDate(batch.shipBy);
+  const shipBy = shipByFor(product);
   const account = auth.accountOf(request);
+  // Unbatched orders are recorded as "unbatched", so they don't use up the cap.
   const metadata = {
-    product: "bluebird-house",
+    product: product.slug,
     quantity: String(quantity),
-    batch: batch.id,
-    ship_by: batch.shipBy,
     fulfillment: choice.method
   };
+  if (product.batched) Object.assign(metadata, { batch: batch.id, ship_by: batch.shipBy });
   if (choice.method === "delivery") {
     Object.assign(metadata, { fee_cents: String(choice.feeCents), delivery_slot_id: String(choice.slot.id), delivery_label: choice.label });
   } else {
@@ -260,10 +276,10 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
   try {
     const stripe = new Stripe(secretKey);
     const intent = await stripe.paymentIntents.create({
-      amount: quantity * UNIT_PRICE_CENTS + choice.feeCents,
+      amount: quantity * unitPrice(product) + choice.feeCents,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
-      description: `${shipBy ? "Pre-order: " : ""}Birdhaus Bluebird House × ${quantity}, ${choice.method === "delivery" ? "local delivery" : "pick-up"}: ${choice.label}`,
+      description: `${shipBy ? "Pre-order: " : ""}Birdhaus ${product.name} × ${quantity}, ${choice.method === "delivery" ? "local delivery" : "pick-up"}: ${choice.label}`,
       metadata
     });
     response.json({ clientSecret: intent.client_secret, publishableKey });
@@ -299,6 +315,7 @@ async function lookupOrder(id, clientSecret) {
     created: intent.created,
     amount: intent.amount,
     currency: intent.currency,
+    product: productName(intent.metadata.product || "bluebird-house"),
     quantity: Number(intent.metadata.quantity) || 1,
     shipBy: displayDate(intent.metadata.ship_by),
     email: intent.receipt_email,
@@ -387,29 +404,35 @@ app.post("/api/delivery/verify", requireAccount, async (request, response) => {
 // -------------------------------------------------------------- cart mutations
 
 // Add the chosen amount to what's already in the cart (form POST, 303 to /cart).
+// The cart holds one product, so adding a different one replaces it.
 app.post("/cart/add", (request, response) => {
-  const cart = readCart(request);
+  const product = visibleProduct(request.body?.product, auth.accountOf(request));
+  if (!product) return response.redirect(303, "/products");
+  const line = cartLine(request);
+  const held = line.product === product ? line.qty : 0;
   const add = Number.parseInt(request.body?.quantity, 10);
-  const qty = Number.isInteger(add) && add > 0 ? Math.min(cart.qty + add, 99) : Math.max(cart.qty, 1);
-  writeCart(response, { ...cart, qty });
+  const qty = Number.isInteger(add) && add > 0 ? Math.min(held + add, 99) : Math.max(held, 1);
+  writeCart(response, { ...readCart(request), product: product.slug, qty });
   response.redirect(303, "/cart");
 });
 
 // The cart stepper. HTMX gets the re-rendered #cart fragment; no-JS gets a 303.
 app.post("/cart/update", async (request, response) => {
-  const cart = readCart(request);
+  const hx = Boolean(request.get("HX-Request"));
+  const { product, qty: held } = cartLine(request);
+  if (!product) return hx ? response.set("HX-Redirect", "/products").end() : response.redirect(303, "/products");
   const target = Number.parseInt(request.body?.quantity, 10);
-  const qty = Number.isInteger(target) ? Math.min(Math.max(target, 1), 99) : cart.qty;
-  writeCart(response, { ...cart, qty });
-  if (request.get("HX-Request")) {
-    const status = batchStatus(batch, await paidUnits());
+  const qty = Number.isInteger(target) ? Math.min(Math.max(target, 1), 99) : held;
+  writeCart(response, { ...readCart(request), qty });
+  if (hx) {
     const vm = {
       ...chrome(request),
       cartQty: qty,
-      lineTotal: formatTotal(qty),
-      subtotal: formatTotal(qty),
-      shipBy: displayDate(batch.shipBy),
-      maxQuantity: stepperLimit(status)
+      productName: product.name,
+      lineTotal: formatTotal(product, qty),
+      subtotal: formatTotal(product, qty),
+      shipBy: shipByFor(product),
+      maxQuantity: stepperLimit(await availability(product))
     };
     return response.set("Cache-Control", "no-cache").type("html").send(views.cartFragment(vm));
   }
@@ -423,7 +446,7 @@ app.post("/cart/clear", (request, response) => {
 
 // -------------------------------------------------------------- waitlist
 
-// The batch and the waitlist are the Bluebird House's, the one product so far.
+// The batch and the waitlist are the Bluebird House's.
 const batchProductPath = `/products/${products[0].slug}`;
 // The waitlist needs an account; both links come back to the product.
 const waitlistLogin = `/login?next=${encodeURIComponent(batchProductPath)}`;
@@ -584,41 +607,47 @@ app.post("/login/resend", async (request, response) => {
 });
 
 app.get("/products", async (request, response) => {
+  const account = auth.accountOf(request);
   const status = batchStatus(batch, await paidUnits());
-  const availability = status.open
+  const batchLine = status.open
     ? (batch.shipBy ? `Pre-order · ships by ${displayDate(batch.shipBy)}` : "In stock")
     : (status.reason === "closed" ? "Pre-orders have closed" : "Sold out · join the waitlist");
   const vm = {
     ...chrome(request),
-    products: products.map((product) => ({
+    products: products.filter((product) => visibleTo(product, account)).map((product) => ({
       href: `/products/${product.slug}`,
       name: product.name,
       summary: product.summary,
       image: product.image,
       imageAlt: product.imageAlt,
-      price: formatUsd(UNIT_PRICE_CENTS),
-      availability
+      price: formatUsd(unitPrice(product)),
+      availability: product.batched ? batchLine : "In stock"
     }))
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.productsPage(vm));
 });
 
 app.get("/products/:slug", async (request, response) => {
-  const product = productBySlug(request.params.slug);
+  const product = visibleProduct(request.params.slug, auth.accountOf(request));
   if (!product) return response.redirect(303, "/products");
-  const status = batchStatus(batch, await paidUnits());
+  const status = await availability(product);
   const showRemaining = status.open && status.remaining !== null && batch.cap > 0 && status.remaining < batch.cap * 0.2;
+  const line = cartLine(request);
   const vm = {
     ...chrome(request, status.reason),
+    slug: product.slug,
     name: product.name,
     summary: product.summary,
     image: product.image,
     imageAlt: product.imageAlt,
     ...waitlistLinks,
     open: status.open,
-    shipBy: displayDate(batch.shipBy),
+    batched: product.batched,
+    details: product.details,
+    inCart: line.product === product ? line.qty : 0,
+    shipBy: shipByFor(product),
     remaining: showRemaining ? status.remaining : -1,
-    priceEach: formatUsd(UNIT_PRICE_CENTS),
+    priceEach: formatUsd(unitPrice(product)),
     maxQuantity: stepperLimit(status),
     wlState: "editing",
     wlMessage: "",
@@ -631,16 +660,16 @@ app.get("/products/:slug", async (request, response) => {
 });
 
 app.get("/cart", async (request, response) => {
-  const qty = readCart(request).qty;
-  if (qty <= 0) return response.redirect(303, "/products");
-  const status = batchStatus(batch, await paidUnits());
+  const { product, qty } = cartLine(request);
+  if (!product) return response.redirect(303, "/products");
   const vm = {
     ...chrome(request),
     cartQty: qty,
-    lineTotal: formatTotal(qty),
-    subtotal: formatTotal(qty),
-    shipBy: displayDate(batch.shipBy),
-    maxQuantity: stepperLimit(status),
+    productName: product.name,
+    lineTotal: formatTotal(product, qty),
+    subtotal: formatTotal(product, qty),
+    shipBy: shipByFor(product),
+    maxQuantity: stepperLimit(await availability(product)),
     fulfillmentNote: await fulfillmentNote()
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.cartPage(vm));
@@ -651,6 +680,7 @@ app.get("/cart", async (request, response) => {
 // and, when an admin has switched it on, local delivery (local-delivery.md).
 async function deliveryPage(request, response, error = "") {
   const cart = readCart(request);
+  const { product, qty } = cartLine(request);
   let pickupSlots = [];
   let deliverySlots = [];
   let settings = null;
@@ -668,8 +698,9 @@ async function deliveryPage(request, response, error = "") {
   const chosen = (method, id) => cart.method === method && cart.slot === id;
   const vm = {
     ...chrome(request),
-    quantity: cart.qty,
-    total: formatTotal(cart.qty),
+    quantity: qty,
+    productName: product.name,
+    total: formatTotal(product, qty),
     error,
     slots: pickupSlots.map((p) => ({ id: p.id, location: p.name, details: p.details, time: pickup.slotTime(p.starts_at, p.ends_at), selected: chosen("pickup", p.id) })),
     deliveryFee: settings ? formatUsd(settings.feeCents) : "",
@@ -680,14 +711,14 @@ async function deliveryPage(request, response, error = "") {
 }
 
 app.get("/checkout", requireAccount, (request, response) => {
-  if (readCart(request).qty <= 0) return response.redirect(303, "/cart");
+  if (!cartLine(request).product) return response.redirect(303, "/cart");
   return deliveryPage(request, response);
 });
 
 // The choice posts as "pickup:<slot id>" or "delivery:<slot id>".
 app.post("/checkout/delivery", requireAccount, async (request, response) => {
+  if (!cartLine(request).product) return response.redirect(303, "/cart");
   const cart = readCart(request);
-  if (cart.qty <= 0) return response.redirect(303, "/cart");
   const [method, id] = String(request.body?.choice ?? "").split(":");
   const slotId = Number.parseInt(id, 10);
   let slot = null;
@@ -712,16 +743,17 @@ app.post("/checkout/delivery", requireAccount, async (request, response) => {
 // address (or the wallet's) and the fee; the data attributes only drive the
 // wallet sheet's display, the server sets the amount.
 app.get("/checkout/pay", requireAccount, async (request, response) => {
-  const qty = readCart(request).qty;
-  if (qty <= 0) return response.redirect(303, "/cart");
+  const { product, qty } = cartLine(request);
+  if (!product) return response.redirect(303, "/cart");
   const choice = await cartChoice(request);
   if (!choice) return response.redirect(303, "/checkout");
   const account = auth.accountOf(request);
-  const subtotalCents = qty * UNIT_PRICE_CENTS;
+  const subtotalCents = qty * unitPrice(product);
   const vm = {
     ...chrome(request),
     quantity: qty,
-    subtotal: formatTotal(qty),
+    productName: product.name,
+    subtotal: formatTotal(product, qty),
     total: formatUsd(subtotalCents + choice.feeCents),
     fulfillment: choice.method,
     choiceLabel: choice.label,
@@ -739,7 +771,7 @@ app.get("/order", async (request, response) => {
   const base = chrome(request);
   const vm = order
     ? { ...base, ...formatOrder(order) }
-    : { ...base, status: "error", message: "", number: "", date: "", items: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1, fulfillment: "ship", pickupLabel: "", deliveryLabel: "" };
+    : { ...base, status: "error", message: "", number: "", date: "", items: "", productName: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1, fulfillment: "ship", pickupLabel: "", deliveryLabel: "" };
   response.type("html").send(views.confirmationPage(vm));
 });
 
@@ -765,6 +797,7 @@ app.get("/admin", auth.requireAdmin, async (request, response) => {
       number: o.id.slice(-8).toUpperCase(),
       date: orderDate.format(o.created_at),
       email: o.email ?? "",
+      product: productName(o.product),
       quantity: o.quantity,
       total: formatUsd(o.amount),
       status: o.status,
@@ -781,7 +814,7 @@ app.get("/admin/pickup", auth.requireAdmin, async (request, response) => {
     return {
       locations: locations.map((l) => ({ id: l.id, name: l.name, details: l.details, active: l.active })),
       slots: slots.map((s) => ({ id: s.id, location: s.name, time: pickup.slotTime(s.starts_at, s.ends_at), active: s.active, past: s.ends_at < now })),
-      schedule: schedule.map((o) => ({ slot: o.pickup_label ?? "", email: o.email ?? "", quantity: o.quantity, number: o.id.slice(-8).toUpperCase() }))
+      schedule: schedule.map((o) => ({ slot: o.pickup_label ?? "", email: o.email ?? "", product: productName(o.product), quantity: o.quantity, number: o.id.slice(-8).toUpperCase() }))
     };
   });
   response.type("html").send(views.adminPickupPage({ locations: [], slots: [], schedule: [], ...vm, error: adminNotice(request) || vm.error }));
@@ -873,6 +906,7 @@ async function adminDeliveryPage(request, response, notice = "") {
           name: o.shipping?.name ?? "",
           phone: o.shipping?.phone ?? "",
           address: [a.line1, a.line2, [a.city, a.state, a.postal_code].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+          product: productName(o.product),
           quantity: o.quantity,
           check: o.address_check ?? "none"
         };

@@ -88,8 +88,8 @@ export async function recordOrder(intent) {
   const fulfillment = ["pickup", "delivery"].includes(intent.metadata.fulfillment) ? intent.metadata.fulfillment : "ship";
   await query(
     `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub, fulfillment,
-       pickup_slot_id, pickup_label, fee_amount, delivery_slot_id, delivery_label, address_check)
-     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12, $13, $14, $15, $16)
+       pickup_slot_id, pickup_label, fee_amount, delivery_slot_id, delivery_label, address_check, product)
+     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12, $13, $14, $15, $16, $17)
      on conflict (id) do nothing`,
     [
       intent.id,
@@ -107,7 +107,8 @@ export async function recordOrder(intent) {
       Number(intent.metadata.fee_cents) || 0,
       Number(intent.metadata.delivery_slot_id) || null,
       intent.metadata.delivery_label || null,
-      addressCheck(intent)
+      addressCheck(intent),
+      intent.metadata.product || "bluebird-house"
     ]
   );
 }

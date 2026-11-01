@@ -24,6 +24,13 @@ the catalog holds only what the listing and detail pages show. `productBySlug`
 looks one up. A second product later means a second entry plus its own price
 and batch, which this plan doesn't build.
 
+Since then each entry also has `visibility` (`"public"`, or `{ groups }` for
+accounts in one of those Rauthy groups) and `batched` (whether it sells through
+the pre-order batch, its cap and waitlist). Demo Thing, $0.50 and visible only
+to `birdhaus-admins`, is unbatched so test orders never use up the cap; orders
+record their product (`orders.product`) and the admin tables show it. The cart
+holds one product, so adding another replaces it.
+
 ## Routes (`server/index.js`)
 
 - `GET /`: `homePage` with the chrome only.

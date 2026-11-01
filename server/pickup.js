@@ -81,7 +81,7 @@ export async function setSlotActive(id, active) {
 // Paid pick-up orders for slots that haven't ended long ago, by slot time.
 export async function pickupSchedule() {
   const { rows } = await query(
-    `select o.id, o.email, o.quantity, o.pickup_label, s.starts_at
+    `select o.id, o.email, o.product, o.quantity, o.pickup_label, s.starts_at
      from orders o left join pickup_slots s on s.id = o.pickup_slot_id
      where o.fulfillment = 'pickup' and o.status = 'paid' and (s.ends_at is null or s.ends_at > now() - interval '7 days')
      order by s.starts_at nulls last, o.created_at`
@@ -91,7 +91,7 @@ export async function pickupSchedule() {
 
 export async function recentOrders(limit = 50) {
   const { rows } = await query(
-    `select id, created_at, email, quantity, amount, currency, status, fulfillment, pickup_label, delivery_label
+    `select id, created_at, email, product, quantity, amount, currency, status, fulfillment, pickup_label, delivery_label
      from orders order by created_at desc limit $1`,
     [limit]
   );

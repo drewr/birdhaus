@@ -13,13 +13,13 @@ import Html (Attr(..), Html, cls, el, elVoid, text, whenH)
 import Server.Layout (Chrome, layout)
 
 type Order =
-  { number :: String, date :: String, email :: String, quantity :: Int, total :: String, status :: String, method :: String }
+  { number :: String, date :: String, email :: String, product :: String, quantity :: Int, total :: String, status :: String, method :: String }
 
 type Location = { id :: Int, name :: String, details :: String, active :: Boolean }
 
 type Slot = { id :: Int, location :: String, time :: String, active :: Boolean, past :: Boolean }
 
-type Pickup = { slot :: String, email :: String, quantity :: Int, number :: String }
+type Pickup = { slot :: String, email :: String, product :: String, quantity :: Int, number :: String }
 
 type OrdersVM = { | Chrome ( error :: String, orders :: Array Order ) }
 
@@ -27,7 +27,7 @@ type DeliverySlot = { id :: Int, time :: String, active :: Boolean, past :: Bool
 
 -- check is how the radius was verified: exact, zip, mismatch or none.
 type Delivery =
-  { slot :: String, number :: String, name :: String, phone :: String, address :: String, quantity :: Int, check :: String }
+  { slot :: String, number :: String, name :: String, phone :: String, address :: String, product :: String, quantity :: Int, check :: String }
 
 type DeliveryVM =
   { | Chrome
@@ -88,8 +88,8 @@ adminOrdersPage vm =
       , errorLine vm.error
       , if null vm.orders then el "p" [ cls "description" ] [ text "No orders yet." ]
         else
-          table [ "Order", "Date", "Email", "Qty", "Total", "Status", "Delivery" ]
-            (map (\o -> [ text o.number, text o.date, text o.email, text (show o.quantity), text o.total, text o.status, text o.method ]) vm.orders)
+          table [ "Order", "Date", "Email", "Product", "Qty", "Total", "Status", "Delivery" ]
+            (map (\o -> [ text o.number, text o.date, text o.email, text o.product, text (show o.quantity), text o.total, text o.status, text o.method ]) vm.orders)
       ]
 
 -- ---------------------------------------------------------------- pick-up
@@ -103,7 +103,7 @@ adminPickupPage vm =
       , errorLine vm.error
       , el "h2" [ cls "section-title" ] [ text "Pick-up schedule" ]
       , if null vm.schedule then el "p" [ cls "description" ] [ text "No paid pick-up orders yet." ]
-        else table [ "Slot", "Order", "Email", "Qty" ] (map (\p -> [ text p.slot, text p.number, text p.email, text (show p.quantity) ]) vm.schedule)
+        else table [ "Slot", "Order", "Email", "Product", "Qty" ] (map (\p -> [ text p.slot, text p.number, text p.email, text p.product, text (show p.quantity) ]) vm.schedule)
       , el "h2" [ cls "section-title" ] [ text "Time slots" ]
       , if null vm.slots then el "p" [ cls "description" ] [ text "No slots yet." ]
         else
@@ -167,9 +167,9 @@ adminDeliveryPage vm =
       , el "h2" [ cls "section-title" ] [ text "Delivery schedule" ]
       , if null vm.schedule then el "p" [ cls "description" ] [ text "No paid delivery orders yet." ]
         else
-          table [ "Slot", "Order", "Name", "Phone", "Address", "Qty", "Address check" ]
+          table [ "Slot", "Order", "Name", "Phone", "Address", "Product", "Qty", "Address check" ]
             ( map
-                (\d -> [ text d.slot, text d.number, text d.name, text d.phone, text d.address, text (show d.quantity), text (checkLabel d.check) ])
+                (\d -> [ text d.slot, text d.number, text d.name, text d.phone, text d.address, text d.product, text (show d.quantity), text (checkLabel d.check) ])
                 vm.schedule
             )
       , el "h2" [ cls "section-title" ] [ text "Settings" ]
