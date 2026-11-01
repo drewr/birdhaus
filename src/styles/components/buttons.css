@@ -1,9 +1,9 @@
 /* Square, ink-bordered controls; the primary one is filled. */
 .buy-button {
   width: 100%;
-  border: 1px solid var(--ink);
+  border: var(--border-size-1) solid var(--ink);
   border-radius: 0;
-  padding: 15px 18px;
+  padding: var(--size-3) var(--size-4);
   background: var(--ink);
   color: var(--paper);
   font-weight: var(--font-weight-7);
@@ -15,12 +15,12 @@
 a.buy-button { display: block; text-align: center; text-decoration: none; }
 
 .cart-link {
-  border: 1px solid var(--ink);
+  border: var(--border-size-1) solid var(--ink);
   border-radius: 0;
   background: var(--paper);
   color: var(--ink);
-  padding: var(--size-px-2) 14px;
-  font-size: 14px;
+  padding: var(--size-2) var(--size-3);
+  font-size: var(--font-size-0);
   font-weight: var(--font-weight-7);
   cursor: pointer;
   white-space: nowrap;
@@ -30,14 +30,14 @@ a.buy-button { display: block; text-align: center; text-decoration: none; }
 a.cart-link { text-decoration: none; }
 
 .quantity-button {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--ink);
+  width: var(--size-7);
+  height: var(--size-7);
+  border: var(--border-size-1) solid var(--ink);
   border-radius: 0;
   background: var(--paper);
   color: var(--ink);
   font-size: var(--font-size-3);
-  line-height: 1;
+  line-height: var(--font-lineheight-00);
   cursor: pointer;
 
   &:hover:not(:disabled) { background: var(--wash-hover); }
@@ -46,11 +46,11 @@ a.cart-link { text-decoration: none; }
 
 .text-button {
   border: 0;
-  padding: var(--size-px-2) 0;
+  padding: var(--size-2) 0;
   background: none;
   color: var(--ink);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: var(--size-1);
   cursor: pointer;
 }
-.text-link { display: inline-block; font-weight: var(--font-weight-7); text-underline-offset: 3px; }
+.text-link { display: inline-block; font-weight: var(--font-weight-7); }

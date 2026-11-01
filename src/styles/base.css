@@ -5,12 +5,14 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
-body { min-width: 320px; }
-a { color: inherit; }
+body { min-width: var(--size-14); }
+a { color: inherit; text-underline-offset: var(--size-1); }
 
 /* Each page's h1; the page sets its margin. */
 .page-title {
   font-size: var(--title-size);
   line-height: var(--font-lineheight-0);
   letter-spacing: var(--title-tracking);
+
+  @media (--sm-n-below) { font-size: var(--font-size-4); }
 }

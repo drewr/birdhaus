@@ -2,12 +2,11 @@
 .order-summary {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 12px var(--gutter);
-  margin: 0 0 var(--size-px-4);
-  padding: var(--size-px-4) 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
+  gap: var(--size-3) var(--gutter);
+  margin: 0 0 var(--size-4);
+  padding: var(--size-4) 0;
+  border-block: var(--rule);
+  font-size: var(--font-size-0);
 
   & dt { color: var(--muted); }
   & dd { margin: 0; font-weight: var(--font-weight-7); }
@@ -23,12 +22,11 @@
 .spec-list {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0;
   margin: 0;
-  font-size: 14px;
+  font-size: var(--font-size-0);
 
-  & dt { padding: 12px 0; border-top: 1px solid var(--line); color: var(--muted); }
-  & dd { margin: 0; padding: 12px 0 12px var(--gutter); border-top: 1px solid var(--line); font-weight: var(--font-weight-7); }
+  & dt { padding: var(--size-3) 0; border-top: var(--rule); color: var(--muted); }
+  & dd { margin: 0; padding: var(--size-3) 0 var(--size-3) var(--gutter); border-top: var(--rule); font-weight: var(--font-weight-7); }
   & dd.spec-todo { font-weight: var(--font-weight-4); }
 }
 .spec-todo { color: var(--muted); font-style: italic; }
@@ -37,8 +35,8 @@
   width: 100%;
   border-collapse: collapse;
   margin: 0 0 var(--gutter);
-  font-size: 14px;
+  font-size: var(--font-size-0);
 
-  & th, & td { padding: var(--size-px-2) 10px var(--size-px-2) 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  & th, & td { padding: var(--size-2) var(--size-2) var(--size-2) 0; border-bottom: var(--rule); text-align: left; vertical-align: top; }
   & th { color: var(--muted); font-weight: var(--font-weight-4); }
 }

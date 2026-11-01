@@ -1,68 +1,73 @@
-/* Breakpoints: 760px stacks the product page, 520px is phone width. */
+/* Breakpoints: --md-n-below stacks two-column layouts; --sm-n-below is phones. */
 .site-header {
-  height: 84px;
+  min-height: var(--size-10);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--gutter);
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--rule);
 
   /* Phones: links get their own line under the wordmark. */
-  @media (max-width: 520px) {
-    height: auto;
+  @media (--sm-n-below) {
     flex-wrap: wrap;
-    gap: var(--size-px-2);
-    padding: 12px var(--size-px-3);
+    gap: var(--size-2);
+    padding: var(--size-3);
   }
 }
 .header-actions {
   display: inline-flex;
   align-items: center;
-  gap: var(--size-px-3);
+  gap: var(--size-3);
+  font-size: var(--font-size-0);
   white-space: nowrap;
 
-  @media (max-width: 520px) { width: 100%; gap: 12px; }
+  @media (--sm-n-below) { width: 100%; }
 }
-.account-nav { display: inline-flex; align-items: center; gap: 12px; font-size: 14px; }
+.account-nav { display: inline-flex; align-items: center; gap: var(--size-3); }
 .account-email {
-  max-width: 220px;
+  max-width: var(--size-content-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--body-text);
 
-  @media (max-width: 520px) { display: none; }
+  @media (--sm-n-below) { display: none; }
 }
 
 .wordmark {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--size-3);
   color: inherit;
   font-family: var(--font-hand);
-  font-size: 30px;
+  font-size: var(--font-size-5);
   font-weight: var(--font-weight-4);
-  letter-spacing: .01em;
+  letter-spacing: var(--font-letterspacing-1);
   text-decoration: none;
 }
-.wordmark-mark { width: 52px; height: 52px; }
+.wordmark-mark { width: var(--size-8); height: var(--size-8); }
 
-main {
-  width: min(100% - 48px, 1040px);
-  margin: var(--size-px-8) var(--gutter) var(--size-px-10);
+/* Content column; the hero's inner block uses the same. */
+main, .hero-inner {
+  width: min(100% - 2 * var(--gutter), var(--page-width));
+  margin-inline: var(--gutter);
 
-  @media (max-width: 520px) {
-    width: min(100% - 32px, 960px);
-    margin: var(--gutter) var(--size-px-3) var(--size-px-10);
+  @media (--sm-n-below) {
+    width: calc(100% - 2 * var(--size-3));
+    margin-inline: var(--size-3);
   }
 }
+main {
+  margin-block: var(--size-8) var(--size-10);
 
+  @media (--sm-n-below) { margin-block-start: var(--gutter); }
+}
 /* The homepage is all hero, so its <main> is empty. */
 main:empty { display: none; }
 
 .site-footer {
-  padding: var(--size-px-3) var(--gutter);
-  border-top: 1px solid var(--line);
+  padding: var(--size-3) var(--gutter);
+  border-top: var(--rule);
   color: var(--muted);
   font-size: var(--font-size-0);
   font-variant-numeric: tabular-nums;

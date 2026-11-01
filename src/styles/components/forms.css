@@ -1,19 +1,22 @@
 /* Bold labels over full-width square inputs. */
-.waitlist-form {
-  & label { display: block; margin: 0 0 6px; font-size: 14px; font-weight: var(--font-weight-7); }
-  & input { display: block; width: 100%; padding: 12px; border: 1px solid var(--field-border); margin-bottom: var(--size-px-3); }
+.waitlist-form, .quantity-field, #payment-form, .admin-form {
+  & label:not(.admin-check) { display: block; margin: 0 0 var(--size-2); font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
 }
-.waitlist-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--size-px-3); }
+.waitlist-form input, #payment-form input,
+.admin-form :is(input:not([type="checkbox"], [type="hidden"]), select, textarea) {
+  display: block;
+  width: 100%;
+  padding: var(--size-3);
+  border: var(--border-size-1) solid var(--field-border);
+  margin-bottom: var(--size-4);
+}
+.waitlist-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--size-3); }
+/* Admin rows hold two or three fields; they wrap when the form is narrow. */
+.admin-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--size-12), 1fr)); gap: var(--size-3); }
 
 .quantity-field {
-  margin: 0 0 var(--size-px-3);
+  margin: 0 0 var(--size-3);
 
-  & label { display: block; margin: 0 0 6px; font-size: 14px; font-weight: var(--font-weight-7); }
-  & input { width: 96px; padding: 10px 12px; border: 1px solid var(--field-border); }
+  & input { width: var(--size-10); padding: var(--size-2) var(--size-3); border: var(--border-size-1) solid var(--field-border); }
 }
-.quantity-control { display: inline-flex; align-items: center; gap: 14px; margin-top: 14px; }
-
-#payment-form {
-  & label { display: block; margin: 0 0 var(--size-px-2); font-size: 14px; font-weight: var(--font-weight-7); }
-  & input { display: block; width: 100%; padding: 13px; border: 1px solid var(--field-border); margin-bottom: 22px; }
-}
+.quantity-control { display: inline-flex; align-items: center; gap: var(--size-3); margin-top: var(--size-3); }

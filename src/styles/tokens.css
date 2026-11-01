@@ -1,7 +1,11 @@
-/* Brand tokens. Sizes come from Open Props' px scales (--size-px-*,
-   --font-size-*), which postcss-jit-props inlines only when used. Where the
-   design sits between two steps (14px type, 12px gaps) the literal stays,
-   rather than nudging the layout to fit the scale. */
+/* Brand tokens. Everything else is an Open Props scale, used directly:
+   spacing --size-1…15; widths --size-content-1…3, --size-header-1…3 and
+   --size-xxs…xxl; fluid --size-fluid-1…10 and --font-size-fluid-0…3; type
+   --font-size-0…8, --font-weight-1…9, --font-lineheight-00…5 and
+   --font-letterspacing-0…7; borders --border-size-1…5; ratios --ratio-square
+   and friends; breakpoints @media (--md-n-below).
+   postcss-jit-props inlines only the props that are used. Snap new values to a
+   step rather than adding literals. */
 :root {
   --ink: #111;
   --ink-hover: #333;
@@ -18,7 +22,9 @@
   /* Architects Daughter echoes the drawn logo's hand lettering. */
   --font-hand: "Architects Daughter", "Comic Sans MS", cursive;
 
+  --rule: var(--border-size-1) solid var(--line);
   --title-size: var(--font-size-5);
-  --title-tracking: -.04em;
-  --gutter: var(--size-px-5);
+  --title-tracking: var(--font-letterspacing-0);
+  --gutter: var(--size-5);
+  --page-width: var(--size-lg);
 }

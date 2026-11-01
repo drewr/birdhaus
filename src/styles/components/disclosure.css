@@ -6,24 +6,24 @@ details.waitlist-inline > summary {
   &::-webkit-details-marker { display: none; }
 }
 
-.faq-list { border-bottom: 1px solid var(--line); }
+.faq-list { border-bottom: var(--rule); }
 .faq-item {
-  border-top: 1px solid var(--line);
+  border-top: var(--rule);
 
   & summary {
-    padding: var(--size-px-3) 0;
-    font-size: 15px;
+    padding: var(--size-3) 0;
+    font-size: var(--font-size-0);
     font-weight: var(--font-weight-7);
     cursor: pointer;
     list-style: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--size-px-3);
+    gap: var(--size-3);
 
     &::-webkit-details-marker { display: none; }
-    &::after { content: "+"; font-weight: var(--font-weight-4); font-size: var(--font-size-3); line-height: 1; }
+    &::after { content: "+"; font-weight: var(--font-weight-4); font-size: var(--font-size-3); line-height: var(--font-lineheight-00); }
   }
   &[open] summary::after { content: "−"; }
 }
-.faq-answer { margin: 0 0 18px; color: var(--body-text); font-size: 14px; line-height: 1.6; }
+.faq-answer { margin: 0 0 var(--size-4); color: var(--body-text); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }

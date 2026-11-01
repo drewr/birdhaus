@@ -3,6 +3,10 @@
    ids or !important. Each file holds one layer; add new layers to this list. */
 @layer reset, tokens, base, layout, components, pages;
 
+/* Open Props' named breakpoints (--sm-n-below, --md-n-below, …), resolved at
+   build time by postcss-custom-media. */
+@import "open-props/media";
+
 @import "./reset.css" layer(reset);
 @import "./tokens.css" layer(tokens);
 @import "./base.css" layer(base);

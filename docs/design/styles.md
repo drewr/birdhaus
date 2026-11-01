@@ -102,3 +102,20 @@ why; new layers go in the order line in `index.css`.
 - HTMX swaps (cart quantity, waitlist join) render styled fragments.
 - Push to `main` deploys dev; check the payment form and Express Checkout on
   dev.birdhaus.store in test mode. Prod only by release, after the owner's OK.
+
+## Revision: Open Props conventions throughout
+
+The first pass kept every pixel by using Open Props' `--size-px-*` steps where
+they matched and literals elsewhere, which left half the sizes outside the
+framework. The styles now follow Open Props' conventions everywhere:
+
+- spacing on the rem scale (`--size-1…15`), widths on the content, header and
+  breakpoint widths, and fluid sizes for the hero;
+- type on `--font-size-*`: the owner chose to bring the 13–15px text down to
+  12px (`--font-size-0`), so text is 12px or 16px;
+- named breakpoints `--md-n-below` (768px) and `--sm-n-below` (480px) through
+  `postcss-custom-media`, replacing 760px and 520px;
+- borders, letter-spacing, line-heights and aspect ratios on their scales.
+
+Colours and fonts stay brand tokens, as Open Props intends. The admin forms,
+which had no field styles, now share the storefront's.
