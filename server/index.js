@@ -15,6 +15,7 @@ import * as emailLogin from "./email-login.js";
 import * as db from "./db.js";
 import * as pickup from "./pickup.js";
 import * as delivery from "./delivery.js";
+import * as copy from "./copy.js";
 import { lastGeocodeFailure } from "./geocode.js";
 
 const app = express();
@@ -497,8 +498,9 @@ app.use(express.static(dist, {
   setHeaders: (response) => response.setHeader("Cache-Control", "no-cache")
 }));
 
-app.get("/", (request, response) => {
-  response.set("Cache-Control", "no-cache").type("html").send(views.homePage(chrome(request)));
+app.get("/", async (request, response) => {
+  const text = await copy.html(["home-welcome"]);
+  response.set("Cache-Control", "no-cache").type("html").send(views.homePage({ ...chrome(request), welcome: text["home-welcome"] }));
 });
 
 // The store's own sign-in (docs/design/login-page.md): log in or create an
@@ -827,6 +829,8 @@ const ADMIN_ERRORS = {
   "location-name": "Give the location a name.",
   "slot-fields": "Choose a location, a date, and start and end times.",
   "slot-times": "The end time must be after the start time (check AM/PM).",
+  "copy-section": "That section doesn't exist.",
+  "copy-length": `Page copy can be at most ${copy.MAX_LENGTH} characters.`,
   "no-database": "The database is not configured.",
   "save-failed": "That change couldn't be saved. Try again shortly."
 };
@@ -955,6 +959,31 @@ app.post("/admin/delivery/slots", auth.requireAdmin, (request, response) => {
 app.post("/admin/delivery/slots/:id/active", auth.requireAdmin, (request, response) =>
   adminWrite(response, () => delivery.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"), "/admin/delivery")
 );
+
+// Page copy (docs/design/site-copy.md): one form per section, Markdown or HTML.
+const savedAt = new Intl.DateTimeFormat("en-US", { timeZone: pickup.ZONE, dateStyle: "medium", timeStyle: "short" });
+
+app.get("/admin/site", auth.requireAdmin, async (request, response) => {
+  const vm = await adminData(request, async () => ({
+    sections: (await copy.list()).map((s) => ({
+      key: s.key,
+      label: s.label,
+      page: s.page,
+      body: s.row?.body ?? s.fallback,
+      saved: s.row ? `Last saved ${savedAt.format(s.row.updated_at)}${s.row.updated_by ? ` by ${s.row.updated_by}` : ""}.` : "Showing the built-in text."
+    }))
+  }));
+  response.type("html").send(views.adminCopyPage({ sections: [], ...vm, error: adminNotice(request) || vm.error }));
+});
+
+app.post("/admin/site/:key", auth.requireAdmin, (request, response) => {
+  const body = String(request.body?.body ?? "").replace(/\r\n/g, "\n");
+  return adminWrite(response, async () => {
+    if (!copy.section(request.params.key)) return "copy-section";
+    if (body.length > copy.MAX_LENGTH) return "copy-length";
+    await copy.save(request.params.key, body, auth.accountOf(request).email || null);
+  }, "/admin/site");
+});
 
 // Anything else: back to the storefront.
 app.get(/.*/, (_request, response) => response.redirect(303, "/"));

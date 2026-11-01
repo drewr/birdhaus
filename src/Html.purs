@@ -1,6 +1,7 @@
 -- A tiny server-side HTML DSL: values render to escaped String. No browser
 -- types, so these modules are safe to bundle for Node. `text` escapes; `raw` is
--- an escape hatch for server-trusted markup only, never user input.
+-- an escape hatch for server-trusted markup only, never user input: admin page
+-- copy qualifies because server/copy.js sanitizes it.
 module Html
   ( Html
   , Attr(..)

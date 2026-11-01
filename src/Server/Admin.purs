@@ -1,10 +1,11 @@
 -- The store admin portal (/admin), for members of the Rauthy admin group: recent
 -- orders; pick-up locations, slots and schedule; local delivery settings, slots
--- and schedule. Plain tables and POST forms; writes redirect back.
+-- and schedule; page copy. Plain tables and POST forms; writes redirect back.
 module Server.Admin
   ( adminOrdersPage
   , adminPickupPage
   , adminDeliveryPage
+  , adminCopyPage
   ) where
 
 import Prelude
@@ -42,6 +43,11 @@ type DeliveryVM =
       )
   }
 
+-- body is the section's source (saved or built-in); saved says which.
+type CopySection = { key :: String, label :: String, page :: String, body :: String, saved :: String }
+
+type CopyVM = { | Chrome ( error :: String, sections :: Array CopySection ) }
+
 type PickupVM =
   { | Chrome ( error :: String, locations :: Array Location, slots :: Array Slot, schedule :: Array Pickup ) }
 
@@ -51,6 +57,7 @@ adminNav current =
     [ link "/admin" "Orders"
     , link "/admin/pickup" "Pick-up"
     , link "/admin/delivery" "Delivery"
+    , link "/admin/site" "Page copy"
     ]
   where
   link href label = el "a" [ cls (if href == current then "text-link admin-current" else "text-link"), A "href" href ] [ text label ]
@@ -235,4 +242,29 @@ inputField id label name kind =
   el "div" []
     [ el "label" [ A "for" id ] [ text label ]
     , elVoid "input" [ A "id" id, A "name" name, A "type" kind, B "required" ]
+    ]
+
+-- ---------------------------------------------------------------- page copy
+
+adminCopyPage :: CopyVM -> String
+adminCopyPage vm =
+  layout vm $
+    el "section" [ cls "admin" ]
+      ( [ el "h1" [ cls "page-title" ] [ text "Admin" ]
+        , adminNav "/admin/site"
+        , el "h2" [ cls "section-title" ] [ text "Page copy" ]
+        , el "p" [ cls "description" ] [ text "Write in Markdown or HTML. Scripts and styles are removed. Leave a section empty to go back to its built-in text." ]
+        , errorLine vm.error
+        ]
+          <> map copyForm vm.sections
+      )
+
+copyForm :: CopySection -> Html
+copyForm s =
+  el "form" [ cls "admin-form admin-copy", A "method" "post", A "action" ("/admin/site/" <> s.key) ]
+    [ el "h3" [] [ text s.label ]
+    , el "p" [ cls "fine-print" ] [ text (s.saved <> " "), el "a" [ cls "text-link", A "href" s.page ] [ text "View page" ] ]
+    , el "label" [ A "for" ("copy-" <> s.key) ] [ text "Text" ]
+    , el "textarea" [ A "id" ("copy-" <> s.key), A "name" "body", A "rows" "14", A "maxlength" "20000" ] [ text s.body ]
+    , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Save" ]
     ]

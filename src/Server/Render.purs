@@ -18,8 +18,8 @@ module Server.Render
 
 import Prelude
 import Data.Array (null)
-import Html (Attr(..), Html, cls, el, elVoid, empty, render, text, whenH)
-import Server.Admin (adminDeliveryPage, adminOrdersPage, adminPickupPage)
+import Html (Attr(..), Html, cls, el, elVoid, empty, raw, render, text, whenH)
+import Server.Admin (adminCopyPage, adminDeliveryPage, adminOrdersPage, adminPickupPage)
 import Server.Layout (Chrome, cartLinkEl, layout, layoutWithHero)
 
 type WaitlistFields r =
@@ -33,7 +33,8 @@ type WaitlistFields r =
   | r
   )
 
-type HomeVM = { | Chrome () }
+-- welcome is admin-edited copy, already rendered and sanitized (server/copy.js).
+type HomeVM = { | Chrome ( welcome :: String ) }
 
 -- The server builds every href, so next is encoded once, in JavaScript.
 type LoginVM =
@@ -139,26 +140,14 @@ type WaitlistVM = { | WaitlistFields ( signedIn :: Boolean, accountLabel :: Stri
 
 -- ---------------------------------------------------------------- home
 
--- The copy and image are placeholders until the owner writes them.
+-- The copy is edited at /admin/site; the image is fixed.
 homePage :: HomeVM -> String
 homePage vm = layoutWithHero vm hero empty
   where
   hero =
     el "section" [ cls "hero", A "aria-label" "Welcome" ]
       [ el "div" [ cls "hero-inner" ]
-          [ el "div" [ cls "hero-copy" ]
-              [ el "p" [ cls "description" ]
-                  [ text "Hi there! Haven't you wanted your own "
-                  , el "strong" [] [ text "birdhouse" ]
-                  , text " for Eastern Bluebirds?"
-                  ]
-              , el "p" [ cls "description" ] [ text "It's very ", el "em" [] [ text "easy" ], text ":" ]
-              , el "ol" [ cls "description" ]
-                  [ el "li" [] [ el "a" [ A "href" "/login#create" ] [ text "Sign up" ], text " to create your free account," ]
-                  , el "li" [] [ el "a" [ A "href" "/products" ] [ text "Shop" ], text " to get yours today, and" ]
-                  , el "li" [] [ text "Add yourself to the waiting list to get notified when new birdhouses are available" ]
-                  ]
-              ]
+          [ el "div" [ cls "hero-copy prose" ] [ raw vm.welcome ]
           , el "figure" [ cls "hero-figure" ]
               [ elVoid "img" [ cls "hero-image", A "src" "/hero-birdhaus.jpg", A "width" "1400", A "height" "1180", A "alt" "A Birdhaus bluebird house held up in a backyard" ] ]
           ]

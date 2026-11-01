@@ -1,6 +1,8 @@
 /* Small print, badges and inline messages. */
 .fine-print { margin: var(--size-2) 0 0; color: var(--muted); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
-.description { margin: 0 0 var(--size-4); color: var(--body-text); line-height: var(--font-lineheight-3); }
+/* .prose holds admin-edited copy (server/copy.js), whose blocks can't carry
+   classes, so they get the description's look. */
+.description, .prose > :is(p, ul, ol) { margin: 0 0 var(--size-4); color: var(--body-text); line-height: var(--font-lineheight-3); }
 .preorder-note {
   display: inline-block;
   margin: 0 0 var(--size-3);
