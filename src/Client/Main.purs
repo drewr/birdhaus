@@ -11,6 +11,7 @@ foreign import initSignOut :: Effect Unit
 foreign import initWaitlistTracking :: Effect Unit
 foreign import initCheckout :: Effect Unit
 foreign import initConfirmation :: Effect Unit
+foreign import initGallery :: Effect Unit
 
 main :: Effect Unit
 main = do
@@ -19,3 +20,4 @@ main = do
   initWaitlistTracking
   initCheckout
   initConfirmation
+  initGallery

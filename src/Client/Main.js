@@ -268,3 +268,22 @@ export const initConfirmation = () => {
   }
   track("preorder-paid", { quantity });
 };
+
+// The product page's thumbnails swap the main photo in place. Without script
+// they are links that reload the page on that photo; a modified click still
+// opens one in a new tab.
+export const initGallery = () => {
+  const photo = document.getElementById("product-photo");
+  const thumbs = [...document.querySelectorAll(".product-thumb")];
+  for (const thumb of thumbs) {
+    thumb.addEventListener("click", (event) => {
+      if (!photo || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      photo.srcset = thumb.dataset.srcset;
+      photo.src = thumb.dataset.src;
+      photo.alt = thumb.dataset.alt;
+      for (const other of thumbs) other.setAttribute("aria-current", String(other === thumb));
+      window.history.replaceState(null, "", thumb.href);
+    });
+  }
+};

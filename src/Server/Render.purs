@@ -55,8 +55,13 @@ type LoginVM =
 type CodeVM = { | Chrome ( email :: String, signingUp :: Boolean, error :: String, notice :: String ) }
 
 -- One listing card; price and availability are formatted by the server.
+-- srcset is empty when the image is an illustration rather than a photo.
 type ProductCard =
-  { href :: String, name :: String, summary :: String, image :: String, imageAlt :: String, price :: String, availability :: String }
+  { href :: String, name :: String, summary :: String, image :: String, imageAlt :: String, srcset :: String, price :: String, availability :: String }
+
+-- A detail-page thumbnail: a link to ?photo=<name> that the client turns into
+-- an in-place swap using src, srcset and alt.
+type Thumb = { href :: String, src :: String, srcset :: String, alt :: String, thumb :: String, current :: Boolean }
 
 type ProductsVM = { | Chrome ( products :: Array ProductCard ) }
 
@@ -66,8 +71,10 @@ type ProductVM =
           ( slug :: String
           , name :: String
           , summary :: String
-          , image :: String
+          , image :: String -- the photo shown, or the illustration
           , imageAlt :: String
+          , srcset :: String -- empty for an illustration
+          , thumbs :: Array Thumb -- empty unless there are photos to choose between
           , open :: Boolean
           , batched :: Boolean -- sold through the pre-order batch, with its waitlist
           , details :: Boolean -- the Bluebird House's feature, spec and FAQ sections
@@ -261,8 +268,12 @@ productsPage vm =
   card p =
     el "li" []
       [ el "a" [ cls "product-card", A "href" p.href ]
-          [ el "span" [ cls "product-card-figure" ]
-              [ elVoid "img" [ cls "product-card-image", A "src" p.image, A "alt" p.imageAlt ] ]
+          [ el "span" [ cls (if p.srcset == "" then "product-card-figure" else "product-card-figure product-card-photo") ]
+              [ elVoid "img"
+                  ( [ cls "product-card-image", A "src" p.image, A "alt" p.imageAlt ]
+                      <> photoAttrs p.srcset "(max-width: 480px) 100vw, 340px"
+                  )
+              ]
           , el "span" [ cls "product-card-name" ] [ text p.name ]
           , el "span" [ cls "product-card-summary" ] [ text p.summary ]
           , el "span" [ cls "product-card-price" ] [ text p.price ]
@@ -292,11 +303,35 @@ productPage vm =
 productMedia :: ProductVM -> Html
 productMedia vm =
   el "div" [ cls "product-media" ]
-    [ el "figure" [ cls "product-figure" ]
-        [ elVoid "img" [ cls "product-illustration", A "src" vm.image, A "alt" vm.imageAlt ]
-        , el "figcaption" [ cls "product-figcaption" ] [ text "Illustration — product photos coming soon." ]
-        ]
+    [ if vm.srcset == "" then
+        el "figure" [ cls "product-figure" ]
+          [ elVoid "img" [ cls "product-illustration", A "src" vm.image, A "alt" vm.imageAlt ] ]
+      else
+        el "figure" [ cls "product-photo-figure" ]
+          [ elVoid "img"
+              ( [ cls "product-photo", A "id" "product-photo", A "src" vm.image, A "alt" vm.imageAlt ]
+                  <> photoAttrs vm.srcset "(max-width: 1023px) 100vw, 600px"
+              )
+          ]
+    , whenH (not (null vm.thumbs)) $
+        el "ul" [ cls "product-thumbs", A "aria-label" "Photos" ] (map thumbLink vm.thumbs)
     ]
+
+thumbLink :: Thumb -> Html
+thumbLink t =
+  el "li" []
+    [ el "a"
+        [ cls "product-thumb", A "href" t.href, A "aria-current" (if t.current then "true" else "false")
+        , A "data-src" t.src, A "data-srcset" t.srcset, A "data-alt" t.alt
+        ]
+        [ elVoid "img" [ A "src" t.thumb, A "width" "160", A "height" "160", A "alt" t.alt ] ]
+    ]
+
+-- Photos are square; the size attributes reserve their space before they load.
+photoAttrs :: String -> String -> Array Attr
+photoAttrs srcset sizes
+  | srcset == "" = []
+  | otherwise = [ A "srcset" srcset, A "sizes" sizes, A "width" "1200", A "height" "1200" ]
 
 purchase :: ProductVM -> Html
 purchase vm =

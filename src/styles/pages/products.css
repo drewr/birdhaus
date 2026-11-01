@@ -27,6 +27,9 @@
   background: var(--wash);
 }
 .product-card-image { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* A photo fills its square edge to edge. */
+.product-card-photo { padding: 0; }
+.product-card-photo .product-card-image { object-fit: cover; }
 .product-card-name { font-size: var(--font-size-1); font-weight: var(--font-weight-7); }
 .product-card-summary { color: var(--body-text); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
 .product-card-price { font-size: var(--font-size-0); font-weight: var(--font-weight-7); }

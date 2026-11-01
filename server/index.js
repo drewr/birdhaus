@@ -9,7 +9,7 @@ import { batchStatus, currentBatch, displayDate } from "./batch.js";
 import { unitPrice, formatUsd, formatTotal } from "./price.js";
 import { readCart, writeCart, clearCart } from "./cart.js";
 import { formatOrder } from "./order-format.js";
-import { products, productName, visibleProduct, visibleTo } from "./products.js";
+import { photoView, products, productName, visibleProduct, visibleTo } from "./products.js";
 import * as auth from "./auth.js";
 import * as emailLogin from "./email-login.js";
 import * as db from "./db.js";
@@ -491,6 +491,8 @@ app.post("/waitlist", async (request, response) => {
 // Image builds pin every file's mtime, so static's validators can't tell builds
 // apart; hashed /assets are immutable, everything else no-cache.
 app.use("/assets", express.static(path.join(dist, "assets"), { immutable: true, maxAge: "1y" }));
+// Product photo names carry a content hash too (scripts/product-photos.hs).
+app.use("/photos", express.static(path.join(dist, "photos"), { immutable: true, maxAge: "1y" }));
 app.use(express.static(dist, {
   index: false,
   etag: false,
@@ -616,15 +618,19 @@ app.get("/products", async (request, response) => {
     : (status.reason === "closed" ? "Pre-orders have closed" : "Sold out · join the waitlist");
   const vm = {
     ...chrome(request),
-    products: products.filter((product) => visibleTo(product, account)).map((product) => ({
-      href: `/products/${product.slug}`,
-      name: product.name,
-      summary: product.summary,
-      image: product.image,
-      imageAlt: product.imageAlt,
-      price: formatUsd(unitPrice(product)),
-      availability: product.batched ? batchLine : "In stock"
-    }))
+    products: products.filter((product) => visibleTo(product, account)).map((product) => {
+      const photo = product.photos[0] && photoView(product, product.photos[0]);
+      return {
+        href: `/products/${product.slug}`,
+        name: product.name,
+        summary: product.summary,
+        image: photo ? photo.src : product.image,
+        imageAlt: photo ? photo.alt : product.imageAlt,
+        srcset: photo ? photo.srcset : "",
+        price: formatUsd(unitPrice(product)),
+        availability: product.batched ? batchLine : "In stock"
+      };
+    })
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.productsPage(vm));
 });
@@ -635,13 +641,20 @@ app.get("/products/:slug", async (request, response) => {
   const status = await availability(product);
   const showRemaining = status.open && status.remaining !== null && batch.cap > 0 && status.remaining < batch.cap * 0.2;
   const line = cartLine(request);
+  // ?photo= picks the photo shown, so the thumbnails work as plain links too.
+  const photos = product.photos.map((photo) => photoView(product, photo));
+  const shown = photos.find((photo) => photo.name === request.query.photo) ?? photos[0];
   const vm = {
     ...chrome(request, status.reason),
     slug: product.slug,
     name: product.name,
     summary: product.summary,
-    image: product.image,
-    imageAlt: product.imageAlt,
+    image: shown ? shown.src : product.image,
+    imageAlt: shown ? shown.alt : product.imageAlt,
+    srcset: shown ? shown.srcset : "",
+    thumbs: photos.length > 1
+      ? photos.map((photo) => ({ ...photo, href: `?photo=${photo.name}`, current: photo === shown }))
+      : [],
     ...waitlistLinks,
     open: status.open,
     batched: product.batched,
