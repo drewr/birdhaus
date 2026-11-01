@@ -36,7 +36,8 @@ That replaces the old rule that guest checkout must always work.
 - `server/mail.js` (new): `nodemailer` over SES SMTP, from the existing
   `birdhaus-ses` Secret (`SMTP_URL`, `SMTP_PORT`, `SMTP_USERNAME`,
   `SMTP_PASSWORD`, `SMTP_FROM`), which `run.hs --mail-secret` adds to the
-  workload. Plain-text code email.
+  workload. The email is short text with a plain HTML copy (the name, the
+  code set apart, a footer link, no images); the code is not in the subject.
 - `server/migrations/007_login_codes.sql`: `login_codes(email, code_hash,
   purpose, expires_at, attempts, used_at, created_at)`. Codes are 6 random
   digits, stored as an HMAC (SESSION_SECRET), valid 10 minutes, 5 tries, and at

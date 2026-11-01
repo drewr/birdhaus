@@ -31,7 +31,7 @@ const hash = (email, code) => crypto.createHmac("sha256", SECRET).update(`${emai
 export async function sendCode(email, purpose) {
   const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
   if (!(await db.saveLoginCode(email, hash(email, code), purpose))) return "limited";
-  await mail.sendCode(email, code);
+  await mail.sendCode(email, code, purpose);
   return "sent";
 }
 
