@@ -53,7 +53,7 @@ export async function migrate() {
 // background instead of failing startup.
 export function migrateInBackground() {
   if (!isConfigured()) {
-    console.warn("PGHOST is not set: orders and the waitlist are disabled.");
+    console.warn("PGHOST is not set: orders, inventory and restock requests are disabled.");
     migrations = "not configured";
     return;
   }
@@ -69,11 +69,6 @@ export function migrateInBackground() {
 // For /api/health: a deploy is finished only once its migrations are applied.
 export const migrationStatus = () => migrations;
 
-export async function paidUnits(batch) {
-  const { rows } = await query("select coalesce(sum(quantity), 0)::int as units from orders where batch = $1 and status = 'paid'", [batch]);
-  return rows[0].units;
-}
-
 // For delivery, address_check says how the radius was verified; a paid address
 // whose ZIP differs from the one /api/delivery/verify passed is a mismatch.
 function addressCheck(intent) {
@@ -84,13 +79,27 @@ function addressCheck(intent) {
   return paidZip === intent.metadata.verified_zip ? check : "mismatch";
 }
 
+// Records the order and counts it against the product's inventory in one
+// statement, so a redelivered event (the insert does nothing) never counts
+// twice. Returns { product, before, after } when a tracked count changed.
 export async function recordOrder(intent) {
   const fulfillment = ["pickup", "delivery"].includes(intent.metadata.fulfillment) ? intent.metadata.fulfillment : "ship";
-  await query(
-    `insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub, fulfillment,
-       pickup_slot_id, pickup_label, fee_amount, delivery_slot_id, delivery_label, address_check, product)
-     values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12, $13, $14, $15, $16, $17)
-     on conflict (id) do nothing`,
+  const { rows } = await query(
+    `with placed as (
+       insert into orders (id, batch, quantity, amount, currency, email, shipping, created_at, account_sub, fulfillment,
+         pickup_slot_id, pickup_label, fee_amount, delivery_slot_id, delivery_label, address_check, product)
+       values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       on conflict (id) do nothing
+       returning id, product, quantity
+     ), counted as (
+       update inventory set available = inventory.available - placed.quantity, updated_at = now()
+       from placed where inventory.product = placed.product
+       returning inventory.product, inventory.available + placed.quantity as before, inventory.available as after, placed.id
+     ), logged as (
+       insert into inventory_changes (product, before, after, reason, order_id)
+       select product, before, after, 'order', id from counted
+     )
+     select product, before, after from counted`,
     [
       intent.id,
       intent.metadata.batch || "unbatched",
@@ -111,6 +120,7 @@ export async function recordOrder(intent) {
       intent.metadata.product || "bluebird-house"
     ]
   );
+  return rows[0] ?? null;
 }
 
 export async function markRefunded(paymentIntentId) {
@@ -121,15 +131,6 @@ export async function markRefunded(paymentIntentId) {
 // Older orders keep their guest attribution if the account is already set.
 export async function linkOrders(accountSub, email) {
   await query("update orders set account_sub = $1 where email = $2 and account_sub is null", [accountSub, email]);
-}
-
-export async function joinWaitlist(batch, email, quantity, postalCode, accountSub) {
-  await query(
-    `insert into waitlist (batch, email, quantity, postal_code, account_sub) values ($1, $2, $3, $4, $5)
-     on conflict (batch, email) do update set quantity = excluded.quantity, postal_code = excluded.postal_code,
-       account_sub = coalesce(excluded.account_sub, waitlist.account_sub), updated_at = now()`,
-    [batch, email, quantity, postalCode, accountSub ?? null]
-  );
 }
 
 // Sign-in codes (docs/design/login-page.md): at most five sent per address an

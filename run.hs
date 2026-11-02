@@ -12,8 +12,8 @@
 -- (--db-secret), and a dockerconfigjson Secret that can pull from GHCR
 -- (--pull-secret); the domain's DNSZone is verified and delegated to Datum.
 --
--- The pre-order batch is set here: --cap, --closes and --ship-by. Raising the
--- cap or moving a date is a redeploy.
+-- Orders are recorded under --batch. How many are left is the inventory, edited
+-- at /admin/inventory.
 --
 -- The version (also the image tag) comes from git: vX.Y.Z at a release tag,
 -- otherwise vX.Y.(Z+1)-dev.N. The deploy finishes when the domain serves that
@@ -54,9 +54,7 @@ data Opts = Opts
   , domain :: Text
   , version :: Maybe Text
   , batch :: Text
-  , cap :: Maybe Text
-  , closes :: Text
-  , shipBy :: Text
+  , alertEmail :: Maybe Text
   , adminGroup :: Text
   , replicas :: Text
   , registryUser :: Maybe Text
@@ -79,10 +77,8 @@ parser =
     <*> optText "pull-secret" 'r' "dockerconfigjson Secret used to pull from GHCR"
     <*> opt "domain" 'd' "birdhaus.store" "Public hostname"
     <*> optional (optText "version" 'V' "Version and image tag; vX.Y.Z needs that tag on HEAD (default: from git)")
-    <*> opt "batch" 'B' "xmas-2026" "Pre-order batch ID"
-    <*> (Just <$> opt "cap" 'c' "20" "Units the batch can sell")
-    <*> opt "closes" 'C' "2026-12-01" "Last day of pre-orders, YYYY-MM-DD (US Central)"
-    <*> opt "ship-by" 'S' "2026-12-15" "Ship-by date promised at checkout, YYYY-MM-DD"
+    <*> opt "batch" 'B' "xmas-2026" "Batch that orders are recorded under"
+    <*> optional (optText "alert-email" 'a' "Where to email low-stock alerts (default: none, only logged)")
     <*> opt "admin-group" 'G' "birdhaus-admins" "Rauthy group whose members get the store admin portal"
     -- Two instances so a rollout replaces one while the other keeps serving;
     -- with one, every deploy is a short 503 from the edge.
@@ -110,8 +106,6 @@ main = do
   unless (ghCode == ExitSuccess) $
     die "Authenticate gh with write:packages: gh auth login --hostname github.com --scopes write:packages"
   procs datumctl (["whoami"] <> maybe [] (\s -> ["--session", s]) (session o)) empty
-  for_ (cap o) $ \c ->
-    unless (T.all (`elem` ['0' .. '9']) c && not (T.null c)) $ die ("--cap must be a whole number, not " <> c)
   let r = replicas o
   unless (not (T.null r) && T.all (`elem` ['0' .. '9']) r && T.take 1 r /= "0") $
     die ("--replicas must be a positive whole number, not " <> r)
@@ -289,12 +283,8 @@ workloadManifest o auth extraSecrets ver commit image =
     , "            env:"
     , "            - name: BATCH_ID"
     , "              value: \"" <> batch o <> "\""
-    , "            - name: BATCH_CAP"
-    , "              value: \"" <> fromMaybe "" (cap o) <> "\""
-    , "            - name: BATCH_CLOSES_AT"
-    , "              value: \"" <> closes o <> "\""
-    , "            - name: BATCH_SHIP_BY"
-    , "              value: \"" <> shipBy o <> "\""
+    , "            - name: STOCK_ALERT_EMAIL"
+    , "              value: \"" <> fromMaybe "" (alertEmail o) <> "\""
     , "            - name: ADMIN_GROUP"
     , "              value: \"" <> adminGroup o <> "\""
     , "            - name: APP_VERSION"

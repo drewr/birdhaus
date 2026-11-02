@@ -16,3 +16,9 @@
 }
 .admin-check { display: flex; gap: var(--size-2); align-items: center; margin: 0 0 var(--size-3); font-weight: var(--font-weight-7); }
 .admin-copy textarea { font-family: var(--font-mono); }
+.admin-stock {
+  & input[type="number"] { max-width: var(--size-12); }
+  & .admin-inline { margin-top: var(--size-2); }
+}
+.admin-oversold { margin: 0 0 var(--size-3); color: var(--danger); font-weight: var(--font-weight-7); }
+.admin-history { margin-top: var(--size-3); }

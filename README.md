@@ -13,7 +13,7 @@ Use `npm run build` to compile the PureScript module and produce the production 
 
 The server requires `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`. `VITE_STRIPE_PUBLISHABLE_KEY` is also accepted by the server as an alternative publishable-key variable. Never put the secret key in a `VITE_` variable or browser code.
 
-Without `PGHOST` the store still runs, but orders and the waitlist are not recorded. To exercise them locally, point the `PG*` variables at a throwaway Postgres and forward Stripe events with `stripe listen --forward-to localhost:8080/api/stripe-webhook`, setting `STRIPE_WEBHOOK_SECRET` to the secret it prints.
+Without `PGHOST` the store still runs, but orders and restock requests are not recorded and tracked products (the Bluebird House) show as temporarily unavailable. To exercise them locally, point the `PG*` variables at a throwaway Postgres and forward Stripe events with `stripe listen --forward-to localhost:8080/api/stripe-webhook`, setting `STRIPE_WEBHOOK_SECRET` to the secret it prints.
 
 Email sign-in needs `RAUTHY_API_KEY`, the `SMTP_*` settings and Postgres. Locally, `MAIL_LOG=1` prints each sign-in code to the server log instead of sending it.
 
@@ -64,7 +64,8 @@ The workflow pins `datumctl` by release and checksum and the `compute` plugin by
 - `--pull-secret` names an existing image-pull secret in the project holding a GHCR token that can read the image.
 - The Stripe keys come from a secret in the project (default `birdhaus-stripe`, override with `--stripe-secret`), exposed to the workload as environment variables. Create it from test keys, never from `.env.production`.
 - The database and webhook settings come from a second secret (default `birdhaus-store-db`, override with `--db-secret`), created once by `./scripts/store-db-secret.hs --project <project>`.
-- The pre-order batch is set with `--batch` (default `xmas-2026`), `--cap` (default `20`, the Christmas 2026 batch), `--closes` (default `2026-12-01`) and `--ship-by` (default `2026-12-15`).
+- Orders are recorded under the batch `--batch` (default `xmas-2026`). Stock is the inventory, set at `/admin/inventory`.
+- `--alert-email` is where low-stock alerts go; without it they're only logged.
 - Other options (`--location`, `--workload`, `--image-name`, `--domain`, `--version`, `--session`) have defaults; run `./run.hs --help`.
 - Image builds use `datumctl compute build`, which uses the container engine's BuildKit (Docker, OrbStack, Colima, …) and honors `DOCKER_HOST`/`DOCKER_CONTEXT`; set `BUILDKIT_HOST` to use a different BuildKit.
 - Every run with a new version replaces the running instances one at a time.
@@ -90,18 +91,16 @@ export AWS_PROFILE=<admin-profile>
 
 `dns/ses.yaml` is generated, so regenerating it never touches the Stripe records in `dns/cname.yaml`.
 
-## Pre-orders
+## Orders and inventory
 
-The store sells in batches. Each pre-order is charged at checkout and promises a ship-by date; when the batch's cap is reached or its closing date passes, the page swaps checkout for a waitlist (email, quantity, optional ZIP, no payment).
+The store sells in-stock houses for local pick-up or local delivery, charged at checkout. How many are left is the inventory, which admins set at `/admin/inventory` ([`docs/design/inventory.md`](docs/design/inventory.md)); when it reaches 0, the product page offers "Notify me when available" instead.
 
-- **Records:** Stripe's `payment_intent.succeeded` webhook (`POST /api/stripe-webhook`, signature-verified) writes each order to the `orders` table in the `birdhaus` database; `charge.refunded` marks it refunded, which frees its units. Redelivered events are no-ops. If the database is down the webhook returns 500 and Stripe retries for up to three days.
-- **Cap:** `POST /api/create-payment-intent` refuses an order that would exceed the cap. It is a soft cap: simultaneous checkouts can overshoot by a few units. If the database is unreachable, checkout stays open.
-- **Page:** `GET /api/batch` tells the page whether the batch is open, the ship-by date, and the units left once fewer than 20% remain.
+- **Records:** Stripe's `payment_intent.succeeded` webhook (`POST /api/stripe-webhook`, signature-verified) writes each order to the `orders` table in the `birdhaus` database and counts it against the inventory; `charge.refunded` marks it refunded but doesn't restock. Redelivered events are no-ops. If the database is down the webhook returns 500 and Stripe retries for up to three days.
+- **Stock:** the cart can't hold more than is left, and checkout refuses an order that would exceed it. Simultaneous checkouts can still oversell the last unit; the admin page flags that. If the database is unreachable, tracked products stop selling until it's back.
+- **Restock emails:** shoppers who ask to be notified are listed per product; an admin emails them all from `/admin/inventory` once there's stock. Low-stock alerts go to `run.hs --alert-email`.
 - **Schema:** numbered SQL files in `server/migrations/`, applied at startup under an advisory lock.
-- **Analytics:** Umami events `checkout-start`, `preorder-paid`, `waitlist-join` and `sold-out-view`.
-- **Demand report:** `./scripts/demand.hs --project <project> --cap <n>` prints paid units by week and day, refunds, the waitlist, and the 7-day sell rate with a projected sell-out date.
-
-To raise the cap or move a date, redeploy with new `run.hs` options.
+- **Analytics:** Umami events `checkout-start`, `preorder-paid` (any paid order; the name predates in-stock sales), `restock-request` and `sold-out-view`.
+- **Demand report:** `./scripts/demand.hs --project <project> --cap <n>` prints paid units by week and day, refunds, the old waitlist, and the 7-day sell rate with a projected sell-out date. It predates the inventory and still reads the old tables.
 
 ## Accounts
 
@@ -127,5 +126,6 @@ Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`u
 
 - [A reproducible AWS account, and moving off the sandbox](docs/design/aws-account.md) (built): one script to set up, migrate and tear down every Birdhaus AWS resource.
 - [S3-backed PostgreSQL on Datum Compute](docs/design/postgres-s3.md): persistence for orders, analytics and accounts. Deployed; operations in [`postgres/README.md`](postgres/README.md).
+- [Inventory](docs/design/inventory.md) (built): stock per product set in the admin portal, low-stock and sold-out behaviour, and restock emails.
 - [Rollouts without downtime](docs/design/rollouts.md) (built): draining on `SIGTERM`, the edge's passive health check, and what dev measurements showed.
 - [Accounts and sign-in with Google and email](docs/design/accounts.md) (built): a self-hosted Rauthy identity service in the `birdhaus` Network, wired into the store and Umami analytics.

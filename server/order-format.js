@@ -20,7 +20,6 @@ export function formatOrder(order) {
     total: `${money.format((order.amount || 0) / 100)} ${currency}`,
     email: order.email ?? "",
     shipTo: [order.shipping?.name, address.line1, address.line2, cityLine, address.country].filter(Boolean),
-    shipBy: order.shipBy ?? "",
     quantity: order.quantity ?? 1,
     fulfillment: order.fulfillment ?? "ship",
     pickupLabel: order.pickupLabel ?? "",

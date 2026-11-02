@@ -27,10 +27,17 @@
 .product-details .page-title { margin: 0; }
 .price { margin: var(--size-3) 0; font-size: var(--font-size-2); font-weight: var(--font-weight-7); }
 .add-form { margin: 0 0 var(--size-1); }
+/* The quantity and, when few are left, how many, side by side. */
+.quantity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-3);
 
-.sold-out h2 { margin: 0 0 var(--size-2); font-size: var(--font-size-3); }
-.waitlist-inline { margin-top: var(--size-4); padding-top: var(--size-3); border-top: var(--rule); }
-.waitlist-signup .description { margin-bottom: var(--size-3); }
+  & .stock-note { margin: 0; }
+}
+
+.sold-out-status { margin: 0 0 var(--size-3); font-size: var(--font-size-3); font-weight: var(--font-weight-7); }
+.notify .fine-print { margin-top: var(--size-2); }
 
 /* Below-the-fold merchandising */
 .info { margin-top: var(--size-9); padding-top: var(--size-8); border-top: var(--rule); }

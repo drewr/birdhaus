@@ -2,10 +2,12 @@ import { readFileSync } from "node:fs";
 import { ADMIN_GROUP } from "./auth.js";
 
 // What the listing and detail pages show about each product. Price lives in
-// price.js and availability in the batch, so neither is repeated here.
+// price.js and stock in the inventory table, so neither is repeated here.
 // visibility is "public" (everyone, signed in or not) or { groups }: only
-// accounts in one of those Rauthy groups see, add or buy it. batched products
-// sell through the pre-order batch (cap, ship-by, waitlist); details shows the
+// accounts in one of those Rauthy groups see, add or buy it. inventory products
+// sell only what /admin/inventory says is available, and none while the
+// database is down; the rest are unlimited. batched products' orders are
+// recorded under the current batch (others as "unbatched"); details shows the
 // Bluebird House's feature, spec and FAQ sections. photos are listed in display
 // order, the first being the default; their files come from
 // scripts/product-photos.hs. A product without photos shows its image.
@@ -22,6 +24,7 @@ export const products = [
       { name: "interior", alt: "The Bluebird House with its front panel swung open to show the inside" }
     ],
     visibility: "public",
+    inventory: true,
     batched: true,
     details: true
   },
@@ -34,6 +37,7 @@ export const products = [
     imageAlt: "Placeholder illustration",
     photos: [],
     visibility: { groups: [ADMIN_GROUP] },
+    inventory: false,
     batched: false,
     details: false
   }

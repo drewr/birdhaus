@@ -1,7 +1,8 @@
 import nodemailer from "nodemailer";
 
-// Sign-in codes go out through SES SMTP with the birdhaus-ses settings Rauthy
-// also uses. MAIL_LOG=1 prints the code instead, for local development.
+// Sign-in codes, restock notices and stock alerts go out through SES SMTP with
+// the birdhaus-ses settings Rauthy also uses. MAIL_LOG=1 prints them instead,
+// for local development.
 const LOG = process.env.MAIL_LOG === "1";
 // Links back to whichever store sent the code (dev or prod).
 const SITE = (() => {
@@ -43,9 +44,44 @@ export function codeEmail(code, purpose) {
   return { subject: purpose === "signup" ? "Finish creating your Birdhaus account" : "Your Birdhaus sign-in code", text, html };
 }
 
-export async function sendCode(to, code, purpose) {
-  const message = codeEmail(code, purpose);
-  if (LOG) return console.log(`[mail] to ${to}: ${message.subject}: ${code}`);
+// Plain notes from the store: a few paragraphs and one link, in the same
+// mostly-text layout as the code email.
+function noteEmail(subject, lines, link) {
+  const host = new URL(SITE).host;
+  const text = `Birdhaus\n\n${lines.join("\n\n")}\n\n${link.label}: ${link.href}\n\nBirdhaus · ${SITE}\n`;
+  const html = `<!doctype html>
+<html lang="en"><body style="margin:0;padding:24px;background:#ffffff;color:#111111;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5">
+<div style="max-width:480px">
+<p style="margin:0 0 24px;font-size:24px;font-weight:700">Birdhaus</p>
+${lines.map((line) => `<p style="margin:0 0 16px">${escape(line)}</p>`).join("\n")}
+<p style="margin:8px 0 24px"><a href="${escape(link.href)}" style="color:#111111;font-weight:700">${escape(link.label)}</a></p>
+<p style="margin:0;padding-top:16px;border-top:1px solid #d9d9d9;color:#606060;font-size:12px">Birdhaus · <a href="${escape(SITE)}" style="color:#606060">${escape(host)}</a></p>
+</div>
+</body></html>
+`;
+  return { subject, text, html };
+}
+
+// To a shopper who asked to hear when a sold-out product is back.
+export const restockEmail = (product) =>
+  noteEmail(`The ${product.name} is available again`, [
+    `You asked us to let you know when the ${product.name} was back. It is, while stock lasts.`,
+    "This is the only email you'll get about it. If it sells out again, you can ask to be notified again on the product page."
+  ], { label: `Get your ${product.name}`, href: `${SITE}/products/${product.slug}` });
+
+// To the owner (STOCK_ALERT_EMAIL) when an order leaves few or none.
+export function stockAlertEmail(product, available) {
+  const state = available < 0 ? `oversold by ${-available}` : available === 0 ? "sold out" : `down to ${available}`;
+  return noteEmail(`${product.name} is ${state}`, [
+    `An order just left the ${product.name} ${state}.`,
+    available <= 0
+      ? "Shoppers now see it as sold out and can ask to be notified. Raise the count when you have more, then email the people waiting."
+      : "Shoppers see how many are left. Raise the count if you have more on hand."
+  ], { label: "Open the inventory", href: `${SITE}/admin/inventory` });
+}
+
+export async function send(to, message) {
+  if (LOG) return console.log(`[mail] to ${to}: ${message.subject}\n${message.text}`);
   transport ??= nodemailer.createTransport({
     host: process.env.SMTP_URL,
     port: Number(process.env.SMTP_PORT) || 587,
@@ -56,4 +92,9 @@ export async function sendCode(to, code, purpose) {
     socketTimeout: 10000
   });
   await transport.sendMail({ from: process.env.SMTP_FROM, to, ...message });
+}
+
+export async function sendCode(to, code, purpose) {
+  if (LOG) return console.log(`[mail] to ${to}: ${codeEmail(code, purpose).subject}: ${code}`);
+  await send(to, codeEmail(code, purpose));
 }

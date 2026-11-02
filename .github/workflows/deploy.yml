@@ -91,9 +91,10 @@ jobs:
       - *nix
       - *datumctl
       - *buildkit
-      # Batch terms (--cap/--closes/--ship-by) are run.hs defaults; changing
-      # the batch is a commit and a release.
+      # Low-stock alerts go to the ALERT_EMAIL repository variable, so the
+      # address stays out of the repository.
       - name: Deploy prod
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./run.hs -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER" --version "$TAG"
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+        run: ./run.hs -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER" --version "$TAG" ${ALERT_EMAIL:+--alert-email "$ALERT_EMAIL"}

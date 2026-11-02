@@ -1,8 +1,8 @@
 /* Bold labels over full-width square inputs. */
-.waitlist-form, .quantity-field, #payment-form, .admin-form, .login-email {
+.quantity-field, #payment-form, .admin-form, .login-email {
   & label:not(.admin-check) { display: block; margin: 0 0 var(--size-2); font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
 }
-.waitlist-form input, #payment-form input, .login-email input:not([type="hidden"]),
+#payment-form input, .login-email input:not([type="hidden"]),
 .admin-form :is(input:not([type="checkbox"], [type="hidden"]), select, textarea) {
   display: block;
   width: 100%;
@@ -10,7 +10,6 @@
   border: var(--border-size-1) solid var(--field-border);
   margin-bottom: var(--size-4);
 }
-.waitlist-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--size-3); }
 /* Admin rows hold two or three fields; they wrap when the form is narrow. */
 .admin-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--size-12), 1fr)); gap: var(--size-3); }
 

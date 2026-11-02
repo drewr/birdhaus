@@ -8,7 +8,7 @@ import Effect (Effect)
 
 foreign import initAnalytics :: Effect Unit
 foreign import initSignOut :: Effect Unit
-foreign import initWaitlistTracking :: Effect Unit
+foreign import initNotifyTracking :: Effect Unit
 foreign import initCheckout :: Effect Unit
 foreign import initConfirmation :: Effect Unit
 foreign import initGallery :: Effect Unit
@@ -17,7 +17,7 @@ main :: Effect Unit
 main = do
   initAnalytics
   initSignOut
-  initWaitlistTracking
+  initNotifyTracking
   initCheckout
   initConfirmation
   initGallery

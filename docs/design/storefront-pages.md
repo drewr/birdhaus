@@ -25,9 +25,10 @@ looks one up. A second product later means a second entry plus its own price
 and batch, which this plan doesn't build.
 
 Since then each entry also has `visibility` (`"public"`, or `{ groups }` for
-accounts in one of those Rauthy groups) and `batched` (whether it sells through
-the pre-order batch, its cap and waitlist). Demo Thing, $0.50 and visible only
-to `birdhaus-admins`, is unbatched so test orders never use up the cap; orders
+accounts in one of those Rauthy groups), `batched` (whether its orders are
+recorded under the current batch) and `inventory` (whether its stock is
+tracked, docs/design/inventory.md). Demo Thing, $0.50 and visible only to
+`birdhaus-admins`, is unbatched and untracked so test orders never use up stock; orders
 record their product (`orders.product`) and the admin tables show it. The cart
 holds one product, so adding another replaces it.
 
@@ -35,8 +36,8 @@ holds one product, so adding another replaces it.
 
 - `GET /`: `homePage` with the chrome only.
 - `GET /products`: `productsPage` with one card per catalog entry: name,
-  summary, price, and an availability line (`Pre-order · ships by …`,
-  `Sold out — join the waitlist` or `Pre-orders have closed`).
+  summary, price, and an availability line (`In stock`, `Only N left`,
+  `Sold out` or `Temporarily unavailable`).
 - `GET /products/:slug`: the current `/` handler, unchanged except that it
   looks the product up; an unknown slug redirects 303 to `/products`.
 - Redirects that meant "the product" now go to `/products/bluebird-house`:

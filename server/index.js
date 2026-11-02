@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { batchStatus, currentBatch, displayDate } from "./batch.js";
+import { currentBatch } from "./batch.js";
 import { unitPrice, formatUsd, formatTotal } from "./price.js";
 import { readCart, writeCart, clearCart } from "./cart.js";
 import { formatOrder } from "./order-format.js";
@@ -16,6 +16,8 @@ import * as db from "./db.js";
 import * as pickup from "./pickup.js";
 import * as delivery from "./delivery.js";
 import * as copy from "./copy.js";
+import * as inventory from "./inventory.js";
+import * as mail from "./mail.js";
 import { lastGeocodeFailure } from "./geocode.js";
 
 const app = express();
@@ -134,14 +136,18 @@ async function fulfillmentNote() {
   return "Local pick-up only for now — shipping coming soon. Taxes not included.";
 }
 
-// Only batched products are capped and close; the rest are always open.
-async function availability(product) {
-  return product.batched ? batchStatus(batch, await paidUnits()) : { open: true, reason: "open", remaining: null };
+// The inventory decides (server/inventory.js): { open, reason, remaining },
+// remaining null for no limit.
+const availability = (product) => inventory.stock(product);
+
+// Whether checkout can go ahead with the cart as it is; when not, /cart says why.
+async function cartFits(line) {
+  if (!line.product) return false;
+  const status = await availability(line.product);
+  return status.open && (status.remaining === null || line.qty <= status.remaining);
 }
 
-const shipByFor = (product) => (product.batched ? displayDate(batch.shipBy) : "");
-
-// Units the stepper may reach: the batch cap (when nearly gone) or 99.
+// Units the stepper may reach: what's left (when tracked) or 99.
 function stepperLimit(status) {
   return status.remaining === null ? 99 : Math.max(Math.min(99, status.remaining), 1);
 }
@@ -149,16 +155,6 @@ function stepperLimit(status) {
 // When the webhook last failed to write to the database; /api/health reports it.
 let lastWebhookFailure = 0;
 
-// Paid units in the batch, or null when there is no database or it is down.
-async function paidUnits() {
-  if (!db.isConfigured()) return null;
-  try {
-    return await db.paidUnits(batch.id);
-  } catch (error) {
-    console.error("Could not count paid pre-orders; leaving the batch open:", error.message);
-    return null;
-  }
-}
 
 // Stripe signs the raw body, so this route is registered before express.json().
 // A database error returns 500 so that Stripe retries the event (for up to
@@ -178,13 +174,16 @@ app.post("/api/stripe-webhook", express.raw({ type: "application/json" }), async
   }
 
   try {
+    let change = null;
     if (event.type === "payment_intent.succeeded") {
-      await db.recordOrder(event.data.object);
+      change = await db.recordOrder(event.data.object);
     } else if (event.type === "charge.refunded") {
+      // Refunds don't restock: a returned house may not be sellable.
       const charge = event.data.object;
       if (charge.refunded && charge.payment_intent) await db.markRefunded(charge.payment_intent);
     }
     response.json({ received: true });
+    await inventory.alertIfLow(change);
   } catch (error) {
     lastWebhookFailure = Date.now();
     console.error(`Could not record ${event.type} ${event.id}:`, error.message);
@@ -232,7 +231,7 @@ app.get("/api/health", async (_request, response) => {
   response.status(ok ? 200 : 503).json(health);
 });
 
-// Checkout and the waitlist need an account (docs/design/login-page.md). Pages
+// Checkout needs an account (docs/design/login-page.md), as do restock requests. Pages
 // send a signed-out buyer to /login and back; the APIs answer 401.
 function requireAccount(request, response, next) {
   if (auth.accountOf(request)) return next();
@@ -257,10 +256,11 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
 
   const status = await availability(product);
   if (!status.open) {
-    return response.status(409).json({ soldOut: true, error: status.reason === "closed" ? "Pre-orders for this batch have closed." : "This batch has sold out." });
+    const unavailable = status.reason === "unavailable";
+    return response.status(409).json({ soldOut: !unavailable, error: unavailable ? "We can't check stock right now. Please try again shortly." : `The ${product.name} has sold out.` });
   }
   if (status.remaining !== null && quantity > status.remaining) {
-    return response.status(409).json({ error: `Only ${status.remaining} left in this batch. Lower the quantity, or join the waitlist for more.` });
+    return response.status(409).json({ error: `Only ${status.remaining} left. Go back to your cart to lower the quantity.` });
   }
 
   // Pick-up or local delivery; shipping isn't offered yet. The fee comes from
@@ -268,15 +268,14 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
   const choice = await cartChoice(request);
   if (!choice) return response.status(409).json({ error: "Choose a new delivery or pick-up time." });
 
-  const shipBy = shipByFor(product);
   const account = auth.accountOf(request);
-  // Unbatched orders are recorded as "unbatched", so they don't use up the cap.
+  // Unbatched orders are recorded as "unbatched".
   const metadata = {
     product: product.slug,
     quantity: String(quantity),
     fulfillment: choice.method
   };
-  if (product.batched) Object.assign(metadata, { batch: batch.id, ship_by: batch.shipBy });
+  if (product.batched) metadata.batch = batch.id;
   if (choice.method === "delivery") {
     Object.assign(metadata, { fee_cents: String(choice.feeCents), delivery_slot_id: String(choice.slot.id), delivery_label: choice.label });
   } else {
@@ -289,7 +288,7 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
       amount: quantity * unitPrice(product) + choice.feeCents,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
-      description: `${shipBy ? "Pre-order: " : ""}Birdhaus ${product.name} × ${quantity}, ${choice.method === "delivery" ? "local delivery" : "pick-up"}: ${choice.label}`,
+      description: `Birdhaus ${product.name} × ${quantity}, ${choice.method === "delivery" ? "local delivery" : "pick-up"}: ${choice.label}`,
       metadata
     });
     response.json({ clientSecret: intent.client_secret, publishableKey });
@@ -327,7 +326,6 @@ async function lookupOrder(id, clientSecret) {
     currency: intent.currency,
     product: productName(intent.metadata.product || "bluebird-house"),
     quantity: Number(intent.metadata.quantity) || 1,
-    shipBy: displayDate(intent.metadata.ship_by),
     email: intent.receipt_email,
     shipping: intent.shipping && { name: intent.shipping.name, address: intent.shipping.address },
     fulfillment: ["pickup", "delivery"].includes(intent.metadata.fulfillment) ? intent.metadata.fulfillment : "ship",
@@ -415,15 +413,20 @@ app.post("/api/delivery/verify", requireAccount, async (request, response) => {
 
 // Add the chosen amount to what's already in the cart (form POST, 303 to /cart).
 // The cart holds one product, so adding a different one replaces it.
-app.post("/cart/add", (request, response) => {
+// Never more than is left: asking for more fills the cart to what's left and
+// /cart says so.
+app.post("/cart/add", async (request, response) => {
   const product = visibleProduct(request.body?.product, auth.accountOf(request));
   if (!product) return response.redirect(303, "/products");
+  const status = await availability(product);
+  if (!status.open) return response.redirect(303, `/products/${product.slug}`);
   const line = cartLine(request);
   const held = line.product === product ? line.qty : 0;
   const add = Number.parseInt(request.body?.quantity, 10);
-  const qty = Number.isInteger(add) && add > 0 ? Math.min(held + add, 99) : Math.max(held, 1);
+  const wanted = Number.isInteger(add) && add > 0 ? Math.min(held + add, 99) : Math.max(held, 1);
+  const qty = Math.min(wanted, stepperLimit(status));
   writeCart(response, { ...readCart(request), product: product.slug, qty });
-  response.redirect(303, "/cart");
+  response.redirect(303, qty < wanted ? "/cart?adjusted=1" : "/cart");
 });
 
 // The cart stepper. HTMX gets the re-rendered #cart fragment; no-JS gets a 303.
@@ -431,19 +434,15 @@ app.post("/cart/update", async (request, response) => {
   const hx = Boolean(request.get("HX-Request"));
   const { product, qty: held } = cartLine(request);
   if (!product) return hx ? response.set("HX-Redirect", "/products").end() : response.redirect(303, "/products");
+  const status = await availability(product);
+  // Sold out since the page loaded: /cart empties the cart and says so.
+  if (!status.open && status.reason !== "unavailable") return hx ? response.set("HX-Redirect", "/cart").end() : response.redirect(303, "/cart");
   const target = Number.parseInt(request.body?.quantity, 10);
-  const qty = Number.isInteger(target) ? Math.min(Math.max(target, 1), 99) : held;
+  const wanted = Number.isInteger(target) ? Math.min(Math.max(target, 1), 99) : held;
+  const qty = status.open ? Math.min(wanted, stepperLimit(status)) : wanted;
   writeCart(response, { ...readCart(request), qty });
   if (hx) {
-    const vm = {
-      ...chrome(request),
-      cartQty: qty,
-      productName: product.name,
-      lineTotal: formatTotal(product, qty),
-      subtotal: formatTotal(product, qty),
-      shipBy: shipByFor(product),
-      maxQuantity: stepperLimit(await availability(product))
-    };
+    const vm = await cartView(request, product, qty, status, qty < wanted ? adjustedNotice(qty) : "");
     return response.set("Cache-Control", "no-cache").type("html").send(views.cartFragment(vm));
   }
   response.redirect(303, "/cart");
@@ -454,45 +453,31 @@ app.post("/cart/clear", (request, response) => {
   response.redirect(303, "/products");
 });
 
-// -------------------------------------------------------------- waitlist
+// -------------------------------------------------------------- restock requests
 
-// The batch and the waitlist are the Bluebird House's.
-const batchProductPath = `/products/${products[0].slug}`;
-// The waitlist needs an account; both links come back to the product.
-const waitlistLogin = `/login?next=${encodeURIComponent(batchProductPath)}`;
-const waitlistLinks = { signInHref: waitlistLogin, signUpHref: `${waitlistLogin}#create` };
-
-app.post("/waitlist", async (request, response) => {
+// "Notify me when available" on a sold-out product. Signed-out shoppers get a
+// sign-in link instead of this form; HTMX swaps in the confirmation.
+app.post("/notify", async (request, response) => {
+  if (!auth.sameOrigin(request)) return response.status(403).type("text").send("Forbidden");
   const account = auth.accountOf(request);
-  const base = {
-    ...waitlistLinks,
-    signedIn: Boolean(account),
-    accountLabel: account ? account.name || account.email : ""
-  };
+  const product = visibleProduct(request.body?.product, account);
+  if (!product) return response.redirect(303, "/products");
+  const page = `/products/${product.slug}`;
   const hx = Boolean(request.get("HX-Request"));
-  const email = account?.email ?? "";
-  const quantity = Number.parseInt(request.body?.quantity, 10);
-  const postalCode = String(request.body?.postalCode ?? "").trim().slice(0, 12) || null;
-
-  const fail = (message) => {
-    if (!hx) return response.redirect(303, batchProductPath);
-    const vm = { ...base, wlState: "error", wlMessage: message, wlEmail: email, wlQuantity: Number.isInteger(quantity) ? String(quantity) : "", wlPostalCode: postalCode ?? "" };
-    return response.status(200).type("html").send(views.waitlistFragment(vm));
-  };
-
-  // Joining requires an account; we email the address it was verified with.
-  if (!account) return fail("Please sign in to join the waitlist.");
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) return fail("Choose a quantity from 1 to 99.");
-  if (!db.isConfigured()) return fail("The waitlist is not available yet.");
-  try {
-    await db.joinWaitlist(batch.id, email, quantity, postalCode, account?.sub ?? null);
-  } catch (error) {
-    console.error("Could not save a waitlist entry:", error.message);
-    return fail("We could not save your spot. Please try again.");
+  if (!account?.email) {
+    const login = `/login?next=${encodeURIComponent(page)}`;
+    return hx ? response.set("HX-Redirect", login).end() : response.redirect(303, login);
   }
-  if (!hx) return response.redirect(303, batchProductPath);
-  const vm = { ...base, wlState: "joined", wlMessage: "", wlEmail: email, wlQuantity: String(quantity), wlPostalCode: postalCode ?? "" };
-  response.type("html").send(views.waitlistFragment(vm));
+  let state = "requested";
+  try {
+    if (!db.isConfigured()) throw new Error("PGHOST is not set");
+    await inventory.requestRestock(product.slug, account);
+  } catch (error) {
+    console.error("Could not save a restock request:", error.message);
+    state = "error";
+  }
+  if (!hx) return response.redirect(303, page);
+  response.type("html").send(views.notifyFragment({ slug: product.slug, notifyState: state, notifyEmail: account.email, loginHref: "" }));
 });
 
 // -------------------------------------------------------------- static + pages
@@ -619,15 +604,20 @@ app.post("/login/resend", async (request, response) => {
   sendPage(response, views.codePage(codeView(request, pending, { notice: "We sent a new code. Only the newest one works." })));
 });
 
+// The listing card's availability line.
+function availabilityLine(status) {
+  if (!status.open) return status.reason === "unavailable" ? "Temporarily unavailable" : "Sold out";
+  if (status.remaining !== null && status.remaining <= inventory.LOW) return `Only ${status.remaining} left`;
+  return "In stock";
+}
+
 app.get("/products", async (request, response) => {
   const account = auth.accountOf(request);
-  const status = batchStatus(batch, await paidUnits());
-  const batchLine = status.open
-    ? (batch.shipBy ? `Pre-order · ships by ${displayDate(batch.shipBy)}` : "In stock")
-    : (status.reason === "closed" ? "Pre-orders have closed" : "Sold out · join the waitlist");
+  const visible = products.filter((product) => visibleTo(product, account));
+  const statuses = await Promise.all(visible.map(availability));
   const vm = {
     ...chrome(request),
-    products: products.filter((product) => visibleTo(product, account)).map((product) => {
+    products: visible.map((product, i) => {
       const photo = product.photos[0] && photoView(product, product.photos[0]);
       return {
         href: `/products/${product.slug}`,
@@ -637,7 +627,7 @@ app.get("/products", async (request, response) => {
         imageAlt: photo ? photo.alt : product.imageAlt,
         srcset: photo ? photo.srcset : "",
         price: formatUsd(unitPrice(product)),
-        availability: product.batched ? batchLine : "In stock"
+        availability: availabilityLine(statuses[i])
       };
     })
   };
@@ -647,9 +637,10 @@ app.get("/products", async (request, response) => {
 app.get("/products/:slug", async (request, response) => {
   const product = visibleProduct(request.params.slug, auth.accountOf(request));
   if (!product) return response.redirect(303, "/products");
+  const account = auth.accountOf(request);
   const status = await availability(product);
-  const showRemaining = status.open && status.remaining !== null && batch.cap > 0 && status.remaining < batch.cap * 0.2;
   const line = cartLine(request);
+  const inCart = line.product === product ? line.qty : 0;
   // ?photo= picks the photo shown, so the thumbnails work as plain links too.
   const photos = product.photos.map((photo) => photoView(product, photo));
   const shown = photos.find((photo) => photo.name === request.query.photo) ?? photos[0];
@@ -664,38 +655,58 @@ app.get("/products/:slug", async (request, response) => {
     thumbs: photos.length > 1
       ? photos.map((photo) => ({ ...photo, href: `?photo=${photo.name}`, current: photo === shown }))
       : [],
-    ...waitlistLinks,
     open: status.open,
-    batched: product.batched,
+    reason: status.reason,
     details: product.details,
-    inCart: line.product === product ? line.qty : 0,
-    shipBy: shipByFor(product),
-    remaining: showRemaining ? status.remaining : -1,
+    inCart,
+    // Said beside the quantity only when few are left.
+    remaining: status.remaining !== null && status.remaining <= inventory.LOW ? status.remaining : -1,
     priceEach: formatUsd(unitPrice(product)),
-    maxQuantity: stepperLimit(status),
-    wlState: "editing",
-    wlMessage: "",
-    wlEmail: "",
-    wlQuantity: "1",
-    wlPostalCode: "",
+    // What can still be added on top of the cart; 0 means the cart has it all.
+    maxQuantity: status.remaining === null ? 99 : Math.max(Math.min(status.remaining, 99) - inCart, 0),
+    notifyState: status.open ? "" : (await inventory.hasRequested(product.slug, account)) ? "requested" : "ready",
+    notifyEmail: account?.email ?? "",
+    loginHref: `/login?next=${encodeURIComponent(`/products/${product.slug}`)}`,
     fulfillmentNote: await fulfillmentNote()
   };
   response.set("Cache-Control", "no-cache").type("html").send(views.productPage(vm));
 });
 
-app.get("/cart", async (request, response) => {
-  const { product, qty } = cartLine(request);
-  if (!product) return response.redirect(303, "/products");
-  const vm = {
+const adjustedNotice = (qty) => `Only ${qty} available, so we changed your quantity to ${qty}.`;
+
+// The cart page and its HTMX fragment. qty 0 renders the "sold out and removed"
+// state; checkout is offered only when the stock can be checked.
+async function cartView(request, product, qty, status, notice) {
+  return {
     ...chrome(request),
     cartQty: qty,
     productName: product.name,
+    productHref: `/products/${product.slug}`,
     lineTotal: formatTotal(product, qty),
     subtotal: formatTotal(product, qty),
-    shipBy: shipByFor(product),
-    maxQuantity: stepperLimit(await availability(product)),
+    maxQuantity: stepperLimit(status),
+    notice: status.reason === "unavailable" ? "We can't check stock right now, so checkout is paused. Try again shortly." : notice,
+    checkoutOk: status.open && qty > 0,
     fulfillmentNote: await fulfillmentNote()
   };
+}
+
+// The cart is checked against what's left on every visit: more than that is cut
+// to what's left, and a sold-out product is removed, saying so either way.
+app.get("/cart", async (request, response) => {
+  const { product, qty: held } = cartLine(request);
+  if (!product) return response.redirect(303, "/products");
+  const status = await availability(product);
+  let qty = held;
+  let notice = request.query.adjusted ? adjustedNotice(held) : "";
+  if (!status.open && status.reason !== "unavailable") {
+    qty = clearCart(response);
+    notice = `The ${product.name} sold out, so we removed it from your cart.`;
+  } else if (status.open && status.remaining !== null && held > status.remaining) {
+    qty = writeCart(response, { ...readCart(request), qty: status.remaining });
+    notice = adjustedNotice(qty);
+  }
+  const vm = await cartView(request, product, qty, status, notice);
   response.set("Cache-Control", "no-cache").type("html").send(views.cartPage(vm));
 });
 
@@ -734,14 +745,14 @@ async function deliveryPage(request, response, error = "") {
   response.set("Cache-Control", "no-cache").type("html").send(views.deliveryPage(vm));
 }
 
-app.get("/checkout", requireAccount, (request, response) => {
-  if (!cartLine(request).product) return response.redirect(303, "/cart");
+app.get("/checkout", requireAccount, async (request, response) => {
+  if (!(await cartFits(cartLine(request)))) return response.redirect(303, "/cart");
   return deliveryPage(request, response);
 });
 
 // The choice posts as "pickup:<slot id>" or "delivery:<slot id>".
 app.post("/checkout/delivery", requireAccount, async (request, response) => {
-  if (!cartLine(request).product) return response.redirect(303, "/cart");
+  if (!(await cartFits(cartLine(request)))) return response.redirect(303, "/cart");
   const cart = readCart(request);
   const [method, id] = String(request.body?.choice ?? "").split(":");
   const slotId = Number.parseInt(id, 10);
@@ -767,8 +778,9 @@ app.post("/checkout/delivery", requireAccount, async (request, response) => {
 // address (or the wallet's) and the fee; the data attributes only drive the
 // wallet sheet's display, the server sets the amount.
 app.get("/checkout/pay", requireAccount, async (request, response) => {
-  const { product, qty } = cartLine(request);
-  if (!product) return response.redirect(303, "/cart");
+  const line = cartLine(request);
+  if (!(await cartFits(line))) return response.redirect(303, "/cart");
+  const { product, qty } = line;
   const choice = await cartChoice(request);
   if (!choice) return response.redirect(303, "/checkout");
   const account = auth.accountOf(request);
@@ -795,7 +807,7 @@ app.get("/order", async (request, response) => {
   const base = chrome(request);
   const vm = order
     ? { ...base, ...formatOrder(order) }
-    : { ...base, status: "error", message: "", number: "", date: "", items: "", productName: "", total: "", email: "", shipTo: [], shipBy: "", quantity: 1, fulfillment: "ship", pickupLabel: "", deliveryLabel: "" };
+    : { ...base, status: "error", message: "", number: "", date: "", items: "", productName: "", total: "", email: "", shipTo: [], quantity: 1, fulfillment: "ship", pickupLabel: "", deliveryLabel: "" };
   response.type("html").send(views.confirmationPage(vm));
 });
 
@@ -853,6 +865,11 @@ const ADMIN_ERRORS = {
   "slot-times": "The end time must be after the start time (check AM/PM).",
   "copy-section": "That section doesn't exist.",
   "copy-length": `Page copy can be at most ${copy.MAX_LENGTH} characters.`,
+  "inventory-product": "That product isn't tracked.",
+  "inventory-value": "Enter a whole number of 0 or more.",
+  "inventory-changed": "The count changed while you were editing, probably from an order. The page now shows the current number; check it and save again.",
+  "notify-empty": "Raise the count above 0 before emailing the people waiting.",
+  "mail-off": "Email isn't configured, so nobody was emailed.",
   "no-database": "The database is not configured.",
   "save-failed": "That change couldn't be saved. Try again shortly."
 };
@@ -1005,6 +1022,66 @@ app.post("/admin/site/:key", auth.requireAdmin, (request, response) => {
     if (body.length > copy.MAX_LENGTH) return "copy-length";
     await copy.save(request.params.key, body, auth.accountOf(request).email || null);
   }, "/admin/site");
+});
+
+// Inventory (docs/design/inventory.md): one form per tracked product. The
+// hidden expected field is the count the admin saw, so a save never overwrites
+// an order that landed meanwhile.
+const changeReason = (change) =>
+  change.reason === "order" ? `Order ${String(change.order_id ?? "").slice(-8).toUpperCase()}`
+    : change.reason === "seed" ? "Starting count, from the batch cap"
+    : `Set by ${change.actor ?? "an admin"}`;
+
+app.get("/admin/inventory", auth.requireAdmin, async (request, response) => {
+  const vm = await adminData(request, async () => ({
+    products: (await inventory.list()).map((row) => ({
+      slug: row.product.slug,
+      name: row.product.name,
+      tracked: row.available !== null,
+      available: row.available ?? 0,
+      sold: row.sold,
+      waiting: row.waiting,
+      changes: row.changes.map((c) => ({ at: savedAt.format(c.at), from: c.before === null ? "—" : String(c.before), to: String(c.after), reason: changeReason(c) }))
+    }))
+  }));
+  const sent = Number.parseInt(request.query.sent, 10);
+  const failed = Number.parseInt(request.query.failed, 10);
+  const notice = Number.isInteger(sent)
+    ? `Emailed ${sent} ${sent === 1 ? "person" : "people"}.${failed > 0 ? ` ${failed} couldn't be sent; email them again to retry.` : ""}`
+    : "";
+  response.type("html").send(views.adminInventoryPage({ products: [], ...vm, error: adminNotice(request) || vm.error, notice }));
+});
+
+const trackedProduct = (slug) => products.find((product) => product.slug === slug && product.inventory) ?? null;
+
+app.post("/admin/inventory/:slug", auth.requireAdmin, (request, response) => {
+  const value = String(request.body?.available ?? "").trim();
+  const expected = String(request.body?.expected ?? "");
+  return adminWrite(response, async () => {
+    const product = trackedProduct(request.params.slug);
+    if (!product) return "inventory-product";
+    if (!/^\d{1,6}$/.test(value) || !/^-?\d{1,6}$/.test(expected)) return "inventory-value";
+    const saved = await inventory.set(product.slug, Number(value), Number(expected), auth.accountOf(request).email || null);
+    if (!saved) return "inventory-changed";
+  }, "/admin/inventory");
+});
+
+// Emails everyone waiting on a product that's back in stock, then reports how
+// many went out.
+app.post("/admin/inventory/:slug/notify", auth.requireAdmin, async (request, response) => {
+  const back = (query) => response.redirect(303, `/admin/inventory?${query}`);
+  const product = trackedProduct(request.params.slug);
+  if (!product) return back("error=inventory-product");
+  if (!db.isConfigured()) return back("error=no-database");
+  if (!mail.isConfigured()) return back("error=mail-off");
+  try {
+    if (!(await inventory.stock(product)).open) return back("error=notify-empty");
+    const { sent, failed } = await inventory.notifyWaiting(product);
+    back(`sent=${sent}&failed=${failed}`);
+  } catch (error) {
+    console.error("Could not email the people waiting:", error.message);
+    back("error=save-failed");
+  }
 });
 
 // Anything else: back to the storefront.

@@ -3,15 +3,8 @@
 /* .prose holds admin-edited copy (server/copy.js), whose blocks can't carry
    classes, so they get the description's look. */
 .description, .prose > :is(p, ul, ol) { margin: 0 0 var(--size-4); color: var(--body-text); line-height: var(--font-lineheight-3); }
-.preorder-note {
-  display: inline-block;
-  margin: 0 0 var(--size-3);
-  padding: var(--size-1) var(--size-2);
-  border: var(--border-size-1) solid var(--ink);
-  font-size: var(--font-size-0);
-  font-weight: var(--font-weight-7);
-  letter-spacing: var(--font-letterspacing-1);
-}
 .stock-note { margin: 0 0 var(--size-3); color: var(--danger); font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
 .waitlist-error { margin: 0 0 var(--size-3); color: var(--danger); font-size: var(--font-size-0); }
-.waitlist-joined { margin: 0; padding: var(--size-3); border: var(--rule); line-height: var(--font-lineheight-3); }
+.notify-done, .admin-notice { margin: 0 0 var(--size-3); padding: var(--size-3); border: var(--rule); line-height: var(--font-lineheight-3); }
+/* Why the cart changed: shown under the item it's about. */
+.cart-notice { margin: var(--size-2) 0 0; color: var(--danger); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }

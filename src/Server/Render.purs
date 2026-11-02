@@ -12,24 +12,24 @@ module Server.Render
   , deliveryPage
   , checkoutPage
   , confirmationPage
-  , waitlistFragment
+  , notifyFragment
   , module Server.Admin
   ) where
 
 import Prelude
 import Data.Array (null)
 import Html (Attr(..), Html, cls, el, elVoid, empty, raw, render, text, whenH)
-import Server.Admin (adminCopyPage, adminDeliveryPage, adminOrdersPage, adminPickupPage)
+import Server.Admin (adminCopyPage, adminDeliveryPage, adminInventoryPage, adminOrdersPage, adminPickupPage)
 import Server.Layout (Chrome, cartLinkEl, layout, layoutWithHero)
 
-type WaitlistFields r =
-  ( wlState :: String        -- "editing" | "joined" | "error"
-  , wlMessage :: String      -- error text, or the joined quantity
-  , wlEmail :: String
-  , wlQuantity :: String
-  , wlPostalCode :: String
-  , signInHref :: String
-  , signUpHref :: String
+-- "Notify me when available" on a product that isn't selling. notifyState is
+-- "ready" (show the button), "requested" or "error"; loginHref is where a
+-- signed-out shopper signs in first, and is empty in the POST /notify fragment.
+type NotifyFields r =
+  ( slug :: String
+  , notifyState :: String
+  , notifyEmail :: String
+  , loginHref :: String
   | r
   )
 
@@ -67,29 +67,39 @@ type ProductsVM = { | Chrome ( products :: Array ProductCard ) }
 
 type ProductVM =
   { | Chrome
-      ( WaitlistFields
-          ( slug :: String
-          , name :: String
+      ( NotifyFields
+          ( name :: String
           , summary :: String
           , image :: String -- the photo shown, or the illustration
           , imageAlt :: String
           , srcset :: String -- empty for an illustration
           , thumbs :: Array Thumb -- empty unless there are photos to choose between
           , open :: Boolean
-          , batched :: Boolean -- sold through the pre-order batch, with its waitlist
+          , reason :: String -- "open" | "sold-out" | "unavailable"
           , details :: Boolean -- the Bluebird House's feature, spec and FAQ sections
           , inCart :: Int -- this product's quantity in the cart
-          , shipBy :: String
-          , remaining :: Int
+          , remaining :: Int -- how many are left when that's few, else -1
           , priceEach :: String
-          , maxQuantity :: Int
+          , maxQuantity :: Int -- what can be added on top of the cart
           , fulfillmentNote :: String
           )
       )
   }
 
+-- cartQty 0 means the product sold out and was removed; notice says why the
+-- cart changed, and checkoutOk is false while stock can't be checked.
 type CartVM =
-  { | Chrome ( productName :: String, lineTotal :: String, subtotal :: String, shipBy :: String, maxQuantity :: Int, fulfillmentNote :: String ) }
+  { | Chrome
+      ( productName :: String
+      , productHref :: String
+      , lineTotal :: String
+      , subtotal :: String
+      , maxQuantity :: Int
+      , notice :: String
+      , checkoutOk :: Boolean
+      , fulfillmentNote :: String
+      )
+  }
 
 type Slot = { id :: Int, location :: String, details :: String, time :: String, selected :: Boolean }
 
@@ -135,7 +145,6 @@ type OrderVM =
       , total :: String
       , email :: String
       , shipTo :: Array String
-      , shipBy :: String
       , quantity :: Int
       , fulfillment :: String
       , pickupLabel :: String
@@ -143,7 +152,7 @@ type OrderVM =
       )
   }
 
-type WaitlistVM = { | WaitlistFields ( signedIn :: Boolean, accountLabel :: String ) }
+type NotifyVM = { | NotifyFields () }
 
 -- ---------------------------------------------------------------- home
 
@@ -292,9 +301,8 @@ productPage vm =
           , el "div" [ cls "product-details" ]
               [ el "h1" [ cls "page-title", A "id" "product-title" ] [ text vm.name ]
               , el "p" [ cls "price" ] [ text (vm.priceEach <> " each") ]
-              , whenH (vm.shipBy /= "") (el "p" [ cls "preorder-note" ] [ text ("Pre-order · ships by " <> vm.shipBy) ])
               , el "p" [ cls "description" ] [ text vm.summary ]
-              , if vm.open then purchase vm else soldOut vm
+              , if vm.open then purchase vm else unavailable vm
               ]
           ]
       , whenH vm.details (featureSection <> specSection <> trustStrip <> faqSection)
@@ -336,39 +344,39 @@ photoAttrs srcset sizes
 purchase :: ProductVM -> Html
 purchase vm =
   el "div" []
-    [ whenH (vm.remaining >= 0) (el "p" [ cls "stock-note" ] [ text ("Only " <> show vm.remaining <> " left in this batch") ])
-    , el "form" [ cls "add-form", A "method" "post", A "action" "/cart/add" ]
-        [ elVoid "input" [ A "type" "hidden", A "name" "product", A "value" vm.slug ]
-        , el "div" [ cls "quantity-field" ]
-            [ el "label" [ A "for" "qty" ] [ text "Quantity" ]
-            , elVoid "input" [ A "id" "qty", A "name" "quantity", A "type" "number", A "min" "1", A "max" (show vm.maxQuantity), A "value" "1", B "required" ]
-            ]
-        , el "button" [ cls "buy-button", A "type" "submit" ]
-            [ text (if vm.inCart > 0 then "Add to cart (" <> show vm.inCart <> " in cart)" else "Add to cart") ]
-        ]
-    , el "p" [ cls "fine-print" ]
-        [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> vm.fulfillmentNote) ]
-    , whenH vm.batched $
-        el "details" [ cls "waitlist-inline" ]
-          [ el "summary" [ cls "text-button" ] [ text "Need more? Join the waitlist" ]
-          , el "p" [ cls "description" ] [ text "Need more than this batch has? Tell us how many and we'll email you when we can build them." ]
-          , waitlistView (toWaitlist vm)
+    [ if vm.maxQuantity < 1 then
+        el "p" [ cls "stock-note" ] [ text ("Your cart already has the last " <> plural vm.inCart <> ".") ]
+      else
+        el "form" [ cls "add-form", A "method" "post", A "action" "/cart/add" ]
+          [ elVoid "input" [ A "type" "hidden", A "name" "product", A "value" vm.slug ]
+          , el "div" [ cls "quantity-field" ]
+              [ el "label" [ A "for" "qty" ] [ text "Quantity" ]
+              , el "div" [ cls "quantity-row" ]
+                  [ elVoid "input" [ A "id" "qty", A "name" "quantity", A "type" "number", A "min" "1", A "max" (show vm.maxQuantity), A "value" "1", B "required", A "aria-describedby" "stock-left" ]
+                  , whenH (vm.remaining >= 0) (el "span" [ cls "stock-note", A "id" "stock-left" ] [ text ("Only " <> show vm.remaining <> " left") ])
+                  ]
+              ]
+          , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add to cart" ]
           ]
+    , el "p" [ cls "fine-print" ] [ text vm.fulfillmentNote ]
     ]
+  where
+  plural n = if n == 1 then "one" else show n
 
-soldOut :: ProductVM -> Html
-soldOut vm =
+-- Sold out: the status where the quantity would be, and a button to hear when
+-- it's back. Unavailable (stock can't be checked) offers nothing.
+unavailable :: ProductVM -> Html
+unavailable vm =
   el "div" [ cls "sold-out" ]
-    [ el "h2" [] [ text (if vm.reason == "closed" then "Pre-orders have closed" else "This batch is sold out") ]
-    , el "p" [ cls "description" ] [ text "Join the waitlist and we'll email you first when we can build more. No payment needed." ]
-    , waitlistView (toWaitlist vm)
-    ]
+    ( [ el "p" [ cls "sold-out-status" ] [ text status ] ]
+        <> if vm.reason == "unavailable" then [ el "p" [ cls "description" ] [ text "We can't check stock right now. Try again in a minute." ] ]
+          else [ notifyView (toNotify vm) ]
+    )
+  where
+  status = if vm.reason == "unavailable" then "Temporarily unavailable" else "Sold out"
 
-toWaitlist :: ProductVM -> WaitlistVM
-toWaitlist vm =
-  { wlState: vm.wlState, wlMessage: vm.wlMessage, wlEmail: vm.wlEmail, wlQuantity: vm.wlQuantity, wlPostalCode: vm.wlPostalCode
-  , signInHref: vm.signInHref, signUpHref: vm.signUpHref, signedIn: vm.signedIn, accountLabel: vm.accountLabel
-  }
+toNotify :: ProductVM -> NotifyVM
+toNotify vm = { slug: vm.slug, notifyState: vm.notifyState, notifyEmail: vm.notifyEmail, loginHref: vm.loginHref }
 
 featureSection :: Html
 featureSection =
@@ -419,7 +427,7 @@ trustStrip :: Html
 trustStrip =
   el "section" [ cls "trust-strip", A "aria-label" "What to expect" ]
     [ trustItem true "Satisfaction guarantee" "[Your returns or guarantee policy.]"
-    , trustItem true "Shipping" "[Shipping cost and delivery time.]"
+    , trustItem true "Pick-up and delivery" "[Where pick-up is, and the local delivery area and fee.]"
     , trustItem false "Secure checkout" "Payments are processed by Stripe."
     ]
 
@@ -439,7 +447,7 @@ faqSection =
         , faqItem "How do I keep sparrows and predators out?" "[The 1½-inch hole already blocks starlings. Add any guidance on house sparrows, baffles or predator guards.]"
         , faqItem "How do I clean it?" "[Your cleaning instructions, and how the box opens for it.]"
         , faqItem "Does it come assembled?" "[Assembled or flat-pack, and what's in the box.]"
-        , faqItem "When will it ship?" "[Shipping timing — for a pre-order, tie this to the current batch's ship-by date.]"
+        , faqItem "When can I get it?" "[How soon after ordering it's ready for pick-up or local delivery.]"
         ]
     ]
 
@@ -461,23 +469,35 @@ cartPage vm =
     el "section" [ cls "cart-screen", A "aria-labelledby" "cart-title" ]
       [ el "h1" [ cls "page-title", A "id" "cart-title" ] [ text "Your cart" ]
       , cartBox vm
-      , el "a" [ cls "buy-button", A "href" "/checkout" ] [ text "Proceed to checkout" ]
+      , whenH vm.checkoutOk (el "a" [ cls "buy-button", A "href" "/checkout" ] [ text "Proceed to checkout" ])
       , el "a" [ cls "text-button", A "href" "/products" ] [ text "Continue shopping" ]
-      , el "p" [ cls "fine-print" ]
-          [ text ((if vm.shipBy == "" then "" else "Pre-order: you're charged today and your house ships by " <> vm.shipBy <> ". Full refund any time before it ships, or if we miss that date. ") <> vm.fulfillmentNote) ]
+      , el "p" [ cls "fine-print" ] [ text vm.fulfillmentNote ]
       ]
 
 -- The #cart box, re-rendered in place by the HTMX stepper.
 cartBox :: CartVM -> Html
 cartBox vm =
   el "div" [ A "id" "cart", cls "cart" ]
-    [ el "div" [ cls "cart-line" ]
-        [ el "span" [] [ text vm.productName ]
-        , el "span" [] [ text vm.lineTotal ]
-        ]
-    , stepper vm.cartQty vm.maxQuantity
-    , el "p" [ cls "cart-total" ] [ text ("Subtotal · " <> vm.subtotal) ]
-    ]
+    if vm.cartQty < 1 then
+      [ el "div" [ cls "cart-line" ] [ el "span" [] [ text vm.productName ] ]
+      , notice
+      , el "a" [ cls "text-link", A "href" vm.productHref ] [ text "Get notified when it's back" ]
+      ]
+    else
+      [ el "div" [ cls "cart-line" ]
+          [ el "span" [] [ text vm.productName ]
+          , el "span" [] [ text vm.lineTotal ]
+          ]
+      , notice
+      , el "div" [ cls "cart-controls" ]
+          [ stepper vm.cartQty vm.maxQuantity
+          , el "form" [ cls "cart-remove", A "method" "post", A "action" "/cart/clear" ]
+              [ el "button" [ cls "text-button", A "type" "submit", A "aria-label" ("Remove " <> vm.productName <> " from your cart") ] [ text "Remove" ] ]
+          ]
+      , el "p" [ cls "cart-total" ] [ text ("Subtotal · " <> vm.subtotal) ]
+      ]
+  where
+  notice = whenH (vm.notice /= "") (el "p" [ cls "cart-notice", A "role" "status" ] [ text vm.notice ])
 
 -- Returned by POST /cart/update: the swapped #cart plus an out-of-band update
 -- of the header cart count.
@@ -620,7 +640,7 @@ confirmationPage vm =
 confirmationBody :: OrderVM -> Array Html
 confirmationBody vm = case vm.status of
   "succeeded" ->
-    [ el "h1" [ cls "page-title" ] [ text (if vm.shipBy == "" then "Thank you for your order" else "Thank you for your pre-order") ]
+    [ el "h1" [ cls "page-title" ] [ text "Thank you for your order" ]
     , el "p" [ cls "confirmation-lede" ]
         [ text (succeededLede vm) ]
     , orderSummary vm
@@ -649,8 +669,7 @@ succeededLede :: OrderVM -> String
 succeededLede vm
   | vm.fulfillment == "pickup" = "Your payment went through. Your " <> vm.productName <> " will be ready for pick-up: " <> vm.pickupLabel <> "."
   | vm.fulfillment == "delivery" = "Your payment went through. We'll deliver your " <> vm.productName <> " " <> vm.deliveryLabel <> "."
-  | vm.shipBy == "" = "Your payment went through and your " <> vm.productName <> " is on its way to the workshop."
-  | otherwise = "Your payment went through. Your " <> vm.productName <> " is on the workshop's list and will ship by " <> vm.shipBy <> "."
+  | otherwise = "Your payment went through. We'll be in touch about getting your " <> vm.productName <> " to you."
 
 orderSummary :: OrderVM -> Html
 orderSummary vm =
@@ -687,64 +706,32 @@ receiptNote vm prefix =
 backToStore :: String -> Html
 backToStore label = el "a" [ cls "text-link", A "href" "/products" ] [ text label ]
 
--- ---------------------------------------------------------------- waitlist
+-- ---------------------------------------------------------------- notify me
 
-waitlistFragment :: WaitlistVM -> String
-waitlistFragment = render <<< waitlistView
+notifyFragment :: NotifyVM -> String
+notifyFragment = render <<< notifyView
 
-waitlistView :: WaitlistVM -> Html
-waitlistView vm =
-  el "div" [ A "id" "waitlist", cls "waitlist" ]
-    [ case vm.wlState of
-        "joined" ->
-          el "p" [ cls "waitlist-joined", A "role" "status", A "data-waitlist-joined" "true" ]
-            [ text ("You're on the waitlist for " <> vm.wlQuantity <> ". We'll email " <> joinedEmail <> " when we can build more.") ]
-        _
-          | vm.signedIn -> memberForm
-          | otherwise -> signUpCta
-    ]
-  where
-  joinedEmail = if vm.signedIn && vm.accountLabel /= "" then vm.accountLabel else vm.wlEmail
-
-  wlForm kids =
-    el "form"
-      [ cls "waitlist-form", A "method" "post", A "action" "/waitlist"
-      , A "hx-post" "/waitlist", A "hx-target" "#waitlist", A "hx-swap" "outerHTML"
-      ] kids
-
-  quantityZip =
-    el "div" [ cls "waitlist-row" ]
-      [ el "div" []
-          [ el "label" [ A "for" "waitlist-quantity" ] [ text "How many" ]
-          , elVoid "input" [ A "id" "waitlist-quantity", A "name" "quantity", A "type" "number", B "required", A "min" "1", A "max" "99", A "value" (if vm.wlQuantity == "" then "1" else vm.wlQuantity) ]
-          ]
-      , el "div" []
-          [ el "label" [ A "for" "waitlist-zip" ] [ text "ZIP code (optional)" ]
-          , elVoid "input" [ A "id" "waitlist-zip", A "name" "postalCode", A "type" "text", A "autocomplete" "postal-code", A "value" vm.wlPostalCode ]
-          ]
-      ]
-
-  errorLine =
-    if vm.wlState == "error"
-      then el "p" [ cls "waitlist-error", A "role" "alert" ] [ text vm.wlMessage ]
-      else empty
-
-  submitButton = el "button" [ cls "buy-button" ] [ text "Join the waitlist" ]
-
-  memberForm =
-    wlForm
-      [ el "p" [ cls "fine-print" ] [ text ("Signed in as " <> vm.accountLabel <> ". We'll email you there.") ]
-      , quantityZip
-      , errorLine
-      , submitButton
-      ]
-
-  signUpCta =
-    el "div" [ cls "waitlist-signup" ]
-      [ el "p" [ cls "description" ] [ text "Create a free account to join the waitlist, so we can reach you when we build more." ]
-      , el "a" [ cls "buy-button", A "href" vm.signUpHref ] [ text "Create an account" ]
-      , el "p" [ cls "fine-print" ]
-          [ text "Already have one? "
-          , el "a" [ cls "text-link", A "href" vm.signInHref ] [ text "Sign in" ]
-          ]
-      ]
+notifyView :: NotifyVM -> Html
+notifyView vm =
+  el "div" [ A "id" "notify", cls "notify" ]
+    case vm.notifyState of
+      "requested" ->
+        [ el "p" [ cls "notify-done", A "role" "status", A "data-notify-requested" "true" ]
+            [ text ("We'll email " <> vm.notifyEmail <> " when it's available again.") ]
+        ]
+      _
+        | vm.notifyEmail == "" && vm.loginHref /= "" ->
+            [ el "a" [ cls "buy-button", A "href" vm.loginHref ] [ text "Notify me when available" ]
+            , el "p" [ cls "fine-print" ] [ text "Sign in or create a free account so we know where to email you." ]
+            ]
+        | otherwise ->
+            [ el "form"
+                [ A "method" "post", A "action" "/notify"
+                , A "hx-post" "/notify", A "hx-target" "#notify", A "hx-swap" "outerHTML"
+                ]
+                [ elVoid "input" [ A "type" "hidden", A "name" "product", A "value" vm.slug ]
+                , whenH (vm.notifyState == "error") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text "We couldn't save that. Please try again." ])
+                , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Notify me when available" ]
+                ]
+            , el "p" [ cls "fine-print" ] [ text ("We'll email " <> vm.notifyEmail <> " once, when it's back.") ]
+            ]

@@ -36,10 +36,10 @@ src/styles/
   layout.css       site header, wordmark, main width, footer, breakpoints
   components/
     buttons.css    .buy-button, .cart-link, .quantity-button, .text-button, .text-link
-    forms.css      labels/inputs: waitlist, quantity field, payment form, admin form
+    forms.css      labels/inputs: quantity field, payment form, admin form
     lists.css      the dt/dd grids: .order-summary, .spec-list; .admin-table
-    notes.css      .fine-print, .preorder-note, .stock-note, error lines
-    disclosure.css details/summary +/− (FAQ, inline waitlist)
+    notes.css      .fine-print, .stock-note, .cart-notice, error lines
+    disclosure.css details/summary +/− (FAQ, admin inventory history)
   pages/
     product.css    product grid, media, features, trust strip, info sections
     cart.css       cart screen and cart box
@@ -96,10 +96,10 @@ why; new layers go in the order line in `index.css`.
   the Open Props variables used; size close to today's 9.5 kB (2.45 kB gzip).
 - Pixel comparison, before vs after, with headless Chromium from nix
   (`chromium --headless --screenshot --window-size=1280,2400` and 375 px wide)
-  against a local `npm start` on test keys: `/`, sold-out/waitlist, `/cart` with
+  against a local `npm start` on test keys: `/`, sold-out with Notify me, `/cart` with
   items, `/checkout`, `/checkout/pay` (pick-up and delivery), `/order`, and the
   admin pages (local admin session). Differences should be none or explained.
-- HTMX swaps (cart quantity, waitlist join) render styled fragments.
+- HTMX swaps (cart quantity, Notify me) render styled fragments.
 - Push to `main` deploys dev; check the payment form and Express Checkout on
   dev.birdhaus.store in test mode. Prod only by release, after the owner's OK.
 

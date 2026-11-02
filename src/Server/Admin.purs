@@ -1,11 +1,13 @@
 -- The store admin portal (/admin), for members of the Rauthy admin group: recent
--- orders; pick-up locations, slots and schedule; local delivery settings, slots
--- and schedule; page copy. Plain tables and POST forms; writes redirect back.
+-- orders; inventory; pick-up locations, slots and schedule; local delivery
+-- settings, slots and schedule; page copy. Plain tables and POST forms; writes
+-- redirect back.
 module Server.Admin
   ( adminOrdersPage
   , adminPickupPage
   , adminDeliveryPage
   , adminCopyPage
+  , adminInventoryPage
   ) where
 
 import Prelude
@@ -48,6 +50,15 @@ type CopySection = { key :: String, label :: String, page :: String, body :: Str
 
 type CopyVM = { | Chrome ( error :: String, sections :: Array CopySection ) }
 
+-- available is meaningless when untracked; below 0 means oversold. from is
+-- "—" for the starting count.
+type Change = { at :: String, from :: String, to :: String, reason :: String }
+
+type Stock =
+  { slug :: String, name :: String, tracked :: Boolean, available :: Int, sold :: Int, waiting :: Int, changes :: Array Change }
+
+type InventoryVM = { | Chrome ( error :: String, notice :: String, products :: Array Stock ) }
+
 type PickupVM =
   { | Chrome ( error :: String, locations :: Array Location, slots :: Array Slot, schedule :: Array Pickup ) }
 
@@ -55,6 +66,7 @@ adminNav :: String -> Html
 adminNav current =
   el "nav" [ cls "admin-nav" ]
     [ link "/admin" "Orders"
+    , link "/admin/inventory" "Inventory"
     , link "/admin/pickup" "Pick-up"
     , link "/admin/delivery" "Delivery"
     , link "/admin/site" "Page copy"
@@ -98,6 +110,54 @@ adminOrdersPage vm =
           table [ "Order", "Date", "Email", "Product", "Qty", "Total", "Status", "Delivery" ]
             (map (\o -> [ text o.number, text o.date, text o.email, text o.product, text (show o.quantity), text o.total, text o.status, text o.method ]) vm.orders)
       ]
+
+-- ---------------------------------------------------------------- inventory
+
+adminInventoryPage :: InventoryVM -> String
+adminInventoryPage vm =
+  layout vm $
+    el "section" [ cls "admin" ]
+      ( [ el "h1" [ cls "page-title" ] [ text "Admin" ]
+        , adminNav "/admin/inventory"
+        , el "h2" [ cls "section-title" ] [ text "Inventory" ]
+        , el "p" [ cls "description" ] [ text "How many of each product shoppers can buy. Each paid order counts down; refunds don't add back." ]
+        , errorLine vm.error
+        , whenH (vm.notice /= "") (el "p" [ cls "admin-notice", A "role" "status" ] [ text vm.notice ])
+        ]
+          <> map stockForm vm.products
+      )
+
+stockForm :: Stock -> Html
+stockForm p =
+  el "div" [ cls "admin-form admin-stock" ]
+    ( [ el "h3" [] [ text p.name ] ]
+        <> if not p.tracked then [ el "p" [ cls "fine-print" ] [ text "Not tracked: always available." ] ]
+          else
+            [ whenH (p.available < 0)
+                (el "p" [ cls "admin-oversold", A "role" "alert" ] [ text ("Oversold by " <> show (negate p.available) <> ". Refund an order or make more, then set the count.") ])
+            , el "form" [ A "method" "post", A "action" ("/admin/inventory/" <> p.slug) ]
+                [ elVoid "input" [ A "type" "hidden", A "name" "expected", A "value" (show p.available) ]
+                , el "label" [ A "for" ("stock-" <> p.slug) ] [ text "Available" ]
+                , elVoid "input" [ A "id" ("stock-" <> p.slug), A "name" "available", A "type" "number", A "min" "0", A "max" "999999", A "step" "1", A "value" (show (max 0 p.available)), B "required" ]
+                , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Save" ]
+                ]
+            , el "p" [ cls "fine-print" ] [ text (show p.sold <> " sold in all. " <> waitingLine) ]
+            , whenH (p.waiting > 0 && p.available > 0) $
+                el "form" [ cls "admin-inline", A "method" "post", A "action" ("/admin/inventory/" <> p.slug <> "/notify") ]
+                  [ el "button" [ cls "text-button", A "type" "submit" ] [ text ("Email " <> people p.waiting <> " that it's back") ] ]
+            , whenH (not (null p.changes)) $
+                el "details" [ cls "admin-history" ]
+                  [ el "summary" [ cls "text-button" ] [ text "Recent changes" ]
+                  , table [ "When", "From", "To", "Why" ] (map (\c -> [ text c.at, text c.from, text c.to, text c.reason ]) p.changes)
+                  ]
+            ]
+    )
+  where
+  people n = if n == 1 then "1 person" else show n <> " people"
+  waitingLine
+    | p.waiting == 0 = "Nobody is waiting to hear it's back."
+    | p.available > 0 = people p.waiting <> " waiting to hear it's back."
+    | otherwise = people p.waiting <> " waiting to hear it's back; raise the count to email them."
 
 -- ---------------------------------------------------------------- pick-up
 

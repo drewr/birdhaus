@@ -48,14 +48,12 @@ export const initSignOut = () => {
   }
 };
 
-// The waitlist posts via HTMX; count a join when the swapped-in fragment is the
-// joined state.
-export const initWaitlistTracking = () => {
+// "Notify me when available" posts via HTMX and swaps #notify's outerHTML, so
+// look for the confirmation in the page rather than in the replaced element.
+export const initNotifyTracking = () => {
   document.body?.addEventListener("htmx:afterSwap", (event) => {
-    const target = event.target;
-    if (target && target.querySelector && target.querySelector("[data-waitlist-joined]")) {
-      track("waitlist-join", {});
-    }
+    if (event.detail?.requestConfig?.path !== "/notify") return;
+    if (document.querySelector("#notify [data-notify-requested]")) track("restock-request", {});
   });
 };
 
@@ -252,8 +250,9 @@ async function submitPayment(event) {
   if (error) fail(error.message);
 }
 
-// On the confirmation page, count a paid pre-order once (a reload must not
+// On the confirmation page, count a paid order once (a reload must not
 // double-count). Status and quantity are server-rendered as data attributes.
+// The event keeps its pre-order-era name so its history stays in one series.
 export const initConfirmation = () => {
   const root = document.getElementById("payment-success");
   if (!root || root.dataset.orderStatus !== "succeeded") return;

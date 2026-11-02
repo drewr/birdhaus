@@ -1,5 +1,5 @@
 /* <details> without the browser's marker. The FAQ draws its own +/−. */
-details.waitlist-inline > summary {
+details.admin-history > summary {
   list-style: none;
   cursor: pointer;
 
