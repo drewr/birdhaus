@@ -87,6 +87,14 @@ runs no reply took longer than 0.13 seconds.
 If it happens again, the probe's database field and the static page will show
 whether the database or the routing failed.
 
+**The first prod rollout with the fix** (`v0.99.2` to `v0.99.3`, 2026-11-02):
+1 failure in 329 probes. At 03:00:42 UTC one health request waited 5.7 seconds
+and got a 503 from the edge, not from the app. The next probe, half a second
+later, got `v0.99.3`, and every later probe got it too. The old instances
+weren't draining yet, because `v0.99.2` had no `SIGTERM` handler, so this run
+matches the "fix, first deploy" row above. The next prod release is the first
+where both sides drain.
+
 ## Other findings
 
 - **`OrderedReady` did not keep a working instance serving when the new image
