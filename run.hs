@@ -165,8 +165,9 @@ main = do
     T.writeFile workloadFile (workloadManifest o haveAuth optionalSecrets ver commit digestRef)
     T.writeFile serviceFile (serviceManifest o)
     printf ("Deploying " % s % " to " % s % " in " % s % "...\n") digestRef (location o) (project o)
-    dc ["compute", "deploy", "-f", T.pack workloadFile, "--yes"]
+    -- The proxy first, so its health check already covers this rollout.
     dc ["apply", "-f", T.pack serviceFile]
+    dc ["compute", "deploy", "-f", T.pack workloadFile, "--yes"]
 
   (_, canonical) <- procStrict datumctl
     ["get", "httpproxy", workload o, "-o", "jsonpath={.status.canonicalHostname}", "--project", project o] empty
@@ -274,6 +275,9 @@ workloadManifest o auth extraSecrets ver commit image =
     , "        reclaimPolicy: Delete"
     , "      runtime:"
     , "        class: unikernel"
+    -- The server drains for 10s after SIGTERM, then finishes in-flight
+    -- requests (server/index.js); this is the most it waits before a kill.
+    , "        terminationGracePeriodSeconds: 30"
     , "        resources:"
     , "          instanceType: datumcloud-d1-standard-2"
     , "        sandbox:"
@@ -340,6 +344,15 @@ serviceManifest o =
     , "metadata:"
     , "  name: " <> workload o
     , "spec:"
+    -- Datum has no readiness probe, so the edge may route to an instance that
+    -- isn't listening yet or has stopped. Envoy counts refused connections as
+    -- 5xx too; after three in a row it sets that instance aside for 30s (longer
+    -- if it keeps failing), never more than half the instances at once.
+    , "  healthCheck:"
+    , "    passive:"
+    , "      consecutive5xxErrors: 3"
+    , "      baseEjectionTime: 30s"
+    , "      maxEjectionPercent: 50"
     , "  hostnames:"
     , "  - " <> domain o
     , "  rules:"

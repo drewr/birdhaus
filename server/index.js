@@ -25,6 +25,15 @@ const dist = path.join(root, "dist");
 const batch = currentBatch();
 db.migrateInBackground();
 
+// Set once SIGTERM arrives (see the end of this file). A draining instance
+// closes each connection after its response, so the edge's pooled connections
+// move to the other instance instead of waiting here to be cut.
+let draining = false;
+app.use((_request, response, next) => {
+  if (draining) response.set("Connection", "close");
+  next();
+});
+
 // Pages are rendered by PureScript (src/Server/Render.purs). In the image that
 // is pre-bundled to server/views.js (the image ships no PureScript toolchain or
 // output/); in dev we import the compiled module tree directly, so iterating
@@ -1001,4 +1010,18 @@ app.post("/admin/site/:key", auth.requireAdmin, (request, response) => {
 // Anything else: back to the storefront.
 app.get(/.*/, (_request, response) => response.redirect(303, "/"));
 
-app.listen(port, () => console.log(`Birdhaus server listening on http://localhost:${port}`));
+const server = app.listen(port, () => console.log(`Birdhaus server listening on http://localhost:${port}`));
+
+// Datum sends SIGTERM when it replaces or removes an instance. Keep answering
+// for DRAIN_MS in case the edge still routes here, then stop accepting and let
+// in-flight requests finish. run.hs gives the instance
+// terminationGracePeriodSeconds to cover both; past that it is killed anyway.
+const DRAIN_MS = 10_000;
+process.once("SIGTERM", () => {
+  console.log(`SIGTERM: draining for ${DRAIN_MS / 1000}s before closing`);
+  draining = true;
+  setTimeout(() => {
+    server.close(() => process.exit(0));
+    server.closeIdleConnections();
+  }, DRAIN_MS);
+});
