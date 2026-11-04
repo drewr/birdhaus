@@ -40,6 +40,14 @@ main = do
          , "-strip", logoFull ]
     magick [logoFull, "-resize", "1200x", "-strip", "public/logo.png"]
 
+    -- The email header (server/mail.js): the logo on its own white card with
+    -- rounded corners, so it reads the same in light and dark mail clients,
+    -- which never invert images. 400px wide, shown at 200 for sharp 2x.
+    magick [ logoFull, "-resize", "352x", "-bordercolor", "white", "-border", "24", "-alpha", "set"
+           , "(", "+clone", "-alpha", "transparent", "-fill", "white"
+           , "-draw", "roundrectangle 0,0 %[fx:w-1],%[fx:h-1] 20,20", ")"
+           , "-compose", "DstIn", "-composite", "-strip", "public/email-logo.png" ]
+
     -- Square mark: trimmed and centred on a white square.
     magick $ levelled "brand/mark-source.png"
       <> [ "-fuzz", "12%", "-trim", "+repage", "-bordercolor", "white", "-border", "24"

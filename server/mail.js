@@ -44,15 +44,18 @@ export function codeEmail(code, purpose) {
   return { subject: purpose === "signup" ? "Finish creating your Birdhaus account" : "Your Birdhaus sign-in code", text, html };
 }
 
-// Plain notes from the store: a few paragraphs and one link, in the same
-// mostly-text layout as the code email.
+// Plain notes from the store: the logo, a few paragraphs and one link, in the
+// same mostly-text layout as the code email. The logo sits on its own white
+// card (scripts/brand-assets.hs), so dark-mode clients, which don't invert
+// images, show it as is; with images blocked, its alt text takes the old
+// heading's place.
 function noteEmail(subject, lines, link) {
   const host = new URL(SITE).host;
   const text = `Birdhaus\n\n${lines.join("\n\n")}\n\n${link.label}: ${link.href}\n\nBirdhaus · ${SITE}\n`;
   const html = `<!doctype html>
 <html lang="en"><body style="margin:0;padding:24px;background:#ffffff;color:#111111;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5">
 <div style="max-width:480px">
-<p style="margin:0 0 24px;font-size:24px;font-weight:700">Birdhaus</p>
+<p style="margin:0 0 24px"><img src="${escape(SITE)}/email-logo.png" width="200" height="191" alt="Birdhaus" style="display:block;border:0;font-size:24px;font-weight:700;color:#111111"></p>
 ${lines.map((line) => `<p style="margin:0 0 16px">${escape(line)}</p>`).join("\n")}
 <p style="margin:8px 0 24px"><a href="${escape(link.href)}" style="color:#111111;font-weight:700">${escape(link.label)}</a></p>
 <p style="margin:0;padding-top:16px;border-top:1px solid #d9d9d9;color:#606060;font-size:12px">Birdhaus · <a href="${escape(SITE)}" style="color:#606060">${escape(host)}</a></p>
