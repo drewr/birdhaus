@@ -30,6 +30,18 @@ function account(user) {
   };
 }
 
+// Every account, oldest first. Rauthy pages its list above a threshold, but the
+// largest page size covers everyone in one request.
+export async function listUsers() {
+  const users = await call("GET", "/users?page_size=65535");
+  return (users ?? []).map((user) => ({
+    sub: user.id,
+    email: user.email.toLowerCase(),
+    name: [user.given_name, user.family_name].filter(Boolean).join(" "),
+    createdAt: new Date(user.created_at * 1000)
+  }));
+}
+
 export async function findByEmail(email) {
   const user = await call("GET", `/users/email/${encodeURIComponent(email)}`);
   return user && account(user);

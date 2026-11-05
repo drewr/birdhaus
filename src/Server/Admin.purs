@@ -28,7 +28,7 @@ type Pickup = { slot :: String, email :: String, product :: String, quantity :: 
 type OrdersVM = { | Chrome ( error :: String, orders :: Array Order ) }
 
 -- waiting lists the products this person is waiting to hear are back.
-type User = { email :: String, since :: String, orders :: Int, spent :: String, lastOrder :: String, waiting :: String }
+type User = { email :: String, name :: String, since :: String, orders :: Int, spent :: String, lastOrder :: String, waiting :: String }
 
 -- filter is the name of the product the list is narrowed to, or empty.
 type UsersVM = { | Chrome ( error :: String, filter :: String, users :: Array User ) }
@@ -133,13 +133,13 @@ adminUsersPage vm =
       , adminNav "/admin/users"
       , if vm.filter == "" then el "h2" [ cls "section-title" ] [ text "Users" ]
         else el "h2" [ cls "section-title" ] [ text ("Waiting for " <> vm.filter) ]
-      , if vm.filter == "" then el "p" [ cls "description" ] [ text "Everyone who has ordered or asked to hear when something is back." ]
-        else el "p" [ cls "fine-print" ] [ text "Oldest request first. ", el "a" [ cls "text-link", A "href" "/admin/users" ] [ text "Show everyone" ] ]
+      , whenH (vm.filter /= "") $
+          el "p" [ cls "fine-print" ] [ text "Oldest request first. ", el "a" [ cls "text-link", A "href" "/admin/users" ] [ text "Show everyone" ] ]
       , errorLine vm.error
       , if null vm.users then el "p" [ cls "description" ] [ text (if vm.filter == "" then "Nobody yet." else "Nobody is waiting.") ]
         else
-          table [ "Email", "Since", "Orders", "Spent", "Last order", "Waiting for" ]
-            (map (\u -> [ text u.email, text u.since, text (show u.orders), text u.spent, text u.lastOrder, text u.waiting ]) vm.users)
+          table [ "Email", "Name", "Since", "Orders", "Spent", "Last order", "Waiting for" ]
+            (map (\u -> [ text u.email, text u.name, text u.since, text (show u.orders), text u.spent, text u.lastOrder, text u.waiting ]) vm.users)
       ]
 
 -- ---------------------------------------------------------------- inventory

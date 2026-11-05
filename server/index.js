@@ -852,21 +852,26 @@ app.get("/admin", auth.requireAdmin, async (request, response) => {
   response.type("html").send(views.adminOrdersPage({ orders: [], ...vm }));
 });
 
-// Everyone who has ordered or asked for a restock; ?waiting=<slug> narrows it
-// to the people still waiting on that product (the link on /admin/inventory).
+// Everyone signed up, and guests who ordered; ?waiting=<slug> narrows it to the
+// people still waiting on that product (the link on /admin/inventory).
 app.get("/admin/users", auth.requireAdmin, async (request, response) => {
   const product = products.find((p) => p.slug === request.query.waiting) ?? null;
-  const vm = await adminData(request, async () => ({
-    users: (await users.list(product?.slug ?? null)).map((u) => ({
+  let partial = false;
+  const vm = await adminData(request, async () => {
+    const { people, accountsOk } = await users.list(product?.slug ?? null);
+    partial = !accountsOk;
+    return { users: people.map((u) => ({
       email: u.email,
-      since: orderDate.format(u.first_seen),
+      name: u.name,
+      since: orderDate.format(u.since),
       orders: u.orders,
       spent: formatUsd(u.spent),
       lastOrder: u.last_order ? orderDate.format(u.last_order) : "—",
       waiting: u.waiting.map(productName).join(", ")
-    }))
-  }));
-  response.type("html").send(views.adminUsersPage({ users: [], ...vm, filter: product?.name ?? "" }));
+    })) };
+  });
+  const error = vm.error || (partial ? "The account list couldn't be loaded, so only people with orders or restock requests are shown." : "");
+  response.type("html").send(views.adminUsersPage({ users: [], ...vm, error, filter: product?.name ?? "" }));
 });
 
 app.get("/admin/pickup", auth.requireAdmin, async (request, response) => {
