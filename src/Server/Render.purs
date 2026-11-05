@@ -42,6 +42,7 @@ type LoginVM =
       ( authEnabled :: Boolean
       , emailEnabled :: Boolean
       , next :: String
+      , reauth :: Boolean
       , googleHref :: String
       , loginEmail :: String
       , loginError :: String
@@ -180,20 +181,32 @@ loginPage vm =
   layout vm $
     el "section" [ cls "login", A "aria-labelledby" "login-title" ]
       [ el "h1" [ cls "page-title", A "id" "login-title" ] [ text "Welcome to Birdhaus" ]
-      , if vm.signedIn then signedInNote else if vm.authEnabled then panels else accountsOff
+      , if vm.reauth && vm.authEnabled then reauthPanel
+        else if vm.signedIn then signedInNote
+        else if vm.authEnabled then panels
+        else accountsOff
       ]
   where
+  logIn =
+    [ el "a" [ cls "secondary-button ui-button ui-button--outline ui-button--block", A "href" vm.googleHref ] [ text "Continue with Google" ]
+    , whenH vm.emailEnabled $
+        emailForm "/login/email" "login"
+          [ field "login-email" "email" "Email" "email" vm.loginEmail ]
+          vm.loginError
+          "Email me a code"
+    ]
+
+  reauthPanel =
+    el "div" [ cls "login-panel login-reauth" ]
+      ( [ el "h2" [ cls "login-heading" ] [ text "Sign in again" ]
+        , el "p" [ cls "description" ] [ text ("You're signed in as " <> vm.accountLabel <> ". Admin pages need a fresh sign-in every 12 hours.") ]
+        ]
+          <> logIn
+      )
+
   panels =
     el "div" [ cls "login-panels" ]
-      [ el "div" [ cls "login-panel" ]
-          [ el "h2" [ cls "login-heading" ] [ text "Log in" ]
-          , el "a" [ cls "secondary-button ui-button ui-button--outline ui-button--block", A "href" vm.googleHref ] [ text "Continue with Google" ]
-          , whenH vm.emailEnabled $
-              emailForm "/login/email" "login"
-                [ field "login-email" "email" "Email" "email" vm.loginEmail ]
-                vm.loginError
-                "Email me a code"
-          ]
+      [ el "div" [ cls "login-panel" ] ([ el "h2" [ cls "login-heading" ] [ text "Log in" ] ] <> logIn)
       , el "p" [ cls "login-or", A "aria-hidden" "true" ] [ text "or" ]
       , el "div" [ cls "login-panel", A "id" "create" ]
           [ el "h2" [ cls "login-heading" ] [ text "Create your account" ]

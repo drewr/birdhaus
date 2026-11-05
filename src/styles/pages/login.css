@@ -24,6 +24,8 @@
 
   & .description, & .fine-print { margin: 0; }
 }
+/* A lapsed admin signing in again: the log-in panel alone. */
+.login-reauth { max-width: var(--size-content-2); margin-inline: auto; }
 .login-heading { margin: 0; font-size: var(--font-size-3); }
 .login-email input { margin-bottom: var(--size-3); }
 .login-or {

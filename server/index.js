@@ -518,6 +518,9 @@ function loginView(request, extra = {}) {
     authEnabled: auth.isConfigured(),
     emailEnabled: emailLogin.isAvailable(),
     googleHref: auth.loginUrl(next, { provider: "google" }),
+    // An admin whose flag has lapsed signs in again rather than continuing,
+    // which would only bounce them off /admin back here.
+    reauth: Boolean(auth.accountOf(request)?.adminLapsed) && next.startsWith("/admin"),
     loginEmail: "",
     loginError: "",
     signupName: "",
