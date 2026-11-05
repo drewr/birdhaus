@@ -27,7 +27,8 @@ and batch, which this plan doesn't build.
 Since then each entry also has `visibility` (`"public"`, or `{ groups }` for
 accounts in one of those Rauthy groups), `batched` (whether its orders are
 recorded under the current batch) and `inventory` (whether its stock is
-tracked, docs/design/inventory.md). Demo Thing, $0.50 and visible only to
+tracked, docs/design/inventory.md). Prices are now set at `/admin/inventory`,
+with `server/price.js` keeping the built-in ones. Demo Thing, $0.50 and visible only to
 `birdhaus-admins`, is unbatched and untracked so test orders never use up stock; orders
 record their product (`orders.product`) and the admin tables show it. The cart
 holds one product, so adding another replaces it.

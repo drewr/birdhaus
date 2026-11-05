@@ -118,7 +118,8 @@ type DeliveryVM =
       )
   }
 
--- subtotalCents and feeCents only label the wallet sheet; the server sets the amount.
+-- subtotalCents and feeCents label the wallet sheet and let the server catch a
+-- price that changed since the page loaded; the server sets the amount.
 type CheckoutVM =
   { | Chrome
       ( quantity :: Int
@@ -585,7 +586,8 @@ choiceInput value selected =
 
 -- Step 2: pay. Wallet buttons (Express Checkout) sit above the card form. For
 -- delivery the wallet supplies the address, or the card path's Address Element
--- does; pick-up needs none. The data attributes only label the wallet sheet.
+-- does; pick-up needs none. The data attributes label the wallet sheet and
+-- tell the server the total shown.
 checkoutPage :: CheckoutVM -> String
 checkoutPage vm =
   layout vm $

@@ -100,7 +100,9 @@ async function initializeCheckout() {
     const response = await fetch("/api/create-payment-intent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: "{}"
+      // Only checked against the server's amount, so a price that changed
+      // after the page loaded isn't charged unseen.
+      body: JSON.stringify({ expectedCents: Number(section.dataset.subtotalCents) + Number(section.dataset.feeCents) })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Unable to start checkout.");

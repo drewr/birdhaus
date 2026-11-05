@@ -6,7 +6,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { currentBatch } from "./batch.js";
-import { unitPrice, formatUsd, formatTotal } from "./price.js";
+import * as price from "./price.js";
+import { unitPrice, formatUsd } from "./price.js";
 import { readCart, writeCart, clearCart } from "./cart.js";
 import { formatOrder } from "./order-format.js";
 import { photoView, products, productName, visibleProduct, visibleTo } from "./products.js";
@@ -267,6 +268,12 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
   // the settings now, never from the browser.
   const choice = await cartChoice(request);
   if (!choice) return response.status(409).json({ error: "Choose a new delivery or pick-up time." });
+  // The browser says only what the page showed, so a price or fee changed
+  // since then is caught before charging; the amount is still the server's.
+  const amount = quantity * (await unitPrice(product)) + choice.feeCents;
+  if (request.body?.expectedCents !== undefined && request.body.expectedCents !== amount) {
+    return response.status(409).json({ error: `The total is now ${formatUsd(amount)}. Reload the page to see the new price.` });
+  }
 
   const account = auth.accountOf(request);
   // Unbatched orders are recorded as "unbatched".
@@ -285,7 +292,7 @@ app.post("/api/create-payment-intent", requireAccount, async (request, response)
   try {
     const stripe = new Stripe(secretKey);
     const intent = await stripe.paymentIntents.create({
-      amount: quantity * unitPrice(product) + choice.feeCents,
+      amount,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
       description: `Birdhaus ${product.name} × ${quantity}, ${choice.method === "delivery" ? "local delivery" : "pick-up"}: ${choice.label}`,
@@ -614,7 +621,7 @@ function availabilityLine(status) {
 app.get("/products", async (request, response) => {
   const account = auth.accountOf(request);
   const visible = products.filter((product) => visibleTo(product, account));
-  const statuses = await Promise.all(visible.map(availability));
+  const [statuses, prices] = await Promise.all([Promise.all(visible.map(availability)), Promise.all(visible.map(unitPrice))]);
   const vm = {
     ...chrome(request),
     products: visible.map((product, i) => {
@@ -626,7 +633,7 @@ app.get("/products", async (request, response) => {
         image: photo ? photo.src : product.image,
         imageAlt: photo ? photo.alt : product.imageAlt,
         srcset: photo ? photo.srcset : "",
-        price: formatUsd(unitPrice(product)),
+        price: formatUsd(prices[i]),
         availability: availabilityLine(statuses[i])
       };
     })
@@ -661,7 +668,7 @@ app.get("/products/:slug", async (request, response) => {
     inCart,
     // Said beside the quantity only when few are left.
     remaining: status.remaining !== null && status.remaining <= inventory.LOW ? status.remaining : -1,
-    priceEach: formatUsd(unitPrice(product)),
+    priceEach: formatUsd(await unitPrice(product)),
     // What can still be added on top of the cart; 0 means the cart has it all.
     maxQuantity: status.remaining === null ? 99 : Math.max(Math.min(status.remaining, 99) - inCart, 0),
     notifyState: status.open ? "" : (await inventory.hasRequested(product.slug, account)) ? "requested" : "ready",
@@ -677,13 +684,14 @@ const adjustedNotice = (qty) => `Only ${qty} available, so we changed your quant
 // The cart page and its HTMX fragment. qty 0 renders the "sold out and removed"
 // state; checkout is offered only when the stock can be checked.
 async function cartView(request, product, qty, status, notice) {
+  const total = formatUsd(qty * (await unitPrice(product)));
   return {
     ...chrome(request),
     cartQty: qty,
     productName: product.name,
     productHref: `/products/${product.slug}`,
-    lineTotal: formatTotal(product, qty),
-    subtotal: formatTotal(product, qty),
+    lineTotal: total,
+    subtotal: total,
     maxQuantity: stepperLimit(status),
     notice: status.reason === "unavailable" ? "We can't check stock right now, so checkout is paused. Try again shortly." : notice,
     checkoutOk: status.open && qty > 0,
@@ -735,7 +743,7 @@ async function deliveryPage(request, response, error = "") {
     ...chrome(request),
     quantity: qty,
     productName: product.name,
-    total: formatTotal(product, qty),
+    total: formatUsd(qty * (await unitPrice(product))),
     error,
     slots: pickupSlots.map((p) => ({ id: p.id, location: p.name, details: p.details, time: pickup.slotTime(p.starts_at, p.ends_at), selected: chosen("pickup", p.id) })),
     deliveryFee: settings ? formatUsd(settings.feeCents) : "",
@@ -784,12 +792,12 @@ app.get("/checkout/pay", requireAccount, async (request, response) => {
   const choice = await cartChoice(request);
   if (!choice) return response.redirect(303, "/checkout");
   const account = auth.accountOf(request);
-  const subtotalCents = qty * unitPrice(product);
+  const subtotalCents = qty * (await unitPrice(product));
   const vm = {
     ...chrome(request),
     quantity: qty,
     productName: product.name,
-    subtotal: formatTotal(product, qty),
+    subtotal: formatUsd(subtotalCents),
     total: formatUsd(subtotalCents + choice.feeCents),
     fulfillment: choice.method,
     choiceLabel: choice.label,
@@ -868,6 +876,8 @@ const ADMIN_ERRORS = {
   "inventory-product": "That product isn't tracked.",
   "inventory-value": "Enter a whole number of 0 or more.",
   "inventory-changed": "The count changed while you were editing, probably from an order. The page now shows the current number; check it and save again.",
+  "price-product": "That product doesn't exist.",
+  "price-value": `Enter a price from ${formatUsd(price.MIN_CENTS)} to ${formatUsd(price.MAX_CENTS)}, like 40 or 39.50.`,
   "notify-empty": "Raise the count above 0 before emailing the people waiting.",
   "mail-off": "Email isn't configured, so nobody was emailed.",
   "no-database": "The database is not configured.",
@@ -1028,7 +1038,8 @@ app.post("/admin/site/:key", auth.requireAdmin, (request, response) => {
 // hidden expected field is the count the admin saw, so a save never overwrites
 // an order that landed meanwhile.
 const changeReason = (change) =>
-  change.reason === "order" ? `Order ${String(change.order_id ?? "").slice(-8).toUpperCase()}`
+  change.kind === "price" ? `Price set by ${change.actor ?? "an admin"}`
+    : change.reason === "order" ? `Order ${String(change.order_id ?? "").slice(-8).toUpperCase()}`
     : change.reason === "seed" ? "Starting count, from the batch cap"
     : `Set by ${change.actor ?? "an admin"}`;
 
@@ -1041,7 +1052,11 @@ app.get("/admin/inventory", auth.requireAdmin, async (request, response) => {
       available: row.available ?? 0,
       sold: row.sold,
       waiting: row.waiting,
-      changes: row.changes.map((c) => ({ at: savedAt.format(c.at), from: c.before === null ? "—" : String(c.before), to: String(c.after), reason: changeReason(c) }))
+      price: (row.cents / 100).toFixed(2),
+      changes: row.changes.map((c) => {
+        const shown = (n) => (n === null ? "—" : c.kind === "price" ? formatUsd(n) : String(n));
+        return { at: savedAt.format(c.at), from: shown(c.before), to: shown(c.after), reason: changeReason(c) };
+      })
     }))
   }));
   const sent = Number.parseInt(request.query.sent, 10);
@@ -1063,6 +1078,19 @@ app.post("/admin/inventory/:slug", auth.requireAdmin, (request, response) => {
     if (!/^\d{1,6}$/.test(value) || !/^-?\d{1,6}$/.test(expected)) return "inventory-value";
     const saved = await inventory.set(product.slug, Number(value), Number(expected), auth.accountOf(request).email || null);
     if (!saved) return "inventory-changed";
+  }, "/admin/inventory");
+});
+
+// Any product's price, tracked or not. Dollars with at most two decimals.
+app.post("/admin/inventory/:slug/price", auth.requireAdmin, (request, response) => {
+  const value = String(request.body?.price ?? "").trim().replace(/^\$/, "");
+  return adminWrite(response, async () => {
+    const product = products.find((p) => p.slug === request.params.slug);
+    if (!product) return "price-product";
+    if (!/^\d{1,4}(\.\d{1,2})?$/.test(value)) return "price-value";
+    const cents = Math.round(Number(value) * 100);
+    if (cents < price.MIN_CENTS || cents > price.MAX_CENTS) return "price-value";
+    await price.set(product, cents, auth.accountOf(request).email || null);
   }, "/admin/inventory");
 });
 

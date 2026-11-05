@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { ADMIN_GROUP } from "./auth.js";
 
-// What the listing and detail pages show about each product. Price lives in
-// price.js and stock in the inventory table, so neither is repeated here.
+// What the listing and detail pages show about each product. Prices come from
+// price.js and stock from the inventory table, so neither is repeated here.
 // visibility is "public" (everyone, signed in or not) or { groups }: only
 // accounts in one of those Rauthy groups see, add or buy it. inventory products
 // sell only what /admin/inventory says is available, and none while the

@@ -49,6 +49,24 @@ count when it's low and a "Notify me when available" button when it's gone.
   "The count changed while you were editing" and the page shows the current
   number.
 
+## Prices
+
+- **Admins set each product's price** on the same page, tracked or not.
+  `server/price.js` reads it from the `prices` table (migration 011); a product
+  without a row sells at its built-in price there. Prices run from $0.50, Stripe's
+  minimum, to $1,000.
+- **Changes are logged** in `price_changes` and listed with the stock changes
+  under "Recent changes". Saving the price already charged logs nothing.
+- **A database blip keeps the owner's price.** Each instance remembers the last
+  price it read and charges that until the database answers again; only an
+  instance that has never read one falls back to the built-in price.
+- **A price that changes mid-checkout isn't charged unseen.** The pay page sends
+  the total it showed with `/api/create-payment-intent`. If the server's amount
+  differs, it refuses with a 409 giving the new total, and the shopper reloads.
+  The amount charged is still only the server's.
+- **Paid orders keep what they paid.** Orders record Stripe's amount, so a later
+  price change doesn't touch them.
+
 ## Shopper experience
 
 - **Product page:**

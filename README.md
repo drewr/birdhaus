@@ -110,7 +110,7 @@ Setup and operations are in [`auth/README.md`](auth/README.md); the design and o
 
 ## Stripe
 
-Stripe test mode is enabled by supplying test keys. Before launch, add live keys in the deployment environment and configure Stripe's payment methods in the Dashboard. Checkout is two steps: `/checkout` chooses delivery (local pick-up at an admin-defined slot; shipping is greyed out until USPS pricing is added) and `/checkout/pay` takes payment. It charges $40 USD per house and collects an email; tax is not added yet.
+Stripe test mode is enabled by supplying test keys. Before launch, add live keys in the deployment environment and configure Stripe's payment methods in the Dashboard. Checkout is two steps: `/checkout` chooses delivery (local pick-up at an admin-defined slot; shipping is greyed out until USPS pricing is added) and `/checkout/pay` takes payment. It charges the price set at `/admin/inventory` (built in: $40 USD per house) and collects an email; tax is not added yet.
 
 Store admins (members of the Rauthy group `birdhaus-admins`) see an Admin link: `/admin` lists recent orders and `/admin/pickup` manages pick-up locations, time slots and the pick-up schedule. To grant access, create the group in Rauthy, add users to it, and add `groups` to the Allowed Scopes of each store client; members then sign out and back in. Orders are recorded from verified webhooks, not the browser return page (see Pre-orders).
 

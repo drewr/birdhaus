@@ -1,5 +1,6 @@
 import * as db from "./db.js";
 import * as mail from "./mail.js";
+import * as price from "./price.js";
 import { products } from "./products.js";
 
 // Stock for products with inventory: true (docs/design/inventory.md). Admins
@@ -28,19 +29,28 @@ export async function stock(product) {
   return { open: remaining > 0, reason: remaining > 0 ? "open" : "sold-out", remaining };
 }
 
-// Every product for the admin page: its count (null when untracked), paid
-// units, people waiting to hear it's back, and its last ten changes.
+// The last ten changes to each product's count or price, newest first.
+const RECENT = (table) =>
+  `select * from (
+     select *, row_number() over (partition by product order by at desc, id desc) as n from ${table}
+   ) recent where n <= 10 order by at desc, id desc`;
+
+// Every product for the admin page: its count (null when untracked), price,
+// paid units, people waiting to hear it's back, and its last ten changes
+// (kind "stock" or "price").
 export async function list() {
-  const [counts, sold, waiting, changes] = await Promise.all([
+  const [counts, prices, sold, waiting, stockChanges, priceChanges] = await Promise.all([
     db.query("select product, available, updated_at, updated_by from inventory"),
+    price.saved(),
     db.query("select product, sum(quantity)::int as units from orders where status = 'paid' group by product"),
     db.query("select product, count(*)::int as people from restock_requests where notified_at is null group by product"),
-    db.query(
-      `select product, before, after, reason, order_id, actor, at from (
-         select *, row_number() over (partition by product order by at desc, id desc) as n from inventory_changes
-       ) recent where n <= 10 order by at desc, id desc`
-    )
+    db.query(RECENT("inventory_changes")),
+    db.query(RECENT("price_changes"))
   ]);
+  const changes = [
+    ...stockChanges.rows.map((row) => ({ ...row, kind: "stock" })),
+    ...priceChanges.rows.map((row) => ({ ...row, kind: "price", reason: "admin" }))
+  ].sort((a, b) => b.at - a.at);
   const count = new Map(counts.rows.map((row) => [row.product, row]));
   const units = new Map(sold.rows.map((row) => [row.product, row.units]));
   const people = new Map(waiting.rows.map((row) => [row.product, row.people]));
@@ -48,9 +58,10 @@ export async function list() {
     product,
     available: product.inventory ? (count.get(product.slug)?.available ?? 0) : null,
     updated: count.get(product.slug) ?? null,
+    cents: prices.get(product.slug)?.cents ?? price.builtInPrice(product),
     sold: units.get(product.slug) ?? 0,
     waiting: people.get(product.slug) ?? 0,
-    changes: changes.rows.filter((row) => row.product === product.slug)
+    changes: changes.filter((row) => row.product === product.slug).slice(0, 10)
   }));
 }
 

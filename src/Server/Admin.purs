@@ -50,12 +50,13 @@ type CopySection = { key :: String, label :: String, page :: String, body :: Str
 
 type CopyVM = { | Chrome ( error :: String, sections :: Array CopySection ) }
 
--- available is meaningless when untracked; below 0 means oversold. from is
--- "—" for the starting count.
+-- available is meaningless when untracked; below 0 means oversold. price is
+-- dollars, like "40.00". A change is to the count or the price; from is "—"
+-- for the starting count.
 type Change = { at :: String, from :: String, to :: String, reason :: String }
 
 type Stock =
-  { slug :: String, name :: String, tracked :: Boolean, available :: Int, sold :: Int, waiting :: Int, changes :: Array Change }
+  { slug :: String, name :: String, tracked :: Boolean, available :: Int, price :: String, sold :: Int, waiting :: Int, changes :: Array Change }
 
 type InventoryVM = { | Chrome ( error :: String, notice :: String, products :: Array Stock ) }
 
@@ -123,7 +124,7 @@ adminInventoryPage vm =
       ( [ el "h1" [ cls "page-title" ] [ text "Admin" ]
         , adminNav "/admin/inventory"
         , el "h2" [ cls "section-title" ] [ text "Inventory" ]
-        , el "p" [ cls "description" ] [ text "How many of each product shoppers can buy. Each paid order counts down; refunds don't add back." ]
+        , el "p" [ cls "description" ] [ text "The price of each product and how many shoppers can buy. Each paid order counts down; refunds don't add back. A new price applies from the next checkout." ]
         , errorLine vm.error
         , whenH (vm.notice /= "") (el "p" [ cls "admin-notice ui-alert ui-alert--success", A "role" "status" ] [ text vm.notice ])
         ]
@@ -133,27 +134,41 @@ adminInventoryPage vm =
 stockForm :: Stock -> Html
 stockForm p =
   el "div" [ cls "admin-form admin-stock" ]
-    ( [ el "h3" [] [ text p.name ] ]
-        <> if not p.tracked then [ el "p" [ cls "fine-print" ] [ text "Not tracked: always available." ] ]
-          else
-            [ whenH (p.available < 0)
-                (el "p" [ cls "admin-oversold ui-alert ui-alert--danger", A "role" "alert" ] [ text ("Oversold by " <> show (negate p.available) <> ". Refund an order or make more, then set the count.") ])
-            , el "form" [ A "method" "post", A "action" ("/admin/inventory/" <> p.slug) ]
+    ( [ el "h3" [] [ text p.name ]
+      , whenH (p.tracked && p.available < 0)
+          (el "p" [ cls "admin-oversold ui-alert ui-alert--danger", A "role" "alert" ] [ text ("Oversold by " <> show (negate p.available) <> ". Refund an order or make more, then set the count.") ])
+      , el "div" [ cls "admin-row" ]
+          [ el "form" [ A "method" "post", A "action" ("/admin/inventory/" <> p.slug <> "/price") ]
+              [ el "label" [ A "for" ("price-" <> p.slug) ] [ text "Price ($)" ]
+              , elVoid "input" [ A "id" ("price-" <> p.slug), A "name" "price", A "type" "number", A "min" "0.50", A "max" "1000", A "step" "0.01", A "value" p.price, B "required" ]
+              , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Save price" ]
+              ]
+          , if not p.tracked then el "p" [ cls "fine-print" ] [ text "Stock not tracked: always available." ]
+            else
+              el "form" [ A "method" "post", A "action" ("/admin/inventory/" <> p.slug) ]
                 [ elVoid "input" [ A "type" "hidden", A "name" "expected", A "value" (show p.available) ]
                 , el "label" [ A "for" ("stock-" <> p.slug) ] [ text "Available" ]
                 , elVoid "input" [ A "id" ("stock-" <> p.slug), A "name" "available", A "type" "number", A "min" "0", A "max" "999999", A "step" "1", A "value" (show (max 0 p.available)), B "required" ]
-                , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Save" ]
+                , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Save count" ]
                 ]
-            , el "p" [ cls "fine-print" ] [ text (show p.sold <> " sold in all. " <> waitingLine) ]
-            , whenH (p.waiting > 0 && p.available > 0) $
-                el "form" [ cls "admin-inline", A "method" "post", A "action" ("/admin/inventory/" <> p.slug <> "/notify") ]
-                  [ el "button" [ cls "text-button ui-button ui-button--link", A "type" "submit" ] [ text ("Email " <> people p.waiting <> " that it's back") ] ]
-            , whenH (not (null p.changes)) $
-                el "details" [ cls "admin-history" ]
-                  [ el "summary" [ cls "text-button ui-button ui-button--link" ] [ text "Recent changes" ]
-                  , table [ "When", "From", "To", "Why" ] (map (\c -> [ text c.at, text c.from, text c.to, text c.reason ]) p.changes)
-                  ]
-            ]
+          ]
+      ]
+        <>
+          ( if not p.tracked then []
+            else
+              [ el "p" [ cls "fine-print" ] [ text (show p.sold <> " sold in all. " <> waitingLine) ]
+              , whenH (p.waiting > 0 && p.available > 0) $
+                  el "form" [ cls "admin-inline", A "method" "post", A "action" ("/admin/inventory/" <> p.slug <> "/notify") ]
+                    [ el "button" [ cls "text-button ui-button ui-button--link", A "type" "submit" ] [ text ("Email " <> people p.waiting <> " that it's back") ] ]
+              ]
+          )
+        <>
+          [ whenH (not (null p.changes)) $
+              el "details" [ cls "admin-history" ]
+                [ el "summary" [ cls "text-button ui-button ui-button--link" ] [ text "Recent changes" ]
+                , table [ "When", "From", "To", "Why" ] (map (\c -> [ text c.at, text c.from, text c.to, text c.reason ]) p.changes)
+                ]
+          ]
     )
   where
   people n = if n == 1 then "1 person" else show n <> " people"
