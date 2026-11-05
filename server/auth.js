@@ -114,16 +114,19 @@ export function accountOf(request) {
   const fresh = Number(session.adminUntil) > now();
   const admin = session.admin === true && fresh;
   const groups = fresh && Array.isArray(session.groups) ? session.groups : [];
-  return { sub: session.sub, email: session.email || "", name: session.name || "", admin, groups };
+  // An admin whose flag has lapsed signs in again to refresh it.
+  const adminLapsed = session.admin === true && !fresh;
+  return { sub: session.sub, email: session.email || "", name: session.name || "", admin, adminLapsed, groups };
 }
 
-// Gate for /admin. Signed-out visitors sign in (which also refreshes a lapsed
-// admin flag); signed-in non-admins see a 404, so the portal isn't advertised.
+// Gate for /admin. Signed-out visitors, and admins whose flag has lapsed, sign
+// in and come back (signing in re-reads the flag); signed-in non-admins see a
+// 404, so the portal isn't advertised.
 // POSTs must come from this origin; session cookies are SameSite=Lax as well.
 export function requireAdmin(request, response, next) {
   response.set("Cache-Control", "no-store");
   const account = accountOf(request);
-  if (!account) {
+  if (!account || account.adminLapsed) {
     const next = request.method === "GET" ? safeNext(request.originalUrl) : "/admin";
     return response.redirect(303, `/login?next=${encodeURIComponent(next)}`);
   }

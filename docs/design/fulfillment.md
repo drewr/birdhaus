@@ -41,7 +41,7 @@ Shipping columns (`shipping_amount`, `quoted_zip`) come later with the USPS chan
 **`server/auth.js`**
 - Scope becomes `openid email profile groups`.
 - On callback, `admin = Array.isArray(payload.groups) && payload.groups.includes(ADMIN_GROUP)`, where `ADMIN_GROUP` is an env var defaulting to `birdhaus-admins`. The session stores `admin` and `adminUntil = now + 12h`.
-- `accountOf` returns `admin: true` only while `adminUntil` hasn't passed. After that, admin pages bounce through `/api/auth/login?next=/admin` to refresh the claim, which keeps revocation lag at roughly 12 hours instead of the 7-day session.
+- `accountOf` returns `admin: true` only while `adminUntil` hasn't passed. After that, admin pages send the admin to `/login?next=<the page>` to sign in again and refresh the claim (`accountOf` flags it as `adminLapsed`), which keeps revocation lag at roughly 12 hours instead of the 7-day session.
 - Export `requireAdmin` middleware:
   - Signed-out users are redirected to sign in.
   - Signed-in users who aren't admins get 404.
