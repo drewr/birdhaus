@@ -46,7 +46,7 @@ parser =
     <*> opt "name" 'n' "birdhaus-store-db" "Secret to create"
     <*> opt "db-secret" 'D' "birdhaus-db-db" "Secret holding the database passwords"
     <*> opt "db-name" 'd' "birdhaus" "Database and role name (also the password key in --db-secret)"
-    <*> opt "db-host" 'H' "db.birdhaus.store" "Postgres hostname"
+    <*> opt "db-host" 'H' "db" "Postgres hostname (db.datum.internal through the Network's search domain)"
     <*> opt "stripe-secret" 'k' "birdhaus-stripe" "Secret holding STRIPE_SECRET_KEY"
     <*> opt "webhook-url" 'u' "https://birdhaus.store/api/stripe-webhook" "Webhook endpoint URL"
   where

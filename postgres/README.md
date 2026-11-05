@@ -24,7 +24,7 @@ The deployment runs as workload `birdhaus-pg` with deployment name `birdhaus-db`
 
 ## Connect
 
-Connect to `db.birdhaus.store`, an AAAA record (`dns/aaaa.yaml`) for the instance's private address. Update that record if the address changes. The address is stable across restarts (`reclaimPolicy: Retain`) but not across recreating the workload:
+Connect to `db`. Inside the `birdhaus` Network the private resolver expands it to `db.datum.internal`, an AAAA record (`dns/private.yaml`) for the instance's private address. Update that record if the address changes. The address is stable across restarts (`reclaimPolicy: Retain`) but not across recreating the workload:
 
 ```sh
 datumctl get instances | grep birdhaus-pg

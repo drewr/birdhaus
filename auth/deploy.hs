@@ -60,7 +60,7 @@ parser =
     <*> opt "network" 'N' "birdhaus" "Datum Network (VPC) to attach"
     <*> opt "workload" 'w' "birdhaus-auth" "Workload name (also the Secret name)"
     <*> opt "hostname" 'H' "login.birdhaus.store" "Public hostname (no scheme)"
-    <*> opt "db-host" 'D' "db.birdhaus.store" "Postgres hostname (a name, not an IPv6 literal)"
+    <*> opt "db-host" 'D' "db" "Postgres hostname (a name, not an IPv6 literal; db.datum.internal through the Network's search domain)"
     <*> opt "db-secret" 'S' "birdhaus-db-db" "Secret holding the database passwords"
     <*> opt "db-name" 'd' "auth" "Database name (the Postgres DATABASES list must include it)"
     <*> opt "smtp-secret" 'm' "birdhaus-ses" "Secret with the SMTP settings"

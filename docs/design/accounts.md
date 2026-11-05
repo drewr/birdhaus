@@ -47,7 +47,7 @@ browser ──► birdhaus.store (session cookie; guest checkout unchanged)
 browser ──► umami.identify({ id }) + login/signup/logout ──► birdhaus-umami
 ```
 
-`birdhaus-auth` is a general-purpose workload on the `birdhaus` Network. It is stateless behind Postgres, so it uses `reclaimPolicy: Delete` and an image pinned by digest, like Umami. Datum programs the `login.birdhaus.store` record from the HTTPProxy, as it does for `stats.birdhaus.store`. Because the address is not retained, replacing the instance changes its private IPv6; the store's internal OIDC client follows `auth-internal` in `dns/aaaa.yaml`, so that record must be updated (see `auth/README.md`).
+`birdhaus-auth` is a general-purpose workload on the `birdhaus` Network. It is stateless behind Postgres, so it uses `reclaimPolicy: Delete` and an image pinned by digest, like Umami. Datum programs the `login.birdhaus.store` record from the HTTPProxy, as it does for `stats.birdhaus.store`. Because the address is not retained, replacing the instance changes its private IPv6; the store's internal OIDC client uses `auth.datum.internal` (`dns/private.yaml`), a CNAME to Compute's instance name, which follows the new address (see `auth/README.md`).
 
 ## Account model
 
@@ -136,7 +136,7 @@ All five steps are done (2026-10-29):
 - Publish the Google OAuth consent screen (External, In production).
 - Run the unexercised verification items above, especially guest-order linking, the magic link, and the auth-down path.
 - Finish branding: 0px corners, the store's black/white palette, and the default `rauthy` client; document it in `auth/README.md`.
-- Update `auth-internal` in `dns/aaaa.yaml` when `birdhaus-auth` is replaced, or switch the workload to a retained interface so the address is stable.
+- **Done (2026-11-04):** the store now reaches Rauthy at `auth.datum.internal` (`dns/private.yaml`), a CNAME to Compute's instance name, which follows `birdhaus-auth` when it is replaced. The public `auth-internal` record is removed.
 - Add an SES SMTP credential rotation runbook (`scripts/ses-smtp.hs --rotate`); it needs an IAM admin.
 - **Phase 2:** Microsoft Entra and Login with Amazon as generic OIDC providers.
 
@@ -146,7 +146,7 @@ All five steps are done (2026-10-29):
 - **Passkey loss.** A passkey-only user who loses every device needs an admin reset. Offer the password option and document the recovery path.
 - **Proxy trust.** With edge-terminated TLS, Rauthy must trust the edge's forwarded headers. Client IP spoofing was **confirmed** on 2026-10-31 (a forged `X-Forwarded-For` reached `/auth/v1/whoami`); `PEER_IP_HEADER_NAME=X-Envoy-External-Address` fixes it by reading the one header the edge always overwrites (see "Client IP and proxy trust"). `TRUSTED_PROXIES` is still the permissive default (`0.0.0.0/0 ::/0`); with the peer-IP header set, narrowing it is optional hardening, not the fix. `SESSION_VALIDATE_IP` is left on so a bad range shows up in the Admin UI.
 - **Admin surface.** The Admin UI is public at `login.birdhaus.store`. Admin MFA must be enforced, and the bootstrap password retired; both are open work.
-- **Private address.** `birdhaus-auth` uses `reclaimPolicy: Delete`, so a replacement changes its IPv6. The store's server-side OIDC calls depend on `auth-internal`, which is a hand-written AAAA record; miss the update and sign-in fails while the store keeps selling.
+- **Private address.** `birdhaus-auth` uses `reclaimPolicy: Delete`, so a replacement changes its IPv6. The store's server-side OIDC calls use `auth.datum.internal`, a CNAME to Compute's instance name, so they follow the new address; they still depend on the Network's private resolver, and if it fails sign-in fails while the store keeps selling.
 - **SMTP dependency.** Email login needs SES SMTP; Google login and the store do not. SES SMTP credentials need an IAM user, and the `drewr` user cannot create one, so an admin (root) has to do it.
 - **Auth outage** blocks sign-in but not sales; the store's auth calls must time out quickly and never gate checkout.
 - **Umami SSO is not possible** on self-hosted Umami; the dashboard login stays separate.

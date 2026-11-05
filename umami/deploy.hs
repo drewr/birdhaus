@@ -8,7 +8,7 @@
 --
 -- Prerequisites: datumctl on PATH; the Postgres deployment is running in the
 -- same Network, its NAME-db Secret has an `umami` password, and --db-host
--- resolves to its address (dns/aaaa.yaml). The Secret birdhaus-umami
+-- resolves to its address (dns/private.yaml). The Secret birdhaus-umami
 -- (DATABASE_URL, APP_SECRET) is created on first run. Run from the repo root.
 
 {-# LANGUAGE OverloadedStrings #-}
@@ -51,7 +51,7 @@ parser =
     <*> opt "network" 'N' "birdhaus" "Datum Network (VPC) to attach"
     <*> opt "workload" 'w' "birdhaus-umami" "Workload name (also the Secret name)"
     <*> opt "hostname" 'H' "stats.birdhaus.store" "Public hostname"
-    <*> opt "db-host" 'D' "db.birdhaus.store" "Postgres hostname (a name, not an IPv6 literal)"
+    <*> opt "db-host" 'D' "db" "Postgres hostname (a name, not an IPv6 literal; db.datum.internal through the Network's search domain)"
     <*> opt "db-secret" 'S' "birdhaus-db-db" "Secret holding the database passwords"
   where
     opt n short def help =

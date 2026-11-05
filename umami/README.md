@@ -8,7 +8,7 @@ Self-hosted [Umami](https://umami.is) 3.4.1 at https://stats.birdhaus.store, sto
 ./umami/deploy.hs --project <project>
 ```
 
-On first run it creates the Secret `birdhaus-umami` (`DATABASE_URL`, `APP_SECRET`). The database host is `db.birdhaus.store` (`dns/aaaa.yaml`), not an IPv6 literal, because Umami's runtime driver cannot parse a bracketed address. The image is pinned by digest in `deploy.hs`; to upgrade, change the digest and redeploy (Umami runs its own migrations on start).
+On first run it creates the Secret `birdhaus-umami` (`DATABASE_URL`, `APP_SECRET`). The database host is `db` (`db.datum.internal` through the Network's private resolver, `dns/private.yaml`), not an IPv6 literal, because Umami's runtime driver cannot parse a bracketed address. The image is pinned by digest in `deploy.hs`; to upgrade, change the digest and redeploy (Umami runs its own migrations on start).
 
 The image binds `0.0.0.0` by default, which an IPv6-only instance cannot serve, so the workload sets `HOSTNAME=::`.
 

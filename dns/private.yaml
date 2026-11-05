@@ -1,0 +1,39 @@
+apiVersion: dns.networking.miloapis.com/v1alpha1
+kind: DNSRecordSet
+metadata:
+  name: birdhaus-internal-aaaa
+  namespace: default
+spec:
+  # The birdhaus Network's managed private zone (datum.internal), created by
+  # its DNSResolverContext dns-birdhaus-7f5010201a04. Only resolvable through
+  # that Network's private resolver. Compute reserves instances.datum.internal,
+  # so customer names must sit outside that subtree.
+  dnsZoneRef:
+    name: managed-d1275e45ed06
+  recordType: AAAA
+  records:
+  # The Postgres instance (birdhaus-pg). Its address survives restarts
+  # (reclaimPolicy: Retain) but not recreating the workload.
+  - name: db
+    ttl: 300
+    aaaa:
+      content: fd20:0:4a::1:0:0
+---
+apiVersion: dns.networking.miloapis.com/v1alpha1
+kind: DNSRecordSet
+metadata:
+  name: birdhaus-internal-cname
+  namespace: default
+spec:
+  dnsZoneRef:
+    name: managed-d1275e45ed06
+  recordType: CNAME
+  records:
+  # Rauthy, for the store's server-side OIDC and admin API calls (the public
+  # hostname hairpins through the edge from inside the Network). Points at
+  # Compute's name for the instance, which follows the instance's address when
+  # birdhaus-auth (reclaimPolicy: Delete) is replaced.
+  - name: auth
+    ttl: 300
+    cname:
+      content: birdhaus-auth-default-us-east-1-0.instances.datum.internal.

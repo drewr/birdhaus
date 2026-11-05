@@ -195,7 +195,7 @@ ensureAuthSecret o sess secretExists = do
             , "--name", authSecret o
             , "--client-id", T.strip cid
             , "--redirect", "https://" <> domain o <> "/api/auth/callback"
-            , "--internal-url", "http://auth-internal.birdhaus.store:8080"
+            , "--internal-url", "http://auth.datum.internal:8080"
             ] <> sess
           )
           empty

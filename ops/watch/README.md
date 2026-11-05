@@ -58,4 +58,4 @@ export AWS_PROFILE=<profile>
 
 ## Added 2026-10-29
 
-- The `auth` probe watches `https://login.birdhaus.store/auth/v1/health`; it reports up. The failure path has not been exercised: stopping `birdhaus-auth` replaces the instance and changes its private address, so `auth-internal` in `dns/aaaa.yaml` must be updated afterwards.
+- The `auth` probe watches `https://login.birdhaus.store/auth/v1/health`; it reports up. The failure path has not been exercised: stopping `birdhaus-auth` replaces the instance and can change its private address; the store reaches it through `auth.datum.internal`, which follows Compute's instance name.

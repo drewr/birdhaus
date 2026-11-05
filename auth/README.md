@@ -82,7 +82,7 @@ The logo and theme live in the `auth` database (`client_logos`, and binary `them
 - **Proxy trust:** `TRUSTED_PROXIES` is still the permissive `0.0.0.0/0 ::/0`; narrow it to the Datum edge range.
 - **Admin:** enforce MFA and remove the plaintext bootstrap password from the Secret.
 - **Google:** publish the consent screen (In production); Testing blocks everyone except test users.
-- **Private address:** `birdhaus-auth` uses `reclaimPolicy: Delete`; update `auth-internal` in `dns/aaaa.yaml` when the instance is replaced.
+- **Private address:** `birdhaus-auth` uses `reclaimPolicy: Delete`, so a replacement can change its address. `auth.datum.internal` (`dns/private.yaml`) is a CNAME to Compute's name for the instance, `birdhaus-auth-default-us-east-1-0.instances.datum.internal`, which Compute keeps current. Update the CNAME only if the instance name changes (a new workload name or location).
 - **SMTP rotation:** rotate the SES SMTP key with `scripts/ses-smtp.hs --rotate`; the `drewr` user has no IAM, so an admin must run it.
 - **Verification:** the passkey round-trip, magic-link email, guest-order linking, Umami events, auth-down path and restart-from-Postgres are not yet exercised; see `docs/design/accounts.md`.
 
@@ -103,7 +103,7 @@ The logo and theme live in the `auth` database (`client_logos`, and binary `them
 - **Lost passkey:** a passkey-only user who loses every device needs an admin-assisted reset in the Admin UI. Users who chose a password can reset it by email.
 - **Proxy trust:** TLS terminates at the Datum edge, so `PROXY_MODE=true` and `TRUSTED_PROXIES` must include the edge's source range. The deployed value is still the permissive `0.0.0.0/0 ::/0`; narrow it after checking the peer addresses in the instance logs, or Rauthy will accept spoofed client IPs. `SESSION_VALIDATE_IP` is on, so a wrong range shows up as sessions with the proxy's IP in the Admin UI.
 
-- **The public hostname hairpins:** from inside the `birdhaus` Network, `https://login.birdhaus.store` times out through the edge. The store's server-side OIDC calls therefore use `OIDC_INTERNAL_URL=http://auth-internal.birdhaus.store:8080`; `auth-internal` is the AAAA record in `dns/aaaa.yaml` for the auth instance's private address. The browser still uses the public issuer. If the auth instance is replaced with a new address, update that record (and the Secret) or sign-in fails while the site keeps selling.
+- **The public hostname hairpins:** from inside the `birdhaus` Network, `https://login.birdhaus.store` times out through the edge. The store's server-side OIDC calls therefore use `OIDC_INTERNAL_URL=http://auth.datum.internal:8080`, a name in the `birdhaus` Network's private zone (`dns/private.yaml`) that only resolves inside the Network. The browser still uses the public issuer. If that name stops resolving, sign-in fails while the site keeps selling.
 
 ## Limits
 
