@@ -18,6 +18,7 @@ import * as pickup from "./pickup.js";
 import * as delivery from "./delivery.js";
 import * as copy from "./copy.js";
 import * as inventory from "./inventory.js";
+import * as users from "./users.js";
 import * as mail from "./mail.js";
 import { lastGeocodeFailure } from "./geocode.js";
 
@@ -849,6 +850,23 @@ app.get("/admin", auth.requireAdmin, async (request, response) => {
     }))
   }));
   response.type("html").send(views.adminOrdersPage({ orders: [], ...vm }));
+});
+
+// Everyone who has ordered or asked for a restock; ?waiting=<slug> narrows it
+// to the people still waiting on that product (the link on /admin/inventory).
+app.get("/admin/users", auth.requireAdmin, async (request, response) => {
+  const product = products.find((p) => p.slug === request.query.waiting) ?? null;
+  const vm = await adminData(request, async () => ({
+    users: (await users.list(product?.slug ?? null)).map((u) => ({
+      email: u.email,
+      since: orderDate.format(u.first_seen),
+      orders: u.orders,
+      spent: formatUsd(u.spent),
+      lastOrder: u.last_order ? orderDate.format(u.last_order) : "—",
+      waiting: u.waiting.map(productName).join(", ")
+    }))
+  }));
+  response.type("html").send(views.adminUsersPage({ users: [], ...vm, filter: product?.name ?? "" }));
 });
 
 app.get("/admin/pickup", auth.requireAdmin, async (request, response) => {

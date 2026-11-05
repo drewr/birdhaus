@@ -1,9 +1,10 @@
 -- The store admin portal (/admin), for members of the Rauthy admin group: recent
--- orders; inventory; pick-up locations, slots and schedule; local delivery
+-- orders; users; inventory; pick-up locations, slots and schedule; local delivery
 -- settings, slots and schedule; page copy. Plain tables and POST forms; writes
 -- redirect back.
 module Server.Admin
   ( adminOrdersPage
+  , adminUsersPage
   , adminPickupPage
   , adminDeliveryPage
   , adminCopyPage
@@ -25,6 +26,12 @@ type Slot = { id :: Int, location :: String, time :: String, active :: Boolean, 
 type Pickup = { slot :: String, email :: String, product :: String, quantity :: Int, number :: String }
 
 type OrdersVM = { | Chrome ( error :: String, orders :: Array Order ) }
+
+-- waiting lists the products this person is waiting to hear are back.
+type User = { email :: String, since :: String, orders :: Int, spent :: String, lastOrder :: String, waiting :: String }
+
+-- filter is the name of the product the list is narrowed to, or empty.
+type UsersVM = { | Chrome ( error :: String, filter :: String, users :: Array User ) }
 
 type DeliverySlot = { id :: Int, time :: String, active :: Boolean, past :: Boolean }
 
@@ -67,6 +74,7 @@ adminNav :: String -> Html
 adminNav current =
   el "nav" [ cls "admin-nav" ]
     [ link "/admin" "Orders"
+    , link "/admin/users" "Users"
     , link "/admin/inventory" "Inventory"
     , link "/admin/pickup" "Pick-up"
     , link "/admin/delivery" "Delivery"
@@ -115,6 +123,25 @@ adminOrdersPage vm =
             (map (\o -> [ text o.number, text o.date, text o.email, text o.product, text (show o.quantity), text o.total, text o.status, text o.method ]) vm.orders)
       ]
 
+-- ---------------------------------------------------------------- users
+
+adminUsersPage :: UsersVM -> String
+adminUsersPage vm =
+  layout vm $
+    el "section" [ cls "admin" ]
+      [ el "h1" [ cls "page-title" ] [ text "Admin" ]
+      , adminNav "/admin/users"
+      , if vm.filter == "" then el "h2" [ cls "section-title" ] [ text "Users" ]
+        else el "h2" [ cls "section-title" ] [ text ("Waiting for " <> vm.filter) ]
+      , if vm.filter == "" then el "p" [ cls "description" ] [ text "Everyone who has ordered or asked to hear when something is back." ]
+        else el "p" [ cls "fine-print" ] [ text "Oldest request first. ", el "a" [ cls "text-link", A "href" "/admin/users" ] [ text "Show everyone" ] ]
+      , errorLine vm.error
+      , if null vm.users then el "p" [ cls "description" ] [ text (if vm.filter == "" then "Nobody yet." else "Nobody is waiting.") ]
+        else
+          table [ "Email", "Since", "Orders", "Spent", "Last order", "Waiting for" ]
+            (map (\u -> [ text u.email, text u.since, text (show u.orders), text u.spent, text u.lastOrder, text u.waiting ]) vm.users)
+      ]
+
 -- ---------------------------------------------------------------- inventory
 
 adminInventoryPage :: InventoryVM -> String
@@ -156,7 +183,7 @@ stockForm p =
         <>
           ( if not p.tracked then []
             else
-              [ el "p" [ cls "fine-print" ] [ text (show p.sold <> " sold in all. " <> waitingLine) ]
+              [ el "p" [ cls "fine-print" ] ([ text (show p.sold <> " sold in all. ") ] <> waitingLine)
               , whenH (p.waiting > 0 && p.available > 0) $
                   el "form" [ cls "admin-inline", A "method" "post", A "action" ("/admin/inventory/" <> p.slug <> "/notify") ]
                     [ el "button" [ cls "text-button ui-button ui-button--link", A "type" "submit" ] [ text ("Email " <> people p.waiting <> " that it's back") ] ]
@@ -173,9 +200,10 @@ stockForm p =
   where
   people n = if n == 1 then "1 person" else show n <> " people"
   waitingLine
-    | p.waiting == 0 = "Nobody is waiting to hear it's back."
-    | p.available > 0 = people p.waiting <> " waiting to hear it's back."
-    | otherwise = people p.waiting <> " waiting to hear it's back; raise the count to email them."
+    | p.waiting == 0 = [ text "Nobody is waiting to hear it's back." ]
+    | p.available > 0 = [ waitingLink, text " waiting to hear it's back." ]
+    | otherwise = [ waitingLink, text " waiting to hear it's back; raise the count to email them." ]
+  waitingLink = el "a" [ cls "text-link", A "href" ("/admin/users?waiting=" <> p.slug) ] [ text (people p.waiting) ]
 
 -- ---------------------------------------------------------------- pick-up
 

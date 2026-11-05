@@ -96,7 +96,8 @@ count when it's low and a "Notify me when available" button when it's gone.
 - `/admin/inventory` lists every product. A tracked product shows:
   - its available count, with Save;
   - units sold;
-  - how many people are waiting;
+  - how many people are waiting, linking to `/admin/users?waiting=<slug>`,
+    which lists them oldest request first;
   - its last ten changes, under "Recent changes".
 - **Emailing the people waiting:** once the count is above 0, "Email N people
   that it's back" sends each one a single restock email (`mail.restockEmail`)

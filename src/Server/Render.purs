@@ -19,7 +19,7 @@ module Server.Render
 import Prelude
 import Data.Array (null)
 import Html (Attr(..), Html, cls, el, elVoid, empty, raw, render, text, whenH)
-import Server.Admin (adminCopyPage, adminDeliveryPage, adminInventoryPage, adminOrdersPage, adminPickupPage)
+import Server.Admin (adminCopyPage, adminDeliveryPage, adminInventoryPage, adminOrdersPage, adminPickupPage, adminUsersPage)
 import Server.Layout (Chrome, cartLinkEl, layout, layoutWithHero)
 
 -- "Notify me when available" on a product that isn't selling. notifyState is
