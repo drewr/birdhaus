@@ -1,0 +1,57 @@
+/* datum-ui's Dialog on the native <dialog>: open it with showModal(), close it
+   with a <form method="dialog"> button.
+
+   <dialog class="ui-dialog">
+     <header class="ui-dialog__header"><h2>Title</h2><p>Description</p></header>
+     <div class="ui-dialog__body">…</div>
+     <form method="dialog" class="ui-dialog__footer"><button class="ui-button">OK</button></form>
+   </dialog> */
+.ui-dialog {
+  width: min(100% - 2 * var(--size-3), var(--size-content-3));
+  max-height: 80vh;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ui-radius);
+  background: var(--ui-card);
+  color: var(--ui-card-foreground);
+  box-shadow: var(--ui-shadow-overlay);
+  opacity: 0;
+  scale: 0.95;
+  transition: opacity var(--ui-duration-medium) var(--ui-ease), scale var(--ui-duration-medium) var(--ui-ease),
+    overlay var(--ui-duration-medium) allow-discrete, display var(--ui-duration-medium) allow-discrete;
+
+  &[open] { display: flex; flex-direction: column; opacity: 1; scale: 1; }
+  &::backdrop {
+    background: color-mix(in srgb, var(--ui-foreground) 30%, transparent);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    transition: opacity var(--ui-duration-medium) var(--ui-ease), overlay var(--ui-duration-medium) allow-discrete, display var(--ui-duration-medium) allow-discrete;
+  }
+  &[open]::backdrop { opacity: 1; }
+
+  @starting-style {
+    &[open] { opacity: 0; scale: 0.95; }
+    &[open]::backdrop { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { scale: 1; &[open] { scale: 1; } }
+}
+.ui-dialog__header {
+  display: grid;
+  gap: var(--size-1);
+  padding: var(--size-4) var(--size-4) 0;
+
+  & > * { margin: 0; }
+  & h2 { font-size: var(--ui-text); }
+  & p { color: var(--ui-muted-foreground); font-size: var(--ui-text-small); }
+}
+.ui-dialog__body { padding: var(--size-4); overflow-y: auto; }
+.ui-dialog__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--size-2);
+  margin: 0;
+  padding: var(--size-3) var(--size-4);
+  border-block-start: var(--ui-rule);
+  background: var(--ui-background);
+}

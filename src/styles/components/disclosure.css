@@ -1,29 +1,9 @@
-/* <details> without the browser's marker. The FAQ draws its own +/−. */
+/* The FAQ is the kit's .ui-disclosure; the admin's inventory history is a bare
+   <details> whose summary is a link button. */
 details.admin-history > summary {
   list-style: none;
   cursor: pointer;
 
   &::-webkit-details-marker { display: none; }
 }
-
-.faq-list { border-bottom: var(--rule); }
-.faq-item {
-  border-top: var(--rule);
-
-  & summary {
-    padding: var(--size-3) 0;
-    font-size: var(--font-size-0);
-    font-weight: var(--font-weight-7);
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--size-3);
-
-    &::-webkit-details-marker { display: none; }
-    &::after { content: "+"; font-weight: var(--font-weight-4); font-size: var(--font-size-3); line-height: var(--font-lineheight-00); }
-  }
-  &[open] summary::after { content: "−"; }
-}
-.faq-answer { margin: 0 0 var(--size-4); color: var(--body-text); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+.faq-answer { margin: 0 0 var(--size-4); color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }

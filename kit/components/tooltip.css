@@ -1,0 +1,35 @@
+/* datum-ui's Tooltip without JavaScript: the text comes from data-tooltip and
+   shows on hover or keyboard focus, above the element. Keep it short, and
+   don't put anything there that isn't also in an aria-label or the page.
+
+   <button class="ui-button" data-tooltip="Copy link" aria-label="Copy link">⧉</button> */
+[data-tooltip] {
+  position: relative;
+
+  &::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    inset-block-end: calc(100% + var(--size-2));
+    inset-inline-start: 50%;
+    z-index: var(--layer-5);
+    width: max-content;
+    max-width: min(var(--size-content-1), 100vw - 2 * var(--size-3));
+    padding: var(--size-1) var(--size-2);
+    border-radius: var(--ui-radius);
+    background: var(--ui-secondary);
+    color: var(--ui-secondary-foreground);
+    font-size: var(--ui-text-small);
+    font-weight: var(--ui-weight-regular);
+    line-height: var(--ui-leading-tight);
+    text-align: center;
+    text-wrap: balance;
+    white-space: normal;
+    pointer-events: none;
+    opacity: 0;
+    translate: -50% var(--size-1);
+    transition: opacity var(--ui-duration-fast) var(--ui-ease), translate var(--ui-duration-fast) var(--ui-ease);
+  }
+  &:is(:hover, :focus-visible)::after { opacity: 1; translate: -50% 0; }
+
+  @media (prefers-reduced-motion: reduce) { &::after { translate: -50% 0; } }
+}

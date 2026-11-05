@@ -1,0 +1,30 @@
+/* datum-ui's Table, and --mist for its data-table look: a compact uppercase
+   header on a tinted band. Wrap in .ui-table-scroll when it may be wider than
+   the screen. */
+.ui-table-scroll { overflow-x: auto; }
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ui-text-small);
+  font-variant-numeric: tabular-nums;
+
+  & th, & td { padding: var(--size-2); border-block-end: var(--ui-rule); text-align: start; vertical-align: top; }
+  & th { color: var(--ui-muted-foreground); font-weight: var(--ui-weight-medium); white-space: nowrap; }
+  & tbody tr { transition: background-color var(--ui-duration-fast) var(--ui-ease); }
+  & tbody tr:hover { background: color-mix(in srgb, var(--ui-muted) 50%, transparent); }
+  & tbody tr:is([aria-selected="true"], [aria-current]) { background: var(--ui-primary-wash); }
+  & tfoot { background: color-mix(in srgb, var(--ui-muted) 50%, transparent); font-weight: var(--ui-weight-medium); }
+  & caption { margin-block-start: var(--size-3); caption-side: bottom; color: var(--ui-muted-foreground); }
+}
+.ui-table--mist {
+  & th {
+    padding-block: var(--size-2);
+    background: var(--ui-muted);
+    color: color-mix(in srgb, var(--ui-foreground) 60%, transparent);
+    font-weight: var(--ui-weight-regular);
+    letter-spacing: var(--font-letterspacing-1);
+    text-transform: uppercase;
+  }
+  & :is(th, td):first-child { padding-inline-start: var(--size-3); }
+  & :is(th, td):last-child { padding-inline-end: var(--size-3); }
+}

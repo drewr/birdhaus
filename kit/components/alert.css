@@ -1,0 +1,40 @@
+/* datum-ui's Alert: a bordered message box, tinted by type.
+
+   <div class="ui-alert ui-alert--success" role="status">
+     <p class="ui-alert__title">Saved</p>
+     <p>The count is now 3.</p>
+   </div>
+   A bare <p class="ui-alert"> works for a one-line message. */
+.ui-alert {
+  --_border: var(--ui-border);
+  --_wash: var(--ui-card);
+  --_color: var(--ui-foreground);
+
+  display: grid;
+  gap: var(--size-1);
+  margin-block: 0 var(--size-3);
+  padding: var(--size-3);
+  border: var(--border-size-1) solid var(--_border);
+  border-radius: var(--ui-radius);
+  background: var(--_wash);
+  color: var(--_color);
+  font-size: var(--ui-text);
+  line-height: var(--ui-leading);
+
+  & > * { margin: 0; }
+}
+.ui-alert__title { font-weight: var(--ui-weight-medium); letter-spacing: var(--ui-tracking-tight); }
+.ui-alert__description { color: var(--ui-muted-foreground); font-size: var(--ui-text-small); }
+
+.ui-alert--muted { --_border: var(--ui-muted); --_wash: var(--ui-muted); --_color: var(--ui-foreground); }
+.ui-alert--info { --_border: var(--blue-2); --_wash: var(--ui-info-wash); --_color: var(--blue-11); }
+.ui-alert--success { --_border: var(--green-3); --_wash: var(--ui-success-wash); --_color: var(--green-11); }
+.ui-alert--warning { --_border: var(--yellow-5); --_wash: var(--ui-warning-wash); --_color: var(--ui-warning-text); }
+.ui-alert--danger { --_border: color-mix(in srgb, var(--ui-destructive) 50%, transparent); --_wash: var(--ui-destructive-wash); --_color: var(--ui-destructive); }
+
+/* Inline status text, without the box: "Only 3 left", a field's error. */
+.ui-status { margin: 0; font-size: var(--ui-text-small); font-weight: var(--ui-weight-medium); }
+.ui-status--danger { color: var(--ui-destructive); }
+.ui-status--success { color: var(--ui-success); }
+.ui-status--warning { color: var(--ui-warning-text); }
+.ui-status--muted { color: var(--ui-muted-foreground); font-weight: var(--ui-weight-regular); }

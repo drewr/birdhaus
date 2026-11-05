@@ -1,0 +1,85 @@
+/* Classless defaults: plain HTML gets the kit's look. Everything is inside
+   :where(), so any class, the site's or the kit's, overrides it. */
+:where(*, ::before, ::after) { box-sizing: border-box; }
+:where(html) {
+  font-family: var(--ui-font-sans);
+  font-size: 100%;
+  line-height: var(--ui-leading);
+  color: var(--ui-foreground);
+  background: var(--ui-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scrollbar-color: var(--ui-border) transparent;
+}
+:where(body) { min-height: 100svh; }
+
+:where(h1, h2, h3, h4) {
+  font-weight: var(--ui-weight-strong);
+  line-height: var(--ui-leading-tight);
+  letter-spacing: var(--ui-tracking-tight);
+  text-wrap: balance;
+}
+:where(h1) { font-size: var(--ui-title-1); }
+:where(h2) { font-size: var(--ui-title-3); }
+:where(h3) { font-size: var(--ui-title-4); }
+:where(h4) { font-size: var(--ui-text); }
+:where(strong, b) { font-weight: var(--ui-weight-strong); }
+:where(small) { font-size: var(--ui-text-small); }
+
+:where(a) {
+  color: var(--ui-primary);
+  text-underline-offset: var(--size-1);
+
+  &:hover { color: var(--ui-primary-hover); }
+}
+:where(code, kbd, pre) { font-family: var(--ui-font-mono); font-size: 0.875em; }
+:where(:not(pre) > code) { padding: 0.1em var(--size-1); border-radius: var(--ui-radius-small); background: var(--ui-muted); }
+:where(pre) { padding: var(--size-3); border-radius: var(--ui-radius); background: var(--ui-muted); overflow-x: auto; }
+:where(mark) { padding: 0 var(--size-1); border-radius: var(--ui-radius-small); background: var(--yellow-1); color: inherit; }
+:where(blockquote) {
+  margin-inline: 0;
+  padding-inline-start: var(--size-3);
+  border-inline-start: var(--border-size-3) solid var(--ui-sky);
+  color: var(--ui-muted-foreground);
+  font-style: italic;
+}
+:where(hr) { border: 0; border-top: var(--ui-rule); }
+
+:where(:focus-visible) { outline: var(--border-size-2) solid var(--ui-ring); outline-offset: var(--border-size-2); }
+
+/* Form controls: datum-ui's Input, Textarea and Select trigger. */
+:where(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="color"], [type="file"]), select, textarea) {
+  width: 100%;
+  padding: var(--size-2) var(--size-3);
+  border: var(--border-size-1) solid var(--ui-input-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-input-background);
+  color: var(--ui-foreground);
+  font: inherit;
+  /* 16px at every width also keeps iOS from zooming in on focus. */
+  font-size: var(--ui-text);
+  line-height: var(--ui-leading);
+  transition: border-color var(--ui-duration-fast) var(--ui-ease), box-shadow var(--ui-duration-fast) var(--ui-ease);
+
+  &::placeholder { color: var(--ui-input-placeholder); }
+  &:focus-visible { outline: none; border-color: var(--ui-input-focus-border); box-shadow: var(--ui-focus-shadow); }
+  &:disabled, &[readonly] { opacity: 0.5; cursor: not-allowed; }
+  &[aria-invalid="true"], &:user-invalid { border-color: var(--ui-destructive); }
+}
+:where(textarea) { min-height: var(--size-10); field-sizing: content; resize: vertical; }
+:where(label) { font-size: var(--ui-text-small); font-weight: var(--ui-weight-medium); }
+
+/* Checkbox and radio: native controls in the primary colour. */
+:where(input:is([type="checkbox"], [type="radio"])) {
+  width: var(--size-3);
+  height: var(--size-3);
+  margin: 0;
+  accent-color: var(--ui-primary);
+  cursor: pointer;
+
+  &:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-ring) 50%, transparent); }
+}
+
+/* Plain buttons keep the browser's look; .ui-button styles them. */
+:where(button) { font: inherit; cursor: pointer; }
+:where(button:disabled) { cursor: not-allowed; }

@@ -62,22 +62,24 @@ let stripe;
 let clientSecret;
 let addressElement;
 
-// Stripe's iframes can't see our CSS, so hand them the tokens from
-// src/styles/tokens.css.
+// Stripe's iframes can't see our CSS, so hand them the kit's tokens
+// (kit/tokens.css). Nor can they load our self-hosted Inter, so Stripe fetches
+// the same face from Google Fonts.
 function stripeAppearance() {
   const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return {
     theme: "flat",
     variables: {
-      fontFamily: token("--font-body"),
-      colorPrimary: token("--ink"),
-      colorText: token("--ink"),
-      colorTextSecondary: token("--muted"),
-      colorDanger: token("--danger"),
-      borderRadius: "0px"
+      fontFamily: token("--ui-font-sans"),
+      colorPrimary: token("--ui-primary"),
+      colorText: token("--ui-foreground"),
+      colorTextSecondary: token("--ui-muted-foreground"),
+      colorDanger: token("--ui-destructive"),
+      borderRadius: token("--ui-radius")
     }
   };
 }
+const stripeFonts = [{ cssSrc: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" }];
 
 // The pay page: wallet buttons (Express Checkout) above the card form. The
 // server set the amount (houses plus any delivery fee) from the cart; the
@@ -108,12 +110,12 @@ async function initializeCheckout() {
 
     clientSecret = result.clientSecret;
     const appearance = stripeAppearance();
-    elements = stripe.elements({ clientSecret, appearance });
+    elements = stripe.elements({ clientSecret, appearance, fonts: stripeFonts });
     mountExpressCheckout(section, delivering);
     if (delivering) {
       // Its own group, so confirming doesn't attach it: the server sets the
       // shipping address it verified.
-      addressElement = stripe.elements({ appearance }).create("address", {
+      addressElement = stripe.elements({ appearance, fonts: stripeFonts }).create("address", {
         mode: "shipping",
         allowedCountries: ["US"],
         fields: { phone: "always" },

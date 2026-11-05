@@ -1,12 +1,6 @@
-:root {
-  font-family: var(--font-body);
-  color: var(--ink);
-  background: var(--paper);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
+/* The kit sets the body font, colours and element defaults (kit/elements.css). */
+:root { font-synthesis: none; text-rendering: optimizeLegibility; }
 body { min-width: var(--size-14); }
-a { color: inherit; text-underline-offset: var(--size-1); }
 
 /* Each page's h1; the page sets its margin. */
 .page-title {

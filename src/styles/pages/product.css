@@ -12,20 +12,22 @@
 
   @media (--md-n-below) { position: static; }
 }
-.product-figure { margin: 0; border: var(--rule); background: var(--wash); padding: var(--size-8); display: grid; place-items: center; }
+.product-figure { margin: 0; border: var(--ui-rule); border-radius: var(--ui-radius); background: var(--ui-card); padding: var(--size-8); display: grid; place-items: center; }
 .product-illustration { width: 100%; max-width: var(--size-xs); height: auto; display: block; }
-.product-photo-figure { margin: 0; border: var(--rule); }
+.product-photo-figure { margin: 0; border: var(--ui-rule); border-radius: var(--ui-radius); overflow: hidden; }
 .product-photo { width: 100%; height: auto; display: block; }
 .product-thumbs { list-style: none; margin: var(--size-3) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--size-3); }
 .product-thumb {
   display: block;
-  border: var(--rule);
+  border: var(--ui-rule);
+  border-radius: var(--ui-radius);
+  overflow: hidden;
 
   & img { width: var(--size-10); height: auto; display: block; }
-  &[aria-current="true"] { outline: var(--border-size-2) solid var(--ink); outline-offset: var(--border-size-1); }
+  &[aria-current="true"] { outline: var(--border-size-2) solid var(--ui-primary); outline-offset: var(--border-size-1); }
 }
 .product-details .page-title { margin: 0; }
-.price { margin: var(--size-3) 0; font-size: var(--font-size-2); font-weight: var(--font-weight-7); }
+.price { margin: var(--size-3) 0; font-size: var(--font-size-2); font-weight: var(--font-weight-6); }
 .add-form { margin: 0 0 var(--size-1); }
 /* The quantity and, when few are left, how many, side by side. */
 .quantity-row {
@@ -36,11 +38,11 @@
   & .stock-note { margin: 0; }
 }
 
-.sold-out-status { margin: 0 0 var(--size-3); font-size: var(--font-size-3); font-weight: var(--font-weight-7); }
+.sold-out-status { margin: 0 0 var(--size-3); font-size: var(--font-size-3); font-weight: var(--font-weight-6); }
 .notify .fine-print { margin-top: var(--size-2); }
 
 /* Below-the-fold merchandising */
-.info { margin-top: var(--size-9); padding-top: var(--size-8); border-top: var(--rule); }
+.info { margin-top: var(--size-9); padding-top: var(--size-8); border-top: var(--ui-rule); }
 .section-title { margin: 0 0 var(--gutter); font-size: var(--font-size-3); letter-spacing: var(--font-letterspacing-0); }
 .feature-list {
   list-style: none;
@@ -59,17 +61,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: var(--border-size-1) solid var(--ink);
+  border: var(--border-size-1) solid var(--ui-primary);
   border-radius: var(--radius-round);
+  color: var(--ui-primary);
   font-size: var(--font-size-0);
   line-height: var(--font-lineheight-00);
 }
-.feature-title { margin: 0 0 var(--size-1); font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
-.feature-desc { margin: 0; color: var(--body-text); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+.feature-title { margin: 0 0 var(--size-1); font-size: var(--font-size-0); font-weight: var(--font-weight-6); }
+.feature-desc { margin: 0; color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
 .trust-strip {
   margin-top: var(--size-9);
   padding: var(--size-6) 0;
-  border-block: var(--rule);
+  border-block: var(--ui-rule);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--size-7);
@@ -77,6 +80,6 @@
   @media (--md-n-below) { grid-template-columns: 1fr; gap: var(--size-4); }
 }
 .trust-item {
-  & h3 { margin: 0 0 var(--size-2); font-size: var(--font-size-0); font-weight: var(--font-weight-7); letter-spacing: var(--font-letterspacing-3); text-transform: uppercase; }
-  & p { margin: 0; color: var(--body-text); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+  & h3 { margin: 0 0 var(--size-2); font-size: var(--font-size-0); font-weight: var(--font-weight-6); letter-spacing: var(--font-letterspacing-3); text-transform: uppercase; }
+  & p { margin: 0; color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
 }

@@ -1,0 +1,21 @@
+/* The kit: datum-ui's design on Open Props, themed sky blue. Import this file
+   unlayered; it puts itself in the kit layer, so name `kit` in your own
+   @layer order (before your layers) to decide what wins. README.md has the
+   class reference. */
+@layer kit.tokens, kit.elements, kit.components;
+
+/* Open Props' named breakpoints, resolved at build time by postcss-custom-media. */
+@import "open-props/media";
+@import "./fonts.css";
+
+@import "./tokens.css" layer(kit.tokens);
+@import "./elements.css" layer(kit.elements);
+@import "./components/button.css" layer(kit.components);
+@import "./components/field.css" layer(kit.components);
+@import "./components/card.css" layer(kit.components);
+@import "./components/table.css" layer(kit.components);
+@import "./components/badge.css" layer(kit.components);
+@import "./components/alert.css" layer(kit.components);
+@import "./components/disclosure.css" layer(kit.components);
+@import "./components/dialog.css" layer(kit.components);
+@import "./components/tooltip.css" layer(kit.components);

@@ -1,10 +1,9 @@
-/* Small print, badges and inline messages. */
-.fine-print { margin: var(--size-2) 0 0; color: var(--muted); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+/* Small print and messages. Boxed notices are the kit's .ui-alert, "Only N
+   left" its .ui-badge and inline errors its .ui-status; the views add them. */
+.fine-print { margin: var(--size-2) 0 0; color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
 /* .prose holds admin-edited copy (server/copy.js), whose blocks can't carry
    classes, so they get the description's look. */
-.description, .prose > :is(p, ul, ol) { margin: 0 0 var(--size-4); color: var(--body-text); line-height: var(--font-lineheight-3); }
-.stock-note { margin: 0 0 var(--size-3); color: var(--danger); font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
-.waitlist-error { margin: 0 0 var(--size-3); color: var(--danger); font-size: var(--font-size-0); }
-.notify-done, .admin-notice { margin: 0 0 var(--size-3); padding: var(--size-3); border: var(--rule); line-height: var(--font-lineheight-3); }
+.description, .prose > :is(p, ul, ol) { margin: 0 0 var(--size-4); color: var(--ui-muted-foreground); line-height: var(--font-lineheight-3); }
+.waitlist-error { margin: 0 0 var(--size-3); }
 /* Why the cart changed: shown under the item it's about. */
-.cart-notice { margin: var(--size-2) 0 0; color: var(--danger); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+.cart-notice { margin: var(--size-2) 0 0; }

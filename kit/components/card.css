@@ -1,0 +1,51 @@
+/* datum-ui's Card: a white panel with a hairline border and no shadow.
+
+   <section class="ui-card">
+     <header class="ui-card__header"><h3 class="ui-card__title">Title</h3>
+       <p class="ui-card__description">Description</p></header>
+     <div class="ui-card__content">…</div>
+     <footer class="ui-card__footer">…</footer>
+   </section>
+
+   Children of a card without slots are padded too, so <div class="ui-card">
+   text</div> works. --sm tightens it; --sectioned rules off header and footer. */
+.ui-card {
+  --_inset: var(--size-5);
+  --_gap: var(--size-3);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--_gap);
+  padding: var(--_inset);
+  border: var(--ui-rule);
+  border-radius: var(--ui-radius);
+  background: var(--ui-card);
+  color: var(--ui-card-foreground);
+
+  & > * { margin-block: 0; }
+}
+.ui-card--sm { --_inset: var(--size-3); --_gap: var(--size-2); }
+.ui-card--raised { box-shadow: var(--ui-shadow); }
+
+.ui-card__header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: var(--size-1) var(--size-3);
+
+  & > :not(.ui-card__action) { grid-column: 1; }
+}
+.ui-card__action { grid-column: 2; grid-row: 1 / span 2; justify-self: end; }
+.ui-card__title { margin: 0; font-size: var(--ui-text); font-weight: var(--ui-weight-strong); line-height: var(--ui-leading-tight); }
+.ui-card__description { margin: 0; color: var(--ui-muted-foreground); font-size: var(--ui-text-small); }
+.ui-card__footer { display: flex; align-items: center; gap: var(--size-2); }
+
+/* Sectioned: slots run edge to edge, ruled between header, body and footer. */
+.ui-card--sectioned {
+  gap: 0;
+  padding: 0;
+
+  & > * { padding: var(--_inset); }
+  & > .ui-card__header { border-block-end: var(--ui-rule); }
+  & > .ui-card__footer { border-block-start: var(--ui-rule); background: var(--ui-background); border-radius: 0 0 var(--ui-radius) var(--ui-radius); }
+}

@@ -8,10 +8,6 @@
 }
 .login-notice {
   margin: 0 0 var(--size-7);
-  padding: var(--size-3);
-  border: var(--rule);
-  background: var(--wash);
-  line-height: var(--font-lineheight-3);
 }
 .login-panels {
   display: grid;
@@ -34,7 +30,7 @@
   align-self: center;
   margin: 0;
   text-align: center;
-  color: var(--muted);
+  color: var(--ui-muted-foreground);
   font-size: var(--font-size-0);
   letter-spacing: var(--font-letterspacing-3);
   text-transform: uppercase;

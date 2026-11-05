@@ -1,13 +1,16 @@
 /* The store's styles, by cascade layer. A later layer wins over an earlier one
    whatever the selectors' specificity, so a page can adjust a component without
-   ids or !important. Each file holds one layer; add new layers to this list. */
-@layer reset, tokens, base, layout, components, pages;
+   ids or !important. Each file holds one layer; add new layers to this list.
+   kit/ (datum-ui's design on Open Props) comes first: its elements and .ui-*
+   components are the look, and the store's layers only add layout. */
+@layer reset, kit, tokens, base, layout, components, pages;
 
 /* Open Props' named breakpoints (--sm-n-below, --md-n-below, …), resolved at
    build time by postcss-custom-media. */
 @import "open-props/media";
 
 @import "./reset.css" layer(reset);
+@import "../../kit/index.css";
 @import "./tokens.css" layer(tokens);
 @import "./base.css" layer(base);
 @import "./layout.css" layer(layout);

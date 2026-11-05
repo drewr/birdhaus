@@ -1,0 +1,112 @@
+/* datum-ui's Button (components/base/button). The type sets the colour roles;
+   --solid (default), --outline, --light and --borderless set how they're used;
+   --sm, --lg, --icon, --block and --link set the shape.
+
+   <button class="ui-button">                        primary, solid
+   <a class="ui-button ui-button--outline">           primary outline
+   <button class="ui-button ui-button--danger ui-button--light ui-button--sm"> */
+.ui-button {
+  /* The type's colours; each type below swaps them. */
+  --_base: var(--ui-primary);
+  --_hover: var(--ui-primary-hover);
+  --_active: var(--ui-primary-active);
+  --_on: var(--ui-primary-foreground);
+  --_wash: var(--ui-primary-wash);
+  --_wash-hover: var(--ui-primary-wash-hover);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-2);
+  padding: var(--size-2) var(--size-3);
+  border: var(--border-size-1) solid var(--_base);
+  border-radius: var(--ui-radius);
+  background: var(--_base);
+  color: var(--_on);
+  font: inherit;
+  font-size: var(--ui-text);
+  font-weight: var(--ui-weight-medium);
+  line-height: var(--ui-leading);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--ui-duration-fast) var(--ui-ease),
+    background-color var(--ui-duration-fast) var(--ui-ease),
+    border-color var(--ui-duration-fast) var(--ui-ease),
+    opacity var(--ui-duration-fast) var(--ui-ease),
+    transform var(--ui-duration-fast) var(--ui-ease);
+
+  &:hover { background: var(--_hover); border-color: var(--_hover); color: var(--_on); }
+  &:active { background: var(--_active); border-color: var(--_active); transform: scale(0.98); }
+  &:focus-visible { outline: none; box-shadow: 0 0 0 var(--border-size-1) var(--ui-background), 0 0 0 calc(2 * var(--border-size-1)) var(--ui-ring); }
+  &:is(:disabled, [aria-disabled="true"]) { opacity: 0.5; cursor: not-allowed; transform: none; pointer-events: none; }
+  /* A form waiting on the server. */
+  &[aria-busy="true"] { opacity: 0.5; cursor: wait; }
+
+  @media (prefers-reduced-motion: reduce) { &:active { transform: none; } }
+}
+
+/* Types */
+.ui-button--secondary { --_base: var(--ui-secondary); --_hover: var(--blue-12); --_active: var(--blue-12); --_on: var(--ui-secondary-foreground); --_wash: var(--gray-1); --_wash-hover: var(--gray-2); }
+.ui-button--tertiary { --_base: var(--ui-tertiary); --_hover: var(--cyan-10); --_active: var(--cyan-11); --_on: var(--ui-tertiary-foreground); --_wash: var(--cyan-0); --_wash-hover: var(--cyan-1); }
+.ui-button--quaternary { --_base: var(--ui-neutral); --_hover: var(--ui-neutral-hover); --_active: var(--gray-4); --_on: var(--ui-foreground); --_wash: var(--gray-1); --_wash-hover: var(--gray-2); }
+.ui-button--danger { --_base: var(--ui-destructive); --_hover: var(--ui-destructive-hover); --_active: var(--red-11); --_on: #fff; --_wash: var(--ui-destructive-wash); --_wash-hover: var(--red-1); }
+.ui-button--success { --_base: var(--ui-success); --_hover: var(--green-11); --_active: var(--green-12); --_on: #fff; --_wash: var(--ui-success-wash); --_wash-hover: var(--green-1); }
+
+/* Themes. Outline and light draw the type's colour as text, so quaternary
+   (a pale fill) uses the foreground there instead. */
+.ui-button:is(.ui-button--outline, .ui-button--light, .ui-button--borderless) {
+  --_text: var(--_base);
+  color: var(--_text);
+
+  &.ui-button--quaternary { --_text: var(--ui-foreground); }
+}
+.ui-button--outline {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--_base) 60%, transparent);
+
+  &:hover { background: var(--_wash); border-color: var(--_base); color: var(--_text); }
+  &:active { background: var(--_wash-hover); border-color: var(--_base); }
+}
+.ui-button--light {
+  background: var(--_wash);
+  border-color: transparent;
+
+  &:hover { background: var(--_wash-hover); border-color: transparent; color: var(--_text); }
+  &:active { background: var(--_wash-hover); border-color: transparent; }
+}
+.ui-button--borderless {
+  background: transparent;
+  border-color: transparent;
+
+  &:hover { background: var(--ui-neutral); border-color: transparent; color: var(--_text); }
+  &:active { background: var(--ui-neutral-hover); border-color: transparent; }
+}
+/* Text that acts as a button: no box, underlined. */
+.ui-button--link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--_base);
+  font-weight: var(--ui-weight-regular);
+  text-decoration: underline;
+  text-underline-offset: var(--size-1);
+
+  &:hover { background: none; color: var(--_hover); }
+  &:active { background: none; transform: none; }
+}
+
+/* Sizes */
+.ui-button--sm { padding: var(--size-1) var(--size-2); font-size: var(--ui-text-small); }
+.ui-button--lg { padding: var(--size-3) var(--size-7); }
+/* Square, for a single glyph or icon: as wide as the button is tall, so it
+   lines up with a text button or a field of the same size. */
+.ui-button--icon {
+  padding-inline: 0;
+  inline-size: calc(1lh + 2 * var(--size-2) + 2 * var(--border-size-1));
+
+  &.ui-button--sm { inline-size: calc(1lh + 2 * var(--size-1) + 2 * var(--border-size-1)); }
+}
+.ui-button--block { display: flex; width: 100%; }

@@ -119,3 +119,41 @@ framework. The styles now follow Open Props' conventions everywhere:
 
 Colours and fonts stay brand tokens, as Open Props intends. The admin forms,
 which had no field styles, now share the storefront's.
+
+## Revision: datum-ui kit, in sky blue
+
+The owner asked whether datum-ui (github.com/datum-cloud/datum-ui) fits this
+direction. As a library it doesn't: it is React 19 on shadcn/Radix, and its CSS
+ships uncompiled for the consumer's Tailwind v4 build. Its design does fit, so
+it was ported to plain CSS on Open Props as `kit/` (kit/README.md), themed sky
+blue instead of Datum's rose, navy and lime, and the store now uses it. The
+look changes on purpose: the monochrome, square-cornered Arial store is gone.
+
+- **Kit layer.** `kit/` is standalone. It has its own layers (`kit.tokens`,
+  `kit.elements`, `kit.components`), `--ui-*` colour, type and shape roles, and
+  `.ui-*` component classes. `index.css` orders `reset, kit, tokens, …`, so every
+  store layer wins over the kit.
+- **Markup.** The views add kit classes beside the semantic ones:
+  - `buy-button ui-button ui-button--block`, and the other button classes;
+  - `ui-alert` on notices, `ui-badge` on "Only N left", `ui-status` on inline
+    errors;
+  - `ui-choice` on delivery options, `ui-disclosure` on the FAQ;
+  - admin tables become `ui-table ui-table--mist`, wrapped so they scroll on
+    phones.
+
+  The store's component files keep only spacing and layout. Form fields need no
+  class: the kit styles bare elements.
+- **Tokens.** The store's colour and font tokens are gone. Pages use the kit's
+  roles (`--ui-foreground`, `--ui-muted-foreground`, `--ui-border`,
+  `--ui-rule`, `--ui-primary`, …). `tokens.css` keeps `--font-hand` (the
+  wordmark), the title size, the gutter and the page width.
+- **Fonts.** Inter replaces Arial, self-hosted through `@fontsource/inter`.
+  Alliance No1, datum-ui's font, is commercial and unlicensed here. The wordmark
+  keeps Architects Daughter, and the logo is unchanged. Bold text is now 600
+  (`--font-weight-6`), the heaviest Inter weight loaded.
+- **Scales.** Open Props steps throughout, so it looks like datum-ui but isn't
+  pixel-identical. Text stays 12px or 16px, and every corner is `--radius-2`.
+- **Stripe.** `stripeAppearance()` reads the kit's roles and radius. Stripe's
+  iframes get Inter from Google Fonts, since they can't load ours.
+- **Size.** Built CSS is 38 kB (7.6 kB gzip), up from 18 kB, mostly from the
+  kit's component set, part of which the store doesn't use yet.

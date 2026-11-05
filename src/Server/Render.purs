@@ -186,7 +186,7 @@ loginPage vm =
     el "div" [ cls "login-panels" ]
       [ el "div" [ cls "login-panel" ]
           [ el "h2" [ cls "login-heading" ] [ text "Log in" ]
-          , el "a" [ cls "secondary-button", A "href" vm.googleHref ] [ text "Continue with Google" ]
+          , el "a" [ cls "secondary-button ui-button ui-button--outline ui-button--block", A "href" vm.googleHref ] [ text "Continue with Google" ]
           , whenH vm.emailEnabled $
               emailForm "/login/email" "login"
                 [ field "login-email" "email" "Email" "email" vm.loginEmail ]
@@ -197,7 +197,7 @@ loginPage vm =
       , el "div" [ cls "login-panel", A "id" "create" ]
           [ el "h2" [ cls "login-heading" ] [ text "Create your account" ]
           , el "p" [ cls "description" ] [ text "You'll need one to check out and to join the waitlist. It also keeps your orders in one place." ]
-          , el "a" [ cls "secondary-button", A "href" vm.googleHref ] [ text "Sign up with Google" ]
+          , el "a" [ cls "secondary-button ui-button ui-button--outline ui-button--block", A "href" vm.googleHref ] [ text "Sign up with Google" ]
           , whenH vm.emailEnabled $
               emailForm "/signup/email" "signup"
                 [ field "signup-name" "name" "Name" "name" vm.signupName
@@ -212,8 +212,8 @@ loginPage vm =
     el "form" [ cls "login-email", A "method" "post", A "action" action ]
       ( [ elVoid "input" [ A "type" "hidden", A "name" "next", A "value" vm.next ] ]
           <> fields
-          <> [ whenH (error /= "") (el "p" [ cls "waitlist-error", A "role" "alert", A "id" (purpose <> "-error") ] [ text error ])
-             , el "button" [ cls "buy-button", A "type" "submit" ] [ text label ]
+          <> [ whenH (error /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert", A "id" (purpose <> "-error") ] [ text error ])
+             , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text label ]
              , el "p" [ cls "fine-print" ] [ text "We'll email you a 6-digit code. No password needed." ]
              ]
       )
@@ -230,8 +230,8 @@ loginPage vm =
   signedInNote =
     el "div" [ cls "login-signed-in" ]
       [ el "p" [ cls "description" ] [ text ("You're signed in as " <> vm.accountLabel <> ".") ]
-      , el "a" [ cls "buy-button", A "href" vm.next ] [ text "Continue" ]
-      , el "a" [ cls "text-button", A "href" "/api/auth/logout", B "data-signout" ] [ text "Sign out" ]
+      , el "a" [ cls "buy-button ui-button ui-button--block", A "href" vm.next ] [ text "Continue" ]
+      , el "a" [ cls "text-button ui-button ui-button--link", A "href" "/api/auth/logout", B "data-signout" ] [ text "Sign out" ]
       ]
 
   accountsOff =
@@ -248,19 +248,19 @@ codePage vm =
       [ el "h1" [ cls "page-title", A "id" "code-title" ] [ text "Check your email" ]
       , el "p" [ cls "description" ]
           [ text "We sent a 6-digit code to ", el "strong" [] [ text vm.email ], text (if vm.signingUp then ". Enter it to create your account." else ". Enter it to log in.") ]
-      , whenH (vm.notice /= "") (el "p" [ cls "login-notice", A "role" "status" ] [ text vm.notice ])
+      , whenH (vm.notice /= "") (el "p" [ cls "login-notice ui-alert ui-alert--info", A "role" "status" ] [ text vm.notice ])
       , el "form" [ cls "login-email", A "method" "post", A "action" "/login/code" ]
           [ el "label" [ A "for" "login-code" ] [ text "Code" ]
           , elVoid "input"
               [ A "id" "login-code", A "name" "code", A "type" "text", A "inputmode" "numeric", A "pattern" "[0-9 ]*"
               , A "autocomplete" "one-time-code", A "maxlength" "7", B "required", B "autofocus"
               ]
-          , whenH (vm.error /= "") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text vm.error ])
-          , el "button" [ cls "buy-button", A "type" "submit" ] [ text (if vm.signingUp then "Create account" else "Log in") ]
+          , whenH (vm.error /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text vm.error ])
+          , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text (if vm.signingUp then "Create account" else "Log in") ]
           ]
       , el "form" [ cls "login-resend", A "method" "post", A "action" "/login/resend" ]
-          [ el "button" [ cls "text-button", A "type" "submit" ] [ text "Send a new code" ]
-          , el "a" [ cls "text-button", A "href" "/login" ] [ text "Use a different email" ]
+          [ el "button" [ cls "text-button ui-button ui-button--link", A "type" "submit" ] [ text "Send a new code" ]
+          , el "a" [ cls "text-button ui-button ui-button--link", A "href" "/login" ] [ text "Use a different email" ]
           ]
       ]
 
@@ -345,7 +345,7 @@ purchase :: ProductVM -> Html
 purchase vm =
   el "div" []
     [ if vm.maxQuantity < 1 then
-        el "p" [ cls "stock-note" ] [ text ("Your cart already has the last " <> plural vm.inCart <> ".") ]
+        el "p" [ cls "stock-note ui-alert ui-alert--warning" ] [ text ("Your cart already has the last " <> plural vm.inCart <> ".") ]
       else
         el "form" [ cls "add-form", A "method" "post", A "action" "/cart/add" ]
           [ elVoid "input" [ A "type" "hidden", A "name" "product", A "value" vm.slug ]
@@ -353,10 +353,10 @@ purchase vm =
               [ el "label" [ A "for" "qty" ] [ text "Quantity" ]
               , el "div" [ cls "quantity-row" ]
                   [ elVoid "input" [ A "id" "qty", A "name" "quantity", A "type" "number", A "min" "1", A "max" (show vm.maxQuantity), A "value" "1", B "required", A "aria-describedby" "stock-left" ]
-                  , whenH (vm.remaining >= 0) (el "span" [ cls "stock-note", A "id" "stock-left" ] [ text ("Only " <> show vm.remaining <> " left") ])
+                  , whenH (vm.remaining >= 0) (el "span" [ cls "stock-note ui-badge ui-badge--warning", A "id" "stock-left" ] [ text ("Only " <> show vm.remaining <> " left") ])
                   ]
               ]
-          , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add to cart" ]
+          , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Add to cart" ]
           ]
     , el "p" [ cls "fine-print" ] [ text vm.fulfillmentNote ]
     ]
@@ -442,7 +442,7 @@ faqSection :: Html
 faqSection =
   el "section" [ cls "info", A "aria-label" "Questions" ]
     [ sectionTitle "Questions"
-    , el "div" [ cls "faq-list" ]
+    , el "div" [ cls "faq-list ui-disclosure-group" ]
         [ faqItem "How do I mount it, and how high?" "[Your mounting guidance. Bluebird houses usually sit 5–6 feet up, in the open, away from heavy foot traffic.]"
         , faqItem "How do I keep sparrows and predators out?" "[The 1½-inch hole already blocks starlings. Add any guidance on house sparrows, baffles or predator guards.]"
         , faqItem "How do I clean it?" "[Your cleaning instructions, and how the box opens for it.]"
@@ -453,7 +453,7 @@ faqSection =
 
 faqItem :: String -> String -> Html
 faqItem question answer =
-  el "details" [ cls "faq-item" ]
+  el "details" [ cls "faq-item ui-disclosure" ]
     [ el "summary" [] [ text question ]
     , el "p" [ cls "faq-answer spec-todo" ] [ text answer ]
     ]
@@ -469,8 +469,8 @@ cartPage vm =
     el "section" [ cls "cart-screen", A "aria-labelledby" "cart-title" ]
       [ el "h1" [ cls "page-title", A "id" "cart-title" ] [ text "Your cart" ]
       , cartBox vm
-      , whenH vm.checkoutOk (el "a" [ cls "buy-button", A "href" "/checkout" ] [ text "Proceed to checkout" ])
-      , el "a" [ cls "text-button", A "href" "/products" ] [ text "Continue shopping" ]
+      , whenH vm.checkoutOk (el "a" [ cls "buy-button ui-button ui-button--block", A "href" "/checkout" ] [ text "Proceed to checkout" ])
+      , el "a" [ cls "text-button ui-button ui-button--link", A "href" "/products" ] [ text "Continue shopping" ]
       , el "p" [ cls "fine-print" ] [ text vm.fulfillmentNote ]
       ]
 
@@ -492,12 +492,12 @@ cartBox vm =
       , el "div" [ cls "cart-controls" ]
           [ stepper vm.cartQty vm.maxQuantity
           , el "form" [ cls "cart-remove", A "method" "post", A "action" "/cart/clear" ]
-              [ el "button" [ cls "text-button", A "type" "submit", A "aria-label" ("Remove " <> vm.productName <> " from your cart") ] [ text "Remove" ] ]
+              [ el "button" [ cls "text-button ui-button ui-button--link", A "type" "submit", A "aria-label" ("Remove " <> vm.productName <> " from your cart") ] [ text "Remove" ] ]
           ]
       , el "p" [ cls "cart-total" ] [ text ("Subtotal · " <> vm.subtotal) ]
       ]
   where
-  notice = whenH (vm.notice /= "") (el "p" [ cls "cart-notice", A "role" "status" ] [ text vm.notice ])
+  notice = whenH (vm.notice /= "") (el "p" [ cls "cart-notice ui-alert ui-alert--warning", A "role" "status" ] [ text vm.notice ])
 
 -- Returned by POST /cart/update: the swapped #cart plus an out-of-band update
 -- of the header cart count.
@@ -515,7 +515,7 @@ stepper qty maxQ =
 stepButton :: Int -> Boolean -> String -> String -> Html
 stepButton target disabled label symbol =
   el "button"
-    ( [ cls "quantity-button", A "type" "button"
+    ( [ cls "quantity-button ui-button ui-button--outline ui-button--icon", A "type" "button"
       , A "hx-post" "/cart/update"
       , A "hx-vals" ("{\"quantity\": " <> show target <> "}")
       , A "hx-target" "#cart", A "hx-swap" "outerHTML"
@@ -534,19 +534,19 @@ deliveryPage vm =
       [ el "h2" [ A "id" "delivery-title" ] [ text "Delivery" ]
       , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × " <> vm.productName <> " · " <> vm.total) ]
       , el "form" [ cls "delivery-form", A "method" "post", A "action" "/checkout/delivery" ]
-          ( [ el "label" [ cls "delivery-option delivery-option-disabled" ]
+          ( [ el "label" [ cls "delivery-option ui-choice" ]
                 [ elVoid "input" [ A "type" "radio", A "name" "method", A "value" "ship", B "disabled" ]
                 , el "span" [] [ el "strong" [] [ text "Shipping" ], text " — coming soon" ]
                 ]
-            , whenH (vm.error /= "") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text vm.error ])
+            , whenH (vm.error /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text vm.error ])
             , el "p" [ cls "delivery-heading" ] [ el "strong" [] [ text "Local pick-up" ], text " — free. Choose a time:" ]
             ]
               <> (if null vm.slots then [ el "p" [ cls "description" ] [ text "No pick-up times are open right now — check back soon." ] ] else map slotOption vm.slots)
               <> deliveryOptions vm
-              <> (if null vm.slots && null vm.deliverySlots then [] else [ el "button" [ cls "buy-button", A "type" "submit" ] [ text "Continue to payment" ] ])
+              <> (if null vm.slots && null vm.deliverySlots then [] else [ el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Continue to payment" ] ])
           )
       , el "div" [ cls "checkout-actions" ]
-          [ el "a" [ cls "text-button", A "href" "/cart" ] [ text "Back to cart" ] ]
+          [ el "a" [ cls "text-button ui-button ui-button--link", A "href" "/cart" ] [ text "Back to cart" ] ]
       ]
 
 -- Local delivery appears only while an admin has it switched on and slots open.
@@ -563,7 +563,7 @@ deliveryOptions vm
 
 slotOption :: Slot -> Html
 slotOption slot =
-  el "label" [ cls "delivery-option" ]
+  el "label" [ cls "delivery-option ui-choice" ]
     [ choiceInput ("pickup:" <> show slot.id) slot.selected
     , el "span" []
         [ el "strong" [] [ text slot.location ]
@@ -574,7 +574,7 @@ slotOption slot =
 
 deliverySlotOption :: DeliverySlot -> Html
 deliverySlotOption slot =
-  el "label" [ cls "delivery-option" ]
+  el "label" [ cls "delivery-option ui-choice" ]
     [ choiceInput ("delivery:" <> show slot.id) slot.selected
     , el "span" [] [ el "strong" [] [ text "Delivery" ], text (" — " <> slot.time) ]
     ]
@@ -610,11 +610,11 @@ checkoutPage vm =
               <>
                 [ el "div" [ A "id" "payment-element" ] []
                 , el "div" [ A "id" "payment-message", A "role" "alert", A "aria-live" "polite" ] []
-                , el "button" [ A "id" "submit-payment", cls "buy-button" ] [ text ("Pay " <> vm.total) ]
+                , el "button" [ A "id" "submit-payment", cls "buy-button ui-button ui-button--block" ] [ text ("Pay " <> vm.total) ]
                 ]
           )
       , el "div" [ cls "checkout-actions" ]
-          [ el "a" [ cls "text-button", A "href" "/cart" ] [ text "Back to cart" ]
+          [ el "a" [ cls "text-button ui-button ui-button--link", A "href" "/cart" ] [ text "Back to cart" ]
           , el "p" [ cls "fine-print" ] [ text "Secure payment by Stripe." ]
           ]
       ]
@@ -716,12 +716,12 @@ notifyView vm =
   el "div" [ A "id" "notify", cls "notify" ]
     case vm.notifyState of
       "requested" ->
-        [ el "p" [ cls "notify-done", A "role" "status", A "data-notify-requested" "true" ]
+        [ el "p" [ cls "notify-done ui-alert ui-alert--success", A "role" "status", A "data-notify-requested" "true" ]
             [ text ("We'll email " <> vm.notifyEmail <> " when it's available again.") ]
         ]
       _
         | vm.notifyEmail == "" && vm.loginHref /= "" ->
-            [ el "a" [ cls "buy-button", A "href" vm.loginHref ] [ text "Notify me when available" ]
+            [ el "a" [ cls "buy-button ui-button ui-button--block", A "href" vm.loginHref ] [ text "Notify me when available" ]
             , el "p" [ cls "fine-print" ] [ text "Sign in or create a free account so we know where to email you." ]
             ]
         | otherwise ->
@@ -730,8 +730,8 @@ notifyView vm =
                 , A "hx-post" "/notify", A "hx-target" "#notify", A "hx-swap" "outerHTML"
                 ]
                 [ elVoid "input" [ A "type" "hidden", A "name" "product", A "value" vm.slug ]
-                , whenH (vm.notifyState == "error") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text "We couldn't save that. Please try again." ])
-                , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Notify me when available" ]
+                , whenH (vm.notifyState == "error") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text "We couldn't save that. Please try again." ])
+                , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Notify me when available" ]
                 ]
             , el "p" [ cls "fine-print" ] [ text ("We'll email " <> vm.notifyEmail <> " once, when it's back.") ]
             ]

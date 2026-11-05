@@ -75,13 +75,16 @@ adminNav current =
   link href label = el "a" [ cls (if href == current then "text-link admin-current" else "text-link"), A "href" href ] [ text label ]
 
 errorLine :: String -> Html
-errorLine message = whenH (message /= "") (el "p" [ cls "waitlist-error", A "role" "alert" ] [ text message ])
+errorLine message = whenH (message /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text message ])
 
 table :: Array String -> Array (Array Html) -> Html
 table headings rows =
-  el "table" [ cls "admin-table" ]
-    [ el "thead" [] [ el "tr" [] (map (\h -> el "th" [] [ text h ]) headings) ]
-    , el "tbody" [] (map (\cells -> el "tr" [] (map (\c -> el "td" [] [ c ]) cells)) rows)
+  -- Scrolls sideways on its own when wider than a phone, not the page.
+  el "div" [ cls "admin-table ui-table-scroll" ]
+    [ el "table" [ cls "ui-table ui-table--mist" ]
+        [ el "thead" [] [ el "tr" [] (map (\h -> el "th" [] [ text h ]) headings) ]
+        , el "tbody" [] (map (\cells -> el "tr" [] (map (\c -> el "td" [] [ c ]) cells)) rows)
+        ]
     ]
 
 -- A one-button form flipping an active flag.
@@ -89,7 +92,7 @@ toggle :: String -> Boolean -> Html
 toggle action active =
   el "form" [ cls "admin-inline", A "method" "post", A "action" action ]
     [ elVoid "input" [ A "type" "hidden", A "name" "active", A "value" (if active then "false" else "true") ]
-    , el "button" [ cls "text-button", A "type" "submit" ] [ text (if active then "Disable" else "Enable") ]
+    , el "button" [ cls "text-button ui-button ui-button--link", A "type" "submit" ] [ text (if active then "Disable" else "Enable") ]
     ]
 
 status :: Boolean -> String
@@ -122,7 +125,7 @@ adminInventoryPage vm =
         , el "h2" [ cls "section-title" ] [ text "Inventory" ]
         , el "p" [ cls "description" ] [ text "How many of each product shoppers can buy. Each paid order counts down; refunds don't add back." ]
         , errorLine vm.error
-        , whenH (vm.notice /= "") (el "p" [ cls "admin-notice", A "role" "status" ] [ text vm.notice ])
+        , whenH (vm.notice /= "") (el "p" [ cls "admin-notice ui-alert ui-alert--success", A "role" "status" ] [ text vm.notice ])
         ]
           <> map stockForm vm.products
       )
@@ -134,20 +137,20 @@ stockForm p =
         <> if not p.tracked then [ el "p" [ cls "fine-print" ] [ text "Not tracked: always available." ] ]
           else
             [ whenH (p.available < 0)
-                (el "p" [ cls "admin-oversold", A "role" "alert" ] [ text ("Oversold by " <> show (negate p.available) <> ". Refund an order or make more, then set the count.") ])
+                (el "p" [ cls "admin-oversold ui-alert ui-alert--danger", A "role" "alert" ] [ text ("Oversold by " <> show (negate p.available) <> ". Refund an order or make more, then set the count.") ])
             , el "form" [ A "method" "post", A "action" ("/admin/inventory/" <> p.slug) ]
                 [ elVoid "input" [ A "type" "hidden", A "name" "expected", A "value" (show p.available) ]
                 , el "label" [ A "for" ("stock-" <> p.slug) ] [ text "Available" ]
                 , elVoid "input" [ A "id" ("stock-" <> p.slug), A "name" "available", A "type" "number", A "min" "0", A "max" "999999", A "step" "1", A "value" (show (max 0 p.available)), B "required" ]
-                , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Save" ]
+                , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Save" ]
                 ]
             , el "p" [ cls "fine-print" ] [ text (show p.sold <> " sold in all. " <> waitingLine) ]
             , whenH (p.waiting > 0 && p.available > 0) $
                 el "form" [ cls "admin-inline", A "method" "post", A "action" ("/admin/inventory/" <> p.slug <> "/notify") ]
-                  [ el "button" [ cls "text-button", A "type" "submit" ] [ text ("Email " <> people p.waiting <> " that it's back") ] ]
+                  [ el "button" [ cls "text-button ui-button ui-button--link", A "type" "submit" ] [ text ("Email " <> people p.waiting <> " that it's back") ] ]
             , whenH (not (null p.changes)) $
                 el "details" [ cls "admin-history" ]
-                  [ el "summary" [ cls "text-button" ] [ text "Recent changes" ]
+                  [ el "summary" [ cls "text-button ui-button ui-button--link" ] [ text "Recent changes" ]
                   , table [ "When", "From", "To", "Why" ] (map (\c -> [ text c.at, text c.from, text c.to, text c.reason ]) p.changes)
                   ]
             ]
@@ -208,7 +211,7 @@ newSlotForm locations =
           , inputField "slot-start" "Starts" "start" "time"
           , inputField "slot-end" "Ends" "end" "time"
           ]
-      , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add slot" ]
+      , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Add slot" ]
       ]
 
 newLocationForm :: Html
@@ -219,7 +222,7 @@ newLocationForm =
     , elVoid "input" [ A "id" "location-name", A "name" "name", A "type" "text", A "maxlength" "120", B "required" ]
     , el "label" [ A "for" "location-details" ] [ text "Address and instructions (shown to buyers)" ]
     , el "textarea" [ A "id" "location-details", A "name" "details", A "maxlength" "500", A "rows" "3" ] []
-    , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add location" ]
+    , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Add location" ]
     ]
 
 -- ---------------------------------------------------------------- delivery
@@ -281,7 +284,7 @@ settingsForm vm =
     , elVoid "input" [ A "id" "delivery-base", A "name" "baseAddress", A "type" "text", A "maxlength" "300", A "value" vm.baseAddress, A "placeholder" "1100 Congress Ave, Austin, TX 78701", B "required" ]
     , el "p" [ cls "fine-print" ]
         [ text (if vm.baseFound == "" then "Not located yet; saving looks the address up with the US Census geocoder." else "Located at " <> vm.baseFound <> ". Distances are measured from here.") ]
-    , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Save settings" ]
+    , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Save settings" ]
     ]
 
 newDeliverySlotForm :: Html
@@ -293,7 +296,7 @@ newDeliverySlotForm =
         , inputField "dslot-start" "Starts" "start" "time"
         , inputField "dslot-end" "Ends" "end" "time"
         ]
-    , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Add slot" ]
+    , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Add slot" ]
     ]
 
 -- A labelled required input for the slot forms.
@@ -326,5 +329,5 @@ copyForm s =
     , el "p" [ cls "fine-print" ] [ text (s.saved <> " "), el "a" [ cls "text-link", A "href" s.page ] [ text "View page" ] ]
     , el "label" [ A "for" ("copy-" <> s.key) ] [ text "Text" ]
     , el "textarea" [ A "id" ("copy-" <> s.key), A "name" "body", A "rows" "14", A "maxlength" "20000" ] [ text s.body ]
-    , el "button" [ cls "buy-button", A "type" "submit" ] [ text "Save" ]
+    , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Save" ]
     ]

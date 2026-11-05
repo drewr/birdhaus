@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kit demo</title>
+  <link rel="stylesheet" href="./index.css">
+  <style>
+    @layer kit;
+    body { margin: 0; }
+    main { width: min(100% - 2 * var(--size-3), var(--size-lg)); margin: var(--size-7) auto var(--size-10); }
+    main > section { margin-block: var(--size-8); }
+    .grid { align-items: start; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--size-2); margin-block: var(--size-2); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--size-14), 1fr)); gap: var(--size-3); }
+    .swatch { display: grid; gap: var(--size-1); font-size: var(--ui-text-small); }
+    .swatch span { block-size: var(--size-8); border: var(--ui-rule); border-radius: var(--ui-radius); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Kit</h1>
+  <p>datum-ui's design on Open Props, in sky blue. Every component and variant on one page.</p>
+
+  <section>
+    <h2>Colour roles</h2>
+    <div class="grid">
+      <div class="swatch"><span style="background: var(--ui-background)"></span>background</div>
+      <div class="swatch"><span style="background: var(--ui-foreground)"></span>foreground</div>
+      <div class="swatch"><span style="background: var(--ui-primary)"></span>primary</div>
+      <div class="swatch"><span style="background: var(--ui-sky)"></span>sky</div>
+      <div class="swatch"><span style="background: var(--ui-primary-wash)"></span>primary wash</div>
+      <div class="swatch"><span style="background: var(--ui-secondary)"></span>secondary</div>
+      <div class="swatch"><span style="background: var(--ui-tertiary)"></span>tertiary</div>
+      <div class="swatch"><span style="background: var(--ui-muted)"></span>muted</div>
+      <div class="swatch"><span style="background: var(--ui-destructive)"></span>destructive</div>
+      <div class="swatch"><span style="background: var(--ui-success)"></span>success</div>
+      <div class="swatch"><span style="background: var(--ui-warning)"></span>warning</div>
+      <div class="swatch"><span style="background: var(--ui-border)"></span>border</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Type</h2>
+    <h1>Title 1</h1>
+    <h2>Title 2</h2>
+    <h3>Title 3</h3>
+    <h4>Title 4</h4>
+    <p>Body text at 16px with a <a href="#">link</a>, <strong>strong text</strong>, <code>inline code</code> and <mark>a highlight</mark>.</p>
+    <p><small>Small text at 12px, for fine print and labels.</small></p>
+    <blockquote>A quotation, ruled in sky blue.</blockquote>
+    <pre>npm run build</pre>
+  </section>
+
+  <section>
+    <h2>Buttons</h2>
+    <div class="row">
+      <button class="ui-button">Primary</button>
+      <button class="ui-button ui-button--secondary">Secondary</button>
+      <button class="ui-button ui-button--tertiary">Tertiary</button>
+      <button class="ui-button ui-button--quaternary">Quaternary</button>
+      <button class="ui-button ui-button--danger">Danger</button>
+      <button class="ui-button ui-button--success">Success</button>
+    </div>
+    <div class="row">
+      <button class="ui-button ui-button--outline">Outline</button>
+      <button class="ui-button ui-button--outline ui-button--secondary">Secondary</button>
+      <button class="ui-button ui-button--outline ui-button--quaternary">Quaternary</button>
+      <button class="ui-button ui-button--outline ui-button--danger">Danger</button>
+    </div>
+    <div class="row">
+      <button class="ui-button ui-button--light">Light</button>
+      <button class="ui-button ui-button--light ui-button--danger">Danger</button>
+      <button class="ui-button ui-button--borderless">Borderless</button>
+      <button class="ui-button ui-button--link">Link button</button>
+    </div>
+    <div class="row">
+      <button class="ui-button ui-button--sm">Small</button>
+      <button class="ui-button">Default</button>
+      <button class="ui-button ui-button--lg">Large</button>
+      <button class="ui-button ui-button--outline ui-button--icon" aria-label="Less">−</button>
+      <button class="ui-button ui-button--outline ui-button--icon ui-button--sm" aria-label="More">+</button>
+      <button class="ui-button" disabled>Disabled</button>
+      <button class="ui-button ui-button--outline" data-tooltip="A CSS-only tooltip">Tooltip</button>
+    </div>
+    <button class="ui-button ui-button--block">Block</button>
+  </section>
+
+  <section>
+    <h2>Fields</h2>
+    <div class="grid">
+      <div>
+        <div class="ui-field">
+          <label for="d-email">Email</label>
+          <input id="d-email" type="email" placeholder="you@example.com" aria-describedby="d-email-hint">
+          <p class="ui-field__hint" id="d-email-hint">We'll send a code.</p>
+        </div>
+        <div class="ui-field">
+          <label for="d-qty">Quantity</label>
+          <input id="d-qty" type="number" value="0" aria-invalid="true" aria-describedby="d-qty-error">
+          <p class="ui-field__error" id="d-qty-error">Choose at least 1.</p>
+        </div>
+        <div class="ui-field">
+          <label for="d-sel">Location</label>
+          <select id="d-sel"><option>Mueller farmers market</option><option>Workshop</option></select>
+        </div>
+        <div class="ui-field">
+          <label for="d-txt">Notes</label>
+          <textarea id="d-txt">Leave it by the gate.</textarea>
+        </div>
+        <div class="row">
+          <label class="ui-check"><input type="checkbox" checked> Active</label>
+          <label class="ui-check"><input type="checkbox"> Archived</label>
+          <label class="ui-check"><input type="checkbox" disabled> Disabled</label>
+        </div>
+      </div>
+      <div>
+        <label class="ui-choice"><input type="radio" name="d-choice" checked><span>Pick-up<br><small>Sun 6 Dec, 10am–noon</small></span></label>
+        <p></p>
+        <label class="ui-choice"><input type="radio" name="d-choice"><span>Delivery<br><small>Sat 12 Dec, $10</small></span></label>
+        <p></p>
+        <label class="ui-choice"><input type="radio" name="d-choice" disabled><span>Shipping<br><small>Not offered</small></span></label>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cards</h2>
+    <div class="grid">
+      <div class="ui-card"><p>A card with no slots.</p></div>
+      <section class="ui-card ui-card--raised">
+        <header class="ui-card__header">
+          <h3 class="ui-card__title">Bluebird House</h3>
+          <p class="ui-card__description">3 left, 2 sold</p>
+          <span class="ui-card__action ui-badge ui-badge--success">Open</span>
+        </header>
+        <div class="ui-card__content">Body text inside a card.</div>
+        <footer class="ui-card__footer"><button class="ui-button ui-button--sm">Save</button></footer>
+      </section>
+      <section class="ui-card ui-card--sectioned">
+        <header class="ui-card__header"><h3 class="ui-card__title">Sectioned</h3><p class="ui-card__description">Ruled slots</p></header>
+        <div class="ui-card__content">Content</div>
+        <footer class="ui-card__footer"><button class="ui-button ui-button--outline ui-button--sm">Cancel</button><button class="ui-button ui-button--sm">Save</button></footer>
+      </section>
+    </div>
+  </section>
+
+  <section>
+    <h2>Badges</h2>
+    <div class="row">
+      <span class="ui-badge">Muted</span>
+      <span class="ui-badge ui-badge--primary">Primary</span>
+      <span class="ui-badge ui-badge--secondary">Secondary</span>
+      <span class="ui-badge ui-badge--tertiary">Tertiary</span>
+      <span class="ui-badge ui-badge--info">Info</span>
+      <span class="ui-badge ui-badge--success">Success</span>
+      <span class="ui-badge ui-badge--warning">Warning</span>
+      <span class="ui-badge ui-badge--danger">Danger</span>
+    </div>
+    <div class="row">
+      <span class="ui-badge ui-badge--primary ui-badge--solid">Solid</span>
+      <span class="ui-badge ui-badge--danger ui-badge--solid">Solid</span>
+      <span class="ui-badge ui-badge--primary ui-badge--outline">Outline</span>
+      <span class="ui-badge ui-badge--success ui-badge--outline">Outline</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Alerts</h2>
+    <div class="ui-alert" role="status"><p class="ui-alert__title">Default</p><p class="ui-alert__description">A plain bordered message.</p></div>
+    <p class="ui-alert ui-alert--muted">Muted: a quiet note.</p>
+    <p class="ui-alert ui-alert--info">Info: we sent a new code.</p>
+    <p class="ui-alert ui-alert--success">Success: saved the Bluebird House count.</p>
+    <p class="ui-alert ui-alert--warning">Warning: only 1 is left, so your cart now holds 1.</p>
+    <p class="ui-alert ui-alert--danger" role="alert">Danger: we couldn't save that.</p>
+    <div class="row">
+      <span class="ui-status ui-status--danger">Only 3 left</span>
+      <span class="ui-status ui-status--success">In stock</span>
+      <span class="ui-status ui-status--warning">Low</span>
+      <span class="ui-status ui-status--muted">Not tracked</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Table</h2>
+    <div class="ui-table-scroll">
+      <table class="ui-table">
+        <thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>BH-1042</td><td>4 Nov 2026</td><td>$90.00</td><td><span class="ui-badge ui-badge--success">Paid</span></td></tr>
+          <tr aria-selected="true"><td>BH-1041</td><td>3 Nov 2026</td><td>$40.00</td><td><span class="ui-badge">Refunded</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p></p>
+    <div class="ui-table-scroll">
+      <table class="ui-table ui-table--mist">
+        <thead><tr><th>Slot</th><th>Name</th><th>Quantity</th></tr></thead>
+        <tbody>
+          <tr><td>Sat 12 Dec, 10am–noon</td><td>Drew Raines</td><td>2</td></tr>
+          <tr><td>Sun 13 Dec, 2–4pm</td><td>Sam Lee</td><td>1</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Disclosure</h2>
+    <div class="ui-disclosure-group">
+      <details class="ui-disclosure" open><summary>How do I mount it?</summary><p>On a pole, five feet up, facing open ground.</p></details>
+      <details class="ui-disclosure"><summary>How do I clean it?</summary><p>Open the side panel after the season.</p></details>
+    </div>
+  </section>
+
+  <section>
+    <h2>Dialog</h2>
+    <button class="ui-button ui-button--outline" onclick="document.getElementById('d-dialog').showModal()">Open dialog</button>
+    <dialog class="ui-dialog" id="d-dialog">
+      <header class="ui-dialog__header"><h2>Remove from cart?</h2><p>You can add it again later.</p></header>
+      <div class="ui-dialog__body">The Bluebird House will be removed.</div>
+      <form method="dialog" class="ui-dialog__footer">
+        <button class="ui-button ui-button--outline">Cancel</button>
+        <button class="ui-button ui-button--danger">Remove</button>
+      </form>
+    </dialog>
+  </section>
+</main>
+</body>
+</html>

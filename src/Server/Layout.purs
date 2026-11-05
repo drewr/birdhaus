@@ -93,7 +93,7 @@ header c =
                 ( if c.isAdmin then [ el "a" [ cls "text-link", A "href" "/admin" ] [ text "Admin" ] ] else [] )
                   <>
                     [ el "span" [ cls "account-email" ] [ text c.accountLabel ]
-                    , el "a" [ cls "text-button", A "href" "/api/auth/logout", B "data-signout" ] [ text "Sign out" ]
+                    , el "a" [ cls "text-button ui-button ui-button--link", A "href" "/api/auth/logout", B "data-signout" ] [ text "Sign out" ]
                     ]
               else
                 [ el "a" [ cls "text-link", A "href" "/login" ] [ text "Sign in" ] ]
@@ -104,5 +104,5 @@ header c =
 cartLinkEl :: Boolean -> Int -> Html
 cartLinkEl oob qty =
   el "a"
-    ([ A "id" "cart-link", cls "cart-link", A "href" "/cart" ] <> (if oob then [ A "hx-swap-oob" "true" ] else []))
+    ([ A "id" "cart-link", cls "cart-link ui-button ui-button--outline ui-button--sm", A "href" "/cart" ] <> (if oob then [ A "hx-swap-oob" "true" ] else []))
     [ text ("Cart · " <> show qty) ]

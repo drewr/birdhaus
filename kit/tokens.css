@@ -1,0 +1,94 @@
+/* The kit's design tokens: datum-ui's purpose roles (themes/alpha.css), with a
+   sky-blue palette in place of Datum's rose, navy and lime. Every value is an
+   Open Props step; postcss-jit-props emits only the ones used. Roles are
+   --ui-*, so they can't collide with Open Props (which has its own
+   --font-sans) or with a site's tokens. Light only. */
+:root {
+  color-scheme: light;
+
+  /* Surfaces and text */
+  --ui-background: var(--gray-0);
+  --ui-foreground: var(--blue-12);
+  --ui-card: #fff;
+  --ui-card-foreground: var(--blue-12);
+  --ui-muted: var(--gray-1);
+  --ui-muted-foreground: var(--gray-7);
+  --ui-border: var(--gray-3);
+
+  /* Actions. Hover and active are the next steps down the scale, where
+     datum-ui darkens with color-mix. White on --blue-8 is 4.9:1. */
+  --ui-primary: var(--blue-8);
+  --ui-primary-hover: var(--blue-9);
+  --ui-primary-active: var(--blue-10);
+  --ui-primary-foreground: #fff;
+  --ui-primary-wash: var(--blue-0);
+  --ui-primary-wash-hover: var(--blue-1);
+  /* Sky itself is too light to carry text: rules and highlights only. */
+  --ui-sky: var(--blue-3);
+  --ui-secondary: var(--blue-11);
+  --ui-secondary-foreground: #fff;
+  --ui-tertiary: var(--cyan-9);
+  --ui-tertiary-foreground: #fff;
+  --ui-neutral: var(--gray-2);
+  --ui-neutral-hover: var(--gray-3);
+
+  /* Status, each with a wash for alert and badge backgrounds */
+  --ui-destructive: var(--red-9);
+  --ui-destructive-hover: var(--red-10);
+  --ui-destructive-wash: var(--red-0);
+  --ui-success: var(--green-10);
+  --ui-success-wash: var(--green-0);
+  --ui-warning: var(--yellow-9);
+  --ui-warning-text: var(--orange-11);
+  --ui-warning-wash: var(--yellow-0);
+  --ui-info: var(--blue-8);
+  --ui-info-wash: var(--blue-0);
+
+  /* Fields: a faint wash so they read recessed on white cards. */
+  --ui-input-background: var(--gray-0);
+  --ui-input-border: var(--gray-4);
+  --ui-input-placeholder: var(--gray-7);
+  --ui-input-focus-border: var(--blue-7);
+  --ui-ring: var(--blue-5);
+  --ui-focus-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-5) 25%, transparent);
+
+  /* Type. Inter stands in for datum-ui's Alliance No1 (fonts.css). */
+  --ui-font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --ui-font-mono: var(--font-monospace-code);
+  --ui-text: var(--font-size-1);
+  --ui-text-small: var(--font-size-0);
+  --ui-weight-regular: var(--font-weight-4);
+  --ui-weight-medium: var(--font-weight-5);
+  --ui-weight-strong: var(--font-weight-6);
+  --ui-leading: var(--font-lineheight-3);
+  --ui-leading-tight: var(--font-lineheight-1);
+  --ui-tracking-tight: var(--font-letterspacing-0);
+  --ui-title-1: var(--font-size-6);
+  --ui-title-2: var(--font-size-5);
+  --ui-title-3: var(--font-size-4);
+  --ui-title-4: var(--font-size-3);
+
+  /* Shape. datum-ui renders 4px, 6px and 10px corners; all snap to --radius-2. */
+  --ui-radius: var(--radius-2);
+  --ui-radius-small: var(--radius-1);
+  --ui-radius-pill: var(--radius-round);
+  --ui-rule: var(--border-size-1) solid var(--ui-border);
+  /* Open Props shadows, tinted with the text's navy as datum-ui's are. */
+  --shadow-color: 209 76% 21%;
+  --shadow-strength: 2%;
+  --ui-shadow: var(--shadow-1);
+  --ui-shadow-raised: var(--shadow-3);
+  --ui-shadow-overlay: var(--shadow-5);
+
+  /* Motion (datum-ui's motion.css): quick ease-out for state changes. */
+  --ui-duration-fast: 150ms;
+  --ui-duration-medium: 250ms;
+  --ui-ease: var(--ease-out-5);
+  --ui-ease-in-out: var(--ease-in-out-4);
+
+  /* Titles shrink a step on tablets and phones, as datum-ui's scale does. */
+  @media (--md-n-below) {
+    --ui-title-1: var(--font-size-5);
+    --ui-title-2: var(--font-size-4);
+  }
+}

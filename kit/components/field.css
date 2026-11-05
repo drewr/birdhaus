@@ -1,0 +1,48 @@
+/* A labelled control: datum-ui's Form field. The control itself is styled by
+   elements.css, so a bare <input> works too.
+
+   <div class="ui-field">
+     <label for="email">Email</label>
+     <input id="email" type="email" aria-describedby="email-hint">
+     <p class="ui-field__hint" id="email-hint">We'll send a code.</p>
+   </div>
+   <label class="ui-check"><input type="checkbox"> Active</label> */
+.ui-field {
+  display: grid;
+  gap: var(--size-2);
+  margin-block-end: var(--size-3);
+}
+.ui-field__hint { margin: 0; color: var(--ui-muted-foreground); font-size: var(--ui-text-small); }
+.ui-field__error { margin: 0; color: var(--ui-destructive); font-size: var(--ui-text-small); }
+
+/* A checkbox or radio with its text beside it. */
+.ui-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2);
+  font-size: var(--ui-text);
+  font-weight: var(--ui-weight-regular);
+  cursor: pointer;
+
+  &:has(:disabled) { opacity: 0.5; cursor: not-allowed; }
+}
+
+/* A choice drawn as a box, e.g. a radio per delivery option; the checked one
+   takes the primary colour. */
+.ui-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--size-3);
+  padding: var(--size-3);
+  border: var(--ui-rule);
+  border-radius: var(--ui-radius);
+  background: var(--ui-card);
+  cursor: pointer;
+  transition: border-color var(--ui-duration-fast) var(--ui-ease), background-color var(--ui-duration-fast) var(--ui-ease);
+
+  &:hover { border-color: var(--ui-input-border); }
+  &:has(:checked) { border-color: var(--ui-primary); background: var(--ui-primary-wash); }
+  &:has(:focus-visible) { box-shadow: var(--ui-focus-shadow); }
+  &:has(:disabled) { background: var(--ui-muted); color: var(--ui-muted-foreground); cursor: not-allowed; }
+  & input { margin-block-start: 0.3em; }
+}

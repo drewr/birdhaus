@@ -1,30 +1,19 @@
 /* The delivery step (/checkout) and the pay page (/checkout/pay). */
 .delivery-form { margin: 0 0 var(--size-4); }
 .delivery-heading { margin: var(--size-4) 0 var(--size-2); }
-.delivery-option {
-  display: flex;
-  gap: var(--size-3);
-  align-items: flex-start;
-  padding: var(--size-3);
-  margin: 0 0 var(--size-2);
-  border: var(--rule);
-  cursor: pointer;
-  line-height: var(--font-lineheight-2);
-
-  & input { margin-top: var(--size-1); }
-}
-.delivery-option-disabled { color: var(--muted); cursor: not-allowed; background: var(--wash); }
-.delivery-details { display: block; color: var(--muted); font-size: var(--font-size-0); white-space: pre-line; }
+/* Each option is the kit's .ui-choice. */
+.delivery-option { margin: 0 0 var(--size-2); font-size: var(--font-size-1); font-weight: var(--font-weight-4); line-height: var(--font-lineheight-2); }
+.delivery-details { display: block; color: var(--ui-muted-foreground); font-size: var(--font-size-0); white-space: pre-line; }
 
 .checkout {
   margin-top: var(--size-7);
   padding-top: var(--size-6);
-  border-top: var(--rule);
+  border-top: var(--ui-rule);
 
   &[hidden] { display: none; }
   & h2 { margin: 0 0 var(--size-2); font-size: var(--font-size-4); }
 }
-.checkout-total { margin: 0 0 var(--gutter); color: var(--ink-hover); font-size: var(--font-size-0); }
+.checkout-total { margin: 0 0 var(--gutter); color: var(--ui-foreground); font-size: var(--font-size-0); }
 .checkout-breakdown { margin-bottom: var(--size-2); }
 .checkout-actions {
   display: flex;
@@ -39,4 +28,4 @@
 #express-checkout { margin: 0 0 var(--size-4); }
 #shipping-address { margin: 0 0 var(--size-5); }
 #payment-element { margin: var(--size-5) 0; }
-#payment-message { min-height: var(--size-5); margin-bottom: var(--size-2); color: var(--danger); font-size: var(--font-size-0); }
+#payment-message { min-height: var(--size-5); margin-bottom: var(--size-2); color: var(--ui-destructive); font-size: var(--font-size-0); }

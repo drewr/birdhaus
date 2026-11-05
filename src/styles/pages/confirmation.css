@@ -5,4 +5,4 @@
   & .page-title { margin: 0 0 var(--size-3); }
   & .fine-print { margin: 0 0 var(--size-6); font-size: var(--font-size-0); }
 }
-.confirmation-lede { margin: 0 0 var(--size-6); color: var(--body-text); line-height: var(--font-lineheight-3); }
+.confirmation-lede { margin: 0 0 var(--size-6); color: var(--ui-muted-foreground); line-height: var(--font-lineheight-3); }

@@ -1,22 +1,23 @@
-/* Label/value grids and tables, ruled with --line. */
+/* Label/value grids, ruled with the kit's border. Tables are the kit's
+   .ui-table. */
 .order-summary {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: var(--size-3) var(--gutter);
   margin: 0 0 var(--size-4);
   padding: var(--size-4) 0;
-  border-block: var(--rule);
+  border-block: var(--ui-rule);
   font-size: var(--font-size-0);
 
-  & dt { color: var(--muted); }
-  & dd { margin: 0; font-weight: var(--font-weight-7); }
+  & dt { color: var(--ui-muted-foreground); }
+  & dd { margin: 0; font-weight: var(--font-weight-6); }
 }
 .ship-to span {
   display: block;
   font-weight: var(--font-weight-4);
   line-height: var(--font-lineheight-3);
 
-  &:first-child { font-weight: var(--font-weight-7); }
+  &:first-child { font-weight: var(--font-weight-6); }
 }
 
 .spec-list {
@@ -25,18 +26,10 @@
   margin: 0;
   font-size: var(--font-size-0);
 
-  & dt { padding: var(--size-3) 0; border-top: var(--rule); color: var(--muted); }
-  & dd { margin: 0; padding: var(--size-3) 0 var(--size-3) var(--gutter); border-top: var(--rule); font-weight: var(--font-weight-7); }
+  & dt { padding: var(--size-3) 0; border-top: var(--ui-rule); color: var(--ui-muted-foreground); }
+  & dd { margin: 0; padding: var(--size-3) 0 var(--size-3) var(--gutter); border-top: var(--ui-rule); font-weight: var(--font-weight-6); }
   & dd.spec-todo { font-weight: var(--font-weight-4); }
 }
-.spec-todo { color: var(--muted); font-style: italic; }
+.spec-todo { color: var(--ui-muted-foreground); font-style: italic; }
 
-.admin-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0 0 var(--gutter);
-  font-size: var(--font-size-0);
-
-  & th, & td { padding: var(--size-2) var(--size-2) var(--size-2) 0; border-bottom: var(--rule); text-align: left; vertical-align: top; }
-  & th { color: var(--muted); font-weight: var(--font-weight-4); }
-}
+.admin-table { margin: 0 0 var(--gutter); }

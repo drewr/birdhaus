@@ -1,24 +1,24 @@
 .admin .page-title { margin: 0 0 var(--size-3); }
 .admin-nav { display: flex; gap: var(--size-4); margin: 0 0 var(--size-2); }
-.admin-current { text-decoration: none; border-bottom: var(--border-size-2) solid var(--ink); }
+.admin-nav .text-link { color: var(--ui-foreground); }
+.admin-current { text-decoration: none; border-bottom: var(--border-size-2) solid var(--ui-primary); }
 .admin-inline {
   margin: 0;
-
-  & .text-button { padding: 0; }
 }
 .admin-form {
   max-width: var(--size-content-3);
   margin: 0 0 var(--size-7);
   padding: var(--size-3);
-  border: var(--rule);
+  border: var(--ui-rule);
+  border-radius: var(--ui-radius);
+  background: var(--ui-card);
 
   & h3 { margin: 0 0 var(--size-3); font-size: var(--font-size-1); }
 }
-.admin-check { display: flex; gap: var(--size-2); align-items: center; margin: 0 0 var(--size-3); font-weight: var(--font-weight-7); }
+.admin-check { display: flex; gap: var(--size-2); align-items: center; margin: 0 0 var(--size-3); font-weight: var(--font-weight-6); }
 .admin-copy textarea { font-family: var(--font-mono); }
 .admin-stock {
   & input[type="number"] { max-width: var(--size-12); }
   & .admin-inline { margin-top: var(--size-2); }
 }
-.admin-oversold { margin: 0 0 var(--size-3); color: var(--danger); font-weight: var(--font-weight-7); }
 .admin-history { margin-top: var(--size-3); }

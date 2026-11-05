@@ -1,0 +1,34 @@
+/* datum-ui's Badge. Muted by default; a type sets the colour and a theme how
+   it's drawn: light (default here, a tinted wash), --solid or --outline.
+
+   <span class="ui-badge">Draft</span>
+   <span class="ui-badge ui-badge--success">Paid</span>
+   <span class="ui-badge ui-badge--danger ui-badge--solid">Oversold</span> */
+.ui-badge {
+  --_color: var(--ui-muted-foreground);
+  --_wash: var(--ui-muted);
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-1);
+  padding: 0 var(--size-2);
+  border: var(--border-size-1) solid transparent;
+  border-radius: var(--ui-radius);
+  background: var(--_wash);
+  color: var(--_color);
+  font-size: var(--ui-text-small);
+  font-weight: var(--ui-weight-strong);
+  line-height: var(--ui-leading);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ui-badge--primary { --_color: var(--ui-primary); --_wash: var(--ui-primary-wash); }
+.ui-badge--secondary { --_color: var(--ui-secondary); --_wash: var(--gray-1); }
+.ui-badge--tertiary { --_color: var(--ui-tertiary); --_wash: var(--cyan-0); }
+.ui-badge--info { --_color: var(--ui-info); --_wash: var(--ui-info-wash); }
+.ui-badge--success { --_color: var(--ui-success); --_wash: var(--ui-success-wash); }
+.ui-badge--warning { --_color: var(--ui-warning-text); --_wash: var(--ui-warning-wash); }
+.ui-badge--danger { --_color: var(--ui-destructive); --_wash: var(--ui-destructive-wash); }
+
+.ui-badge--solid { background: var(--_color); color: #fff; }
+.ui-badge--outline { background: transparent; border-color: currentColor; }

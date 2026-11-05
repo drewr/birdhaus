@@ -1,8 +1,8 @@
 /* The homepage hero spans the window; its content lines up with <main>
    (layout.css). */
 .hero {
-  background: var(--wash);
-  border-bottom: var(--rule);
+  background: var(--ui-primary-wash);
+  border-bottom: var(--ui-rule);
 }
 .hero-inner {
   padding-block: var(--size-fluid-6);
@@ -16,4 +16,4 @@
 /* A photo at its own proportions; the width and height attributes reserve
    its space before it loads. */
 .hero-figure { margin: 0; }
-.hero-image { width: 100%; height: auto; display: block; border: var(--rule); }
+.hero-image { width: 100%; height: auto; display: block; border: var(--ui-rule); border-radius: var(--ui-radius); }

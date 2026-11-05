@@ -4,12 +4,14 @@
 
   & .page-title { margin: 0 0 var(--gutter); }
   & .buy-button { margin-top: var(--size-2); }
-  & .text-button { display: block; margin-top: var(--size-2); }
+  & > .text-button { display: inline-block; margin-top: var(--size-3); }
 }
 .cart {
   margin: 0 0 var(--size-4);
   padding: var(--size-3);
-  border: var(--rule);
+  border: var(--ui-rule);
+  border-radius: var(--ui-radius);
+  background: var(--ui-card);
 
   & h2 { margin: 0 0 var(--size-3); font-size: var(--font-size-1); }
 }
@@ -24,5 +26,5 @@
 
   & .quantity-control { margin-top: 0; }
 }
-.cart-remove { margin: 0; }
-.cart-total { margin: var(--size-3) 0 0; padding-top: var(--size-3); border-top: var(--rule); font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
+.cart-remove { display: flex; margin: 0; }
+.cart-total { margin: var(--size-3) 0 0; padding-top: var(--size-3); border-top: var(--ui-rule); font-size: var(--font-size-0); font-weight: var(--font-weight-6); }

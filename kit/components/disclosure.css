@@ -1,0 +1,49 @@
+/* <details> as datum-ui's collapsible: a ruled row with a chevron that turns
+   when open, and the body sliding open where the browser can animate to
+   height: auto (interpolate-size); elsewhere it just opens.
+
+   <div class="ui-disclosure-group">
+     <details class="ui-disclosure"><summary>Question</summary><div>Answer</div></details>
+   </div> */
+.ui-disclosure-group { border-block-end: var(--ui-rule); }
+.ui-disclosure {
+  interpolate-size: allow-keywords;
+  border-block-start: var(--ui-rule);
+
+  & > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--size-3);
+    padding-block: var(--size-3);
+    font-weight: var(--ui-weight-medium);
+    list-style: none;
+    cursor: pointer;
+
+    &::-webkit-details-marker { display: none; }
+    &::after {
+      content: "";
+      flex: none;
+      width: var(--size-2);
+      height: var(--size-2);
+      border-inline-end: var(--border-size-2) solid currentColor;
+      border-block-end: var(--border-size-2) solid currentColor;
+      color: var(--ui-muted-foreground);
+      transform: translateY(-25%) rotate(45deg);
+      transition: transform var(--ui-duration-medium) var(--ui-ease);
+    }
+    &:hover { color: var(--ui-primary); }
+  }
+  &[open] > summary::after { transform: translateY(25%) rotate(-135deg); }
+
+  &::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition: block-size var(--ui-duration-medium) var(--ui-ease-in-out), content-visibility var(--ui-duration-medium) allow-discrete;
+  }
+  &[open]::details-content { block-size: auto; }
+
+  @media (prefers-reduced-motion: reduce) {
+    & > summary::after, &::details-content { transition: none; }
+  }
+}

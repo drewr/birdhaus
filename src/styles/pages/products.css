@@ -23,14 +23,16 @@
   aspect-ratio: var(--ratio-square);
   margin-bottom: var(--size-2);
   padding: var(--size-7);
-  border: var(--rule);
-  background: var(--wash);
+  border: var(--ui-rule);
+  border-radius: var(--ui-radius);
+  background: var(--ui-card);
+  overflow: hidden;
 }
 .product-card-image { width: 100%; height: 100%; object-fit: contain; display: block; }
 /* A photo fills its square edge to edge. */
 .product-card-photo { padding: 0; }
 .product-card-photo .product-card-image { object-fit: cover; }
-.product-card-name { font-size: var(--font-size-1); font-weight: var(--font-weight-7); }
-.product-card-summary { color: var(--body-text); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
-.product-card-price { font-size: var(--font-size-0); font-weight: var(--font-weight-7); }
-.product-card-availability { color: var(--muted); font-size: var(--font-size-0); }
+.product-card-name { font-size: var(--font-size-1); font-weight: var(--font-weight-6); }
+.product-card-summary { color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+.product-card-price { font-size: var(--font-size-0); font-weight: var(--font-weight-6); }
+.product-card-availability { color: var(--ui-muted-foreground); font-size: var(--font-size-0); }

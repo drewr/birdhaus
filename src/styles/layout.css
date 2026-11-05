@@ -5,7 +5,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--gutter);
-  border-bottom: var(--rule);
+  border-bottom: var(--ui-rule);
+  background: var(--ui-card);
 
   /* Phones: links get their own line under the wordmark. */
   @media (--sm-n-below) {
@@ -23,13 +24,16 @@
 
   @media (--sm-n-below) { width: 100%; }
 }
+/* Navigation reads in the text colour and the header's small size; the kit's
+   links are blue and its buttons 16px. */
+.header-actions :is(.text-link, .text-button) { color: var(--ui-foreground); font-size: inherit; }
 .account-nav { display: inline-flex; align-items: center; gap: var(--size-3); }
 .account-email {
   max-width: var(--size-content-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--body-text);
+  color: var(--ui-muted-foreground);
 
   @media (--sm-n-below) { display: none; }
 }
@@ -65,8 +69,8 @@ main:empty { display: none; }
 
 .site-footer {
   padding: var(--size-3) var(--gutter);
-  border-top: var(--rule);
-  color: var(--muted);
+  border-top: var(--ui-rule);
+  color: var(--ui-muted-foreground);
   font-size: var(--font-size-0);
   font-variant-numeric: tabular-nums;
 }
