@@ -36,6 +36,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import System.Directory (findExecutable, getTemporaryDirectory)
 import System.FilePath ((</>))
+import qualified System.IO as IO
 import Turtle hiding (FilePath, (</>))
 
 data Opts = Opts
@@ -91,6 +92,8 @@ parser =
 
 main :: IO ()
 main = do
+  -- Compiled (as in CI), stdout to a pipe is block-buffered; keep the log in order.
+  IO.hSetBuffering IO.stdout IO.LineBuffering
   o <- options "Build and deploy the Birdhaus store to Datum Compute" parser
   for_ (session o) (export "DATUM_SESSION")
   export "DATUM_PROJECT" (project o)
