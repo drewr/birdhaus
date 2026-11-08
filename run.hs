@@ -200,9 +200,10 @@ parseVersion t = do
       | otherwise = Nothing
 
 -- The instances share the domain, so eight answers in a row must report the
--- new version before the old ones count as gone. Gives up after ten minutes.
+-- new version before the old ones count as gone. Asks every second; gives up
+-- after ten minutes.
 awaitRollout :: Text -> Text -> IO ()
-awaitRollout host want = go (120 :: Int) (0 :: Int) ""
+awaitRollout host want = go (600 :: Int) (0 :: Int) ""
   where
     go 0 _ seen = die ("Gave up waiting for " <> want <> " on " <> host <> "; /api/health last said: " <> seen)
     go tries streak seen = do
@@ -216,7 +217,7 @@ awaitRollout host want = go (120 :: Int) (0 :: Int) ""
       if done && streak >= 7
         then pure ()
         else do
-          sleep 5
+          sleep 1
           go (tries - 1) (if done then streak + 1 else 0) now
 
 -- A throwaway Docker config so datumctl can push to GHCR with the gh token.

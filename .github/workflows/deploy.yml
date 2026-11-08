@@ -48,7 +48,31 @@ jobs:
       - &nix
         uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
-          nix_path: nixpkgs=channel:nixpkgs-unstable
+          # A fixed nixpkgs (nixpkgs-unstable on 2026-11-08), so the scripts get
+          # the same tools every run and its unpacked source can be cached
+          # instead of fetched; the tarball never changes, so Nix needn't
+          # check it again. Bump the revision to update the tools.
+          nix_path: nixpkgs=https://github.com/NixOS/nixpkgs/archive/4fe25e12eb9f4c744966dd3de5a05246cf098601.tar.gz
+          extra_nix_config: tarball-ttl = 31536000
+      # Downloads that only change with the lockfiles or this workflow: nixpkgs,
+      # npm's cache and spago's registry and packages. Saved once per key.
+      - &deps
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/nix
+            ~/.npm
+            .cache/spago-home
+            .spago
+          key: deploy-deps-${{ hashFiles('.github/workflows/deploy.yml', 'package-lock.json', 'spago.lock') }}
+      # Compiled PureScript from the last run, so purs rebuilds only the
+      # modules that changed.
+      - &purs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: output
+          key: purs-output-${{ github.sha }}
+          restore-keys: purs-output-
       - &datumctl
         name: Install datumctl and sign in
         env:
@@ -89,6 +113,8 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Release tags are vX.Y.Z, not $TAG"; exit 1; }
           git merge-base --is-ancestor HEAD origin/main || { echo "::error::$TAG is not on main, so dev never ran it"; exit 1; }
       - *nix
+      - *deps
+      - *purs
       - *datumctl
       - *buildkit
       # Low-stock alerts go to the ALERT_EMAIL repository variable, so the

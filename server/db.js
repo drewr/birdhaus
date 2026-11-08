@@ -60,9 +60,9 @@ export function migrateInBackground() {
   migrate().then(() => {
     migrations = "ok";
   }, (error) => {
-    console.error("Migrations failed, retrying in 15s:", error.message);
+    console.error("Migrations failed, retrying in 5s:", error.message);
     migrations = `failing: ${error.message}`;
-    setTimeout(migrateInBackground, 15000);
+    setTimeout(migrateInBackground, 5000);
   });
 }
 
