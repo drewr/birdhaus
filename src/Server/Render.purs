@@ -220,8 +220,8 @@ loginPage vm =
 
   -- Which option this browser used last time (server/auth.js lastLogin).
   lastUsed = case vm.lastLogin of
-    "google" -> [ text " Last time you used ", el "strong" [] [ text "Continue with Google" ], text "." ]
-    "email" -> [ text " Last time you used ", el "strong" [] [ text "Email me a code" ], text "." ]
+    "google" -> [ text " Last time you used ", el "strong" [] [ text "Google" ], text "." ]
+    "email" -> [ text " Last time you used ", el "strong" [] [ text "email" ], text "." ]
     _ -> []
 
   emailForm action purpose fields error label =
