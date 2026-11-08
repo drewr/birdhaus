@@ -539,11 +539,7 @@ deliveryPage vm =
       , el "div" [ cls "delivery-intro prose" ] [ raw vm.intro ]
       , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × " <> vm.productName <> " · " <> vm.total) ]
       , el "form" [ cls "delivery-form", A "method" "post", A "action" "/checkout/delivery" ]
-          ( [ el "label" [ cls "delivery-option ui-choice" ]
-                [ elVoid "input" [ A "type" "radio", A "name" "method", A "value" "ship", B "disabled" ]
-                , el "span" [] [ el "strong" [] [ text "Shipping" ], text " — coming soon" ]
-                ]
-            , whenH (vm.error /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text vm.error ])
+          ( [ whenH (vm.error /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text vm.error ])
             , el "p" [ cls "delivery-heading" ] [ el "strong" [] [ text "Local pick-up" ], text " — free. Choose a time:" ]
             ]
               <> (if null vm.slots then [ el "p" [ cls "description" ] [ text "No pick-up times are open right now — check back soon." ] ] else map slotOption vm.slots)

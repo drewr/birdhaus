@@ -130,12 +130,12 @@ async function fulfillmentNote() {
   try {
     const s = db.isConfigured() ? await delivery.settings() : null;
     if (s && delivery.offered(s)) {
-      return `Local pick-up, or local delivery within ${s.radiusMiles} miles for ${formatUsd(s.feeCents)}. Shipping coming soon. Taxes not included.`;
+      return `Local pick-up, or local delivery within ${s.radiusMiles} miles for ${formatUsd(s.feeCents)}. Taxes not included.`;
     }
   } catch (error) {
     console.error("Could not load delivery settings:", error.message);
   }
-  return "Local pick-up only for now — shipping coming soon. Taxes not included.";
+  return "Local pick-up only. Taxes not included.";
 }
 
 // The inventory decides (server/inventory.js): { open, reason, remaining },
@@ -719,9 +719,9 @@ app.get("/cart", async (request, response) => {
   response.set("Cache-Control", "no-cache").type("html").send(views.cartPage(vm));
 });
 
-// Checkout step 1: how to get the house. Shipping is shown but greyed out until
-// USPS pricing is added (docs/design/fulfillment.md); the choices are pick-up
-// and, when an admin has switched it on, local delivery (local-delivery.md).
+// Checkout step 1: how to get the house. The choices are pick-up
+// (docs/design/fulfillment.md) and, when an admin has switched it on, local
+// delivery (local-delivery.md). There is no shipping.
 async function deliveryPage(request, response, error = "") {
   const cart = readCart(request);
   const { product, qty } = cartLine(request);
