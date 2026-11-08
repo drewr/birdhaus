@@ -12,21 +12,38 @@
 .login-panels {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  align-items: start;
-  gap: var(--size-7);
+  grid-template-rows: repeat(4, auto);
+  column-gap: var(--size-7);
 
-  @media (--md-n-below) { grid-template-columns: 1fr; gap: var(--size-5); }
+  @media (--md-n-below) { grid-template-columns: 1fr; grid-template-rows: none; gap: var(--size-5); }
 }
+/* Side by side, both panels share the rows heading, description, Google
+   button and email form, so the Google buttons line up although only the
+   create panel has a description. */
 .login-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--size-3);
+  display: grid;
+  grid-row: 1 / span 4;
+  grid-column: 1;
+  grid-template-rows: subgrid;
+  &:last-child { grid-column: 3; }
+  row-gap: var(--size-3);
 
+  & > .description { grid-row: 2; }
+  & > .secondary-button { grid-row: 3; }
+  & > .login-email { grid-row: 4; }
   & .description, & .fine-print { margin: 0; }
+
+  @media (--md-n-below) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-3);
+    &, &:last-child { grid-area: auto; }
+  }
 }
 .login-heading { margin: 0; font-size: var(--font-size-3); }
 .login-email input { margin-bottom: var(--size-3); }
 .login-or {
+  grid-area: 1 / 2 / -1;
   align-self: center;
   margin: 0;
   text-align: center;
@@ -34,6 +51,8 @@
   font-size: var(--font-size-0);
   letter-spacing: var(--font-letterspacing-3);
   text-transform: uppercase;
+
+  @media (--md-n-below) { grid-area: auto; }
 }
 .login-signed-in {
   max-width: var(--size-content-2);
