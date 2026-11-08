@@ -54,6 +54,17 @@ jobs:
           # check it again. Bump the revision to update the tools.
           nix_path: nixpkgs=https://github.com/NixOS/nixpkgs/archive/4fe25e12eb9f4c744966dd3de5a05246cf098601.tar.gz
           extra_nix_config: tarball-ttl = 31536000
+      # The Nix store with run.hs's environment (GHC and its packages, about
+      # 675 MiB from cache.nixos.org otherwise). It only changes with the
+      # nixpkgs pin or the shebang's packages, so the key is made from those.
+      - &nixkey
+        id: nixkey
+        run: echo "key=nix-store-$( { echo "$NIX_PATH"; grep '^#! nix-shell' run.hs; } | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - &nixstore
+        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
+        with:
+          primary-key: ${{ steps.nixkey.outputs.key }}
+          restore-prefixes-first-match: nix-store-
       # Downloads that only change with the lockfiles or this workflow: nixpkgs,
       # npm's cache and spago's registry and packages. Saved once per key.
       - &deps
@@ -113,6 +124,8 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Release tags are vX.Y.Z, not $TAG"; exit 1; }
           git merge-base --is-ancestor HEAD origin/main || { echo "::error::$TAG is not on main, so dev never ran it"; exit 1; }
       - *nix
+      - *nixkey
+      - *nixstore
       - *deps
       - *purs
       - *datumctl
