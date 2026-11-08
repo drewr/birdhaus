@@ -42,7 +42,6 @@ type LoginVM =
       ( authEnabled :: Boolean
       , emailEnabled :: Boolean
       , next :: String
-      , reauth :: Boolean
       , googleHref :: String
       , loginEmail :: String
       , loginError :: String
@@ -181,10 +180,7 @@ loginPage vm =
   layout vm $
     el "section" [ cls "login", A "aria-labelledby" "login-title" ]
       [ el "h1" [ cls "page-title", A "id" "login-title" ] [ text "Welcome to Birdhaus" ]
-      , if vm.reauth && vm.authEnabled then reauthPanel
-        else if vm.signedIn then signedInNote
-        else if vm.authEnabled then panels
-        else accountsOff
+      , if vm.signedIn then signedInNote else if vm.authEnabled then panels else accountsOff
       ]
   where
   logIn =
@@ -195,14 +191,6 @@ loginPage vm =
           vm.loginError
           "Email me a code"
     ]
-
-  reauthPanel =
-    el "div" [ cls "login-panel login-reauth" ]
-      ( [ el "h2" [ cls "login-heading" ] [ text "Sign in again" ]
-        , el "p" [ cls "description" ] [ text ("You're signed in as " <> vm.accountLabel <> ". Admin pages need a fresh sign-in every 12 hours.") ]
-        ]
-          <> logIn
-      )
 
   panels =
     el "div" [ cls "login-panels" ]

@@ -40,8 +40,8 @@ Shipping columns (`shipping_amount`, `quoted_zip`) come later with the USPS chan
 
 **`server/auth.js`**
 - Scope becomes `openid email profile groups`.
-- On callback, `admin = Array.isArray(payload.groups) && payload.groups.includes(ADMIN_GROUP)`, where `ADMIN_GROUP` is an env var defaulting to `birdhaus-admins`. The session stores `admin` and `adminUntil = now + 12h`.
-- `accountOf` returns `admin: true` only while `adminUntil` hasn't passed. After that, admin pages send the admin to `/login?next=<the page>` to sign in again and refresh the claim (`accountOf` flags it as `adminLapsed`), which keeps revocation lag at roughly 12 hours instead of the 7-day session.
+- On callback, `admin = Array.isArray(payload.groups) && payload.groups.includes(ADMIN_GROUP)`, where `ADMIN_GROUP` is an env var defaulting to `birdhaus-admins`. The session stores `admin` and the groups.
+- Admin pages check membership again with Rauthy's admin API (`rauthy.findById`, the store's API key), trusting an answer for 5 minutes, and write it back to the session. An admin stays an admin for the 7-day session without signing in again, and removing a member takes effect within 5 minutes. Rauthy is required for admin pages, like the database: if it can't be reached they return 503 rather than trust the session's flag.
 - Export `requireAdmin` middleware:
   - Signed-out users are redirected to sign in.
   - Signed-in users who aren't admins get 404.
@@ -112,7 +112,7 @@ Build and verify on dev (`scripts/dev-store.hs`, with migration 005 applied auto
   - A `birdhaus-admins` member sees the Admin link.
   - A non-member gets 404 at `/admin`, and a signed-out visitor is sent to sign in.
   - A cross-origin POST is rejected.
-  - After removing a member, access ends within 12 hours or at their next sign-in.
+  - After removing a member, access ends within 5 minutes.
 - **Admin pick-up management:** create a location and a slot, see it in checkout, disable it, and see it disappear.
 - **Pick-up purchase on dev:**
   - add → `/checkout` shows shipping disabled → choose a slot → `/checkout/pay` shows "Pick-up … free" with no address form → pay with `pm_card_visa`.

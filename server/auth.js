@@ -3,6 +3,7 @@ import express from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { cookies, sign, unsign, cookieOptions, now } from "./cookies.js";
 import * as db from "./db.js";
+import * as rauthy from "./rauthy.js";
 
 // OpenID Connect login against Rauthy (auth/README.md). The issuer, client and
 // session key come from the birdhaus-store-auth Secret. A missing configuration
@@ -22,11 +23,12 @@ const SESSION_COOKIE = "bh_session";
 const STATE_COOKIE = "bh_auth";
 const SESSION_TTL = 7 * 24 * 60 * 60;
 // Store admins are members of this Rauthy group (not Rauthy's own admin role).
-// Membership is read from the id_token at sign-in, so the admin flag (and the
-// groups that make products visible) lapses sooner than the session and is
-// refreshed by signing in again.
+// Membership is read from the id_token at sign-in and checked again with
+// Rauthy's admin API on admin pages, trusting an answer for CHECK_MS, so
+// removing someone from the group takes effect within minutes.
 export const ADMIN_GROUP = process.env.ADMIN_GROUP || "birdhaus-admins";
-const ADMIN_TTL = 12 * 60 * 60;
+const CHECK_MS = 5 * 60 * 1000;
+const checked = new Map();
 
 export const isConfigured = () => Boolean(ISSUER && CLIENT_ID && CLIENT_SECRET && REDIRECT_URI && SESSION_SECRET);
 
@@ -111,28 +113,54 @@ export function accountOf(request) {
   if (!isConfigured()) return null;
   const session = unsign(cookies(request)[SESSION_COOKIE]);
   if (!session || typeof session.sub !== "string") return null;
-  const fresh = Number(session.adminUntil) > now();
-  const admin = session.admin === true && fresh;
-  const groups = fresh && Array.isArray(session.groups) ? session.groups : [];
-  // An admin whose flag has lapsed signs in again to refresh it.
-  const adminLapsed = session.admin === true && !fresh;
-  return { sub: session.sub, email: session.email || "", name: session.name || "", admin, adminLapsed, groups };
+  const groups = Array.isArray(session.groups) ? session.groups : [];
+  return { sub: session.sub, email: session.email || "", name: session.name || "", admin: session.admin === true, groups };
 }
 
-// Gate for /admin. Signed-out visitors, and admins whose flag has lapsed, sign
-// in and come back (signing in re-reads the flag); signed-in non-admins see a
-// 404, so the portal isn't advertised.
+// The account's groups now, from Rauthy; none once it's disabled or deleted.
+// Without an API key (local development) the groups from sign-in stand.
+async function currentGroups(account) {
+  if (!rauthy.isConfigured()) return account.groups;
+  const hit = checked.get(account.sub);
+  if (hit && Date.now() - hit.at < CHECK_MS) return hit.groups;
+  const user = await rauthy.findById(account.sub);
+  const groups = user?.enabled ? user.groups.filter((group) => typeof group === "string").slice(0, 20) : [];
+  checked.set(account.sub, { groups, at: Date.now() });
+  return groups;
+}
+
+// Gate for /admin. Signed-out visitors sign in and come back; signed-in
+// non-admins see a 404, so the portal isn't advertised. Membership is checked
+// with Rauthy, and the session takes the answer, so the header's Admin link
+// and group-visible products follow it. Like the database for orders, Rauthy
+// has to be up: without it admin pages refuse rather than trust a stale flag.
 // POSTs must come from this origin; session cookies are SameSite=Lax as well.
-export function requireAdmin(request, response, next) {
+export async function requireAdmin(request, response, next) {
   response.set("Cache-Control", "no-store");
   const account = accountOf(request);
-  if (!account || account.adminLapsed) {
+  if (!account) {
     const next = request.method === "GET" ? safeNext(request.originalUrl) : "/admin";
     return response.redirect(303, `/login?next=${encodeURIComponent(next)}`);
   }
-  if (!account.admin) return response.status(404).type("text").send("Not found");
+  let groups;
+  try {
+    groups = await currentGroups(account);
+  } catch (error) {
+    console.error("Could not check admin membership:", error.message);
+    return response.status(503).type("text").send("Admin pages are unavailable while sign-in is down. Try again shortly.");
+  }
+  const admin = groups.includes(ADMIN_GROUP);
+  if (admin !== account.admin || groups.join("\n") !== account.groups.join("\n")) updateSession(request, response, { admin, groups });
+  if (!admin) return response.status(404).type("text").send("Not found");
   if (request.method === "POST" && !sameOrigin(request)) return response.status(403).type("text").send("Forbidden");
   next();
+}
+
+// Rewrites the session with changes, keeping when it ends.
+function updateSession(request, response, changes) {
+  const session = unsign(cookies(request)[SESSION_COOKIE]);
+  if (!session) return;
+  response.cookie(SESSION_COOKIE, sign({ ...session, ...changes }), cookieOptions(Math.max(Number(session.exp) - now(), 0)));
 }
 
 // A POST from the store's own pages. TLS ends at the edge, so the public
@@ -144,7 +172,7 @@ export function sameOrigin(request) {
 
 // Signs the browser in, from either Google (through Rauthy) or an emailed
 // code. Past guest orders are claimed only with a verified address. The admin
-// flag comes from Rauthy groups and lapses before the session does.
+// flag comes from Rauthy groups, rechecked on admin pages (requireAdmin).
 export async function startSession(response, { sub, email, name, groups, emailVerified, idToken }) {
   if (emailVerified && email) {
     try {
@@ -157,7 +185,7 @@ export async function startSession(response, { sub, email, name, groups, emailVe
   const admin = memberOf.includes(ADMIN_GROUP);
   response.cookie(
     SESSION_COOKIE,
-    sign({ sub, email, name, admin, groups: memberOf, adminUntil: now() + ADMIN_TTL, ...(idToken ? { id_token: idToken } : {}), exp: now() + SESSION_TTL }),
+    sign({ sub, email, name, admin, groups: memberOf, ...(idToken ? { id_token: idToken } : {}), exp: now() + SESSION_TTL }),
     cookieOptions(SESSION_TTL)
   );
 }

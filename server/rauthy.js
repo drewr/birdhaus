@@ -42,6 +42,11 @@ export async function listUsers() {
   }));
 }
 
+export async function findById(id) {
+  const user = await call("GET", `/users/${encodeURIComponent(id)}`);
+  return user && account(user);
+}
+
 export async function findByEmail(email) {
   const user = await call("GET", `/users/email/${encodeURIComponent(email)}`);
   return user && account(user);
