@@ -53,18 +53,11 @@ jobs:
           # instead of fetched; the tarball never changes, so Nix needn't
           # check it again. Bump the revision to update the tools.
           nix_path: nixpkgs=https://github.com/NixOS/nixpkgs/archive/4fe25e12eb9f4c744966dd3de5a05246cf098601.tar.gz
-          extra_nix_config: tarball-ttl = 31536000
-      # The Nix store with run.hs's environment (GHC and its packages, about
-      # 675 MiB from cache.nixos.org otherwise). It only changes with the
-      # nixpkgs pin or the shebang's packages, so the key is made from those.
-      - &nixkey
-        id: nixkey
-        run: echo "key=nix-store-$( { echo "$NIX_PATH"; grep '^#! nix-shell' run.hs; } | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - &nixstore
-        uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
-        with:
-          primary-key: ${{ steps.nixkey.outputs.key }}
-          restore-prefixes-first-match: nix-store-
+          # runner is trusted so it can import the cached closure, which is
+          # unsigned.
+          extra_nix_config: |
+            tarball-ttl = 31536000
+            trusted-users = root runner
       # Downloads that only change with the lockfiles or this workflow: nixpkgs,
       # npm's cache and spago's registry and packages. Saved once per key.
       - &deps
@@ -84,6 +77,26 @@ jobs:
           path: output
           key: purs-output-${{ github.sha }}
           restore-keys: purs-output-
+      # run.hs compiled with its tools (.github/run-hs.nix), kept as an exported
+      # Nix closure of about 570 MB. Interpreting it with runghc instead needs
+      # GHC, 675 MiB to download and 3.9 GiB unpacked, on every run.
+      - &runhscache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/run-hs
+          key: run-hs-${{ hashFiles('run.hs', '.github/run-hs.nix', '.github/workflows/deploy.yml') }}
+      - &runhs
+        name: Build or import run.hs
+        run: |
+          dir="$RUNNER_TEMP/run-hs"
+          if [ -f "$dir/closure" ]; then
+            nix-store --import < "$dir/closure" > /dev/null
+          else
+            mkdir -p "$dir"
+            nix-build .github/run-hs.nix --no-out-link > "$dir/path"
+            nix-store --export $(nix-store -qR "$(cat "$dir/path")") > "$dir/closure"
+          fi
+          echo "RUN_HS=$(cat "$dir/path")/bin/run-hs" >> "$GITHUB_ENV"
       - &datumctl
         name: Install datumctl and sign in
         env:
@@ -104,7 +117,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          ./run.hs -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER"
+          "$RUN_HS" -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER"
           -w birdhaus-store-dev -d dev.birdhaus.store -b birdhaus-store-dev-db
           -k birdhaus-stripe-test -A birdhaus-store-dev-auth -R birdhaus-store-dev-rauthy
           --replicas 1
@@ -124,10 +137,10 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Release tags are vX.Y.Z, not $TAG"; exit 1; }
           git merge-base --is-ancestor HEAD origin/main || { echo "::error::$TAG is not on main, so dev never ran it"; exit 1; }
       - *nix
-      - *nixkey
-      - *nixstore
       - *deps
       - *purs
+      - *runhscache
+      - *runhs
       - *datumctl
       - *buildkit
       # Low-stock alerts go to the ALERT_EMAIL repository variable, so the
@@ -136,4 +149,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
-        run: ./run.hs -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER" --version "$TAG" ${ALERT_EMAIL:+--alert-email "$ALERT_EMAIL"}
+        run: >-
+          "$RUN_HS" -p "$DATUM_PROJECT" -r ghcr-drewr -u "$REGISTRY_USER" --version "$TAG" ${ALERT_EMAIL:+--alert-email "$ALERT_EMAIL"}
