@@ -3,7 +3,8 @@
 ## Context
 
 Changing a sentence on the site meant a commit and a deploy. Admins now edit
-sections of page text at `/admin/site`, starting with the front page's welcome.
+sections of page text at `/admin/site`: the front page's welcome and the
+introduction on the checkout's delivery step.
 
 ## Design
 

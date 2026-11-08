@@ -18,6 +18,13 @@ It's very *easy*:
 2. [Shop](/products) to get yours today, and
 3. Add yourself to the waiting list to get notified when new birdhouses are available
 `
+  },
+  {
+    key: "checkout-delivery",
+    label: "Checkout: delivery choice",
+    page: "/checkout",
+    fallback: `We're a Nashville-based business and only offer local pick-up and delivery right now. Questions? Email <info@birdhaus.store>.
+`
   }
 ];
 

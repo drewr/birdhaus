@@ -105,9 +105,11 @@ type Slot = { id :: Int, location :: String, details :: String, time :: String, 
 
 type DeliverySlot = { id :: Int, time :: String, selected :: Boolean }
 
+-- intro is admin-edited copy, already rendered and sanitized (server/copy.js).
 type DeliveryVM =
   { | Chrome
-      ( quantity :: Int
+      ( intro :: String
+      , quantity :: Int
       , productName :: String
       , total :: String
       , error :: String
@@ -533,7 +535,8 @@ deliveryPage :: DeliveryVM -> String
 deliveryPage vm =
   layout vm $
     el "section" [ cls "checkout", A "aria-labelledby" "delivery-title" ]
-      [ el "h2" [ A "id" "delivery-title" ] [ text "Delivery" ]
+      [ el "h1" [ cls "page-title", A "id" "delivery-title" ] [ text "How can we get your birdhouse to you?" ]
+      , el "div" [ cls "delivery-intro prose" ] [ raw vm.intro ]
       , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × " <> vm.productName <> " · " <> vm.total) ]
       , el "form" [ cls "delivery-form", A "method" "post", A "action" "/checkout/delivery" ]
           ( [ el "label" [ cls "delivery-option ui-choice" ]

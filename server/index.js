@@ -740,8 +740,10 @@ async function deliveryPage(request, response, error = "") {
     }
   }
   const chosen = (method, id) => cart.method === method && cart.slot === id;
+  const text = await copy.html(["checkout-delivery"]);
   const vm = {
     ...chrome(request),
+    intro: text["checkout-delivery"],
     quantity: qty,
     productName: product.name,
     total: formatUsd(qty * (await unitPrice(product))),

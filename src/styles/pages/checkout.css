@@ -12,6 +12,7 @@
 
   &[hidden] { display: none; }
   & h2 { margin: 0 0 var(--size-2); font-size: var(--font-size-4); }
+  & .page-title { margin: 0 0 var(--size-3); }
 }
 .checkout-total { margin: 0 0 var(--gutter); color: var(--ui-foreground); font-size: var(--font-size-0); }
 .checkout-breakdown { margin-bottom: var(--size-2); }
