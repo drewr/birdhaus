@@ -22,6 +22,11 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "";
 const SESSION_COOKIE = "bh_session";
 const STATE_COOKIE = "bh_auth";
 const SESSION_TTL = 7 * 24 * 60 * 60;
+// How this browser last signed in ("google" or "email"), kept through sign-out
+// so /login can point a returning customer at the same option.
+const LAST_COOKIE = "bh_last_login";
+const LAST_TTL = 365 * 24 * 60 * 60;
+const METHODS = ["google", "email"];
 // Store admins are members of this Rauthy group (not Rauthy's own admin role).
 // Membership is read from the id_token at sign-in and checked again with
 // Rauthy's admin API on admin pages, trusting an answer for CHECK_MS, so
@@ -173,7 +178,7 @@ export function sameOrigin(request) {
 // Signs the browser in, from either Google (through Rauthy) or an emailed
 // code. Past guest orders are claimed only with a verified address. The admin
 // flag comes from Rauthy groups, rechecked on admin pages (requireAdmin).
-export async function startSession(response, { sub, email, name, groups, emailVerified, idToken }) {
+export async function startSession(response, { sub, email, name, groups, emailVerified, idToken, method }) {
   if (emailVerified && email) {
     try {
       await db.linkOrders(sub, email);
@@ -188,6 +193,12 @@ export async function startSession(response, { sub, email, name, groups, emailVe
     sign({ sub, email, name, admin, groups: memberOf, ...(idToken ? { id_token: idToken } : {}), exp: now() + SESSION_TTL }),
     cookieOptions(SESSION_TTL)
   );
+  if (METHODS.includes(method)) response.cookie(LAST_COOKIE, method, cookieOptions(LAST_TTL));
+}
+
+export function lastLogin(request) {
+  const method = cookies(request)[LAST_COOKIE];
+  return METHODS.includes(method) ? method : "";
 }
 
 // Where to land after signing in; ?auth=in tells the client to count a login
@@ -238,7 +249,8 @@ export function routes() {
       const state = crypto.randomBytes(16).toString("base64url");
       const verifier = crypto.randomBytes(32).toString("base64url");
       const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
-      response.cookie(STATE_COOKIE, sign({ state, verifier, next: safeNext(request.query.next), exp: now() + 600 }), cookieOptions(600));
+      const provider = typeof request.query.provider === "string" ? request.query.provider.toLowerCase().slice(0, 32) : "";
+      response.cookie(STATE_COOKIE, sign({ state, verifier, next: safeNext(request.query.next), provider, exp: now() + 600 }), cookieOptions(600));
       const url = new URL(found.authorization_endpoint);
       url.searchParams.set("client_id", CLIENT_ID);
       url.searchParams.set("response_type", "code");
@@ -250,7 +262,6 @@ export function routes() {
       // idp_hint is a Rauthy extension: its page goes straight on to the
       // provider, so the customer never chooses anything there. An unknown
       // provider or an unreachable list falls back to Rauthy's page.
-      const provider = typeof request.query.provider === "string" ? request.query.provider.toLowerCase() : "";
       if (/^[a-z]{1,32}$/.test(provider)) {
         const id = await providerId(provider).catch((error) => {
           console.error("Could not list sign-in providers:", error.message);
@@ -294,7 +305,8 @@ export function routes() {
         name: typeof payload.name === "string" ? payload.name : "",
         groups: payload.groups,
         emailVerified: payload.email_verified === true,
-        idToken: tokens.id_token
+        idToken: tokens.id_token,
+        method: pending.provider === "google" ? "google" : ""
       });
       response.redirect(landing(pending.next));
     } catch (error) {

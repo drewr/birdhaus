@@ -42,6 +42,7 @@ type LoginVM =
       ( authEnabled :: Boolean
       , emailEnabled :: Boolean
       , next :: String
+      , lastLogin :: String
       , googleHref :: String
       , loginEmail :: String
       , loginError :: String
@@ -196,7 +197,12 @@ loginPage vm =
 
   panels =
     el "div" [ cls "login-panels" ]
-      [ el "div" [ cls "login-panel" ] ([ el "h2" [ cls "login-heading" ] [ text "Log in" ] ] <> logIn)
+      [ el "div" [ cls "login-panel" ]
+          ( [ el "h2" [ cls "login-heading" ] [ text "Log in" ]
+            , el "p" [ cls "description" ] ([ text "Welcome back. Please log in with your existing account." ] <> lastUsed)
+            ]
+              <> logIn
+          )
       , el "p" [ cls "login-or", A "aria-hidden" "true" ] [ text "or" ]
       , el "div" [ cls "login-panel", A "id" "create" ]
           [ el "h2" [ cls "login-heading" ] [ text "Create your account" ]
@@ -211,6 +217,12 @@ loginPage vm =
                 "Email me a code"
           ]
       ]
+
+  -- Which option this browser used last time (server/auth.js lastLogin).
+  lastUsed = case vm.lastLogin of
+    "google" -> [ text " Last time you used ", el "strong" [] [ text "Continue with Google" ], text "." ]
+    "email" -> [ text " Last time you used ", el "strong" [] [ text "Email me a code" ], text "." ]
+    _ -> []
 
   emailForm action purpose fields error label =
     el "form" [ cls "login-email", A "method" "post", A "action" action ]

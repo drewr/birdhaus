@@ -50,6 +50,8 @@ That replaces the old rule that guest checkout must always work.
 - Routes:
   - `GET /login`: log in (Google, or email) and create an account (Google, or
     name and email). Signed-in visitors see who they are, Continue and Sign out.
+    Each sign-in sets `bh_last_login` (`google` or `email`, a year, kept
+    through sign-out), and the log-in panel names that option.
   - `POST /login/email`, `POST /signup/email`: send a code, remember the email,
     purpose, name and `next` in a short-lived signed cookie, 303 to
     `/login/code`. Unknown email on log in, or a known one on sign-up, says so

@@ -518,6 +518,7 @@ function loginView(request, extra = {}) {
     authEnabled: auth.isConfigured(),
     emailEnabled: emailLogin.isAvailable(),
     googleHref: auth.loginUrl(next, { provider: "google" }),
+    lastLogin: auth.lastLogin(request),
     loginEmail: "",
     loginError: "",
     signupName: "",
@@ -590,7 +591,7 @@ app.post("/login/code", async (request, response) => {
   if (checked.result === "wrong") return again("That code isn't right. Check the email and try again.");
   if (checked.result !== "ok") return again("That code has expired or had too many tries. Send a new one below.");
   emailLogin.clearPending(response);
-  await auth.startSession(response, checked.account);
+  await auth.startSession(response, { ...checked.account, method: "email" });
   response.redirect(303, auth.landing(pending.next));
 });
 
