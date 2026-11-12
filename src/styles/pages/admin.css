@@ -16,7 +16,13 @@
   & h3 { margin: 0 0 var(--size-3); font-size: var(--font-size-1); }
 }
 .admin-check { display: flex; gap: var(--size-2); align-items: center; margin: 0 0 var(--size-3); font-weight: var(--font-weight-6); }
-.admin-copy textarea { font-family: var(--font-mono); }
+/* Page copy edited in place (Server.Render's copyBlock): a quiet Edit link
+   under each section for admins, and the editor that replaces it. */
+.copy-edit { margin-top: var(--size-2); font-size: var(--font-size-0); }
+.copy-editor {
+  & textarea { font-family: var(--font-mono); }
+}
+.copy-actions { display: flex; gap: var(--size-4); align-items: center; }
 .admin-stock {
   & input[type="number"] { max-width: var(--size-12); }
   & .admin-inline { margin-top: var(--size-2); }

@@ -13,13 +13,15 @@ module Server.Render
   , checkoutPage
   , confirmationPage
   , notifyFragment
+  , copyBlock
+  , copyEditor
   , module Server.Admin
   ) where
 
 import Prelude
 import Data.Array (null)
 import Html (Attr(..), Html, cls, el, elVoid, empty, raw, render, text, whenH)
-import Server.Admin (adminCopyPage, adminDeliveryPage, adminInventoryPage, adminOrdersPage, adminPickupPage, adminUsersPage)
+import Server.Admin (adminDeliveryPage, adminInventoryPage, adminOrdersPage, adminPickupPage, adminUsersPage)
 import Server.Layout (Chrome, cartLinkEl, layout, layoutWithHero)
 
 -- "Notify me when available" on a product that isn't selling. notifyState is
@@ -33,8 +35,7 @@ type NotifyFields r =
   | r
   )
 
--- welcome is admin-edited copy, already rendered and sanitized (server/copy.js).
-type HomeVM = { | Chrome ( welcome :: String ) }
+type HomeVM = { | Chrome ( welcome :: Block ) }
 
 -- The server builds every href, so next is encoded once, in JavaScript.
 type LoginVM =
@@ -66,9 +67,24 @@ type Thumb = { href :: String, src :: String, srcset :: String, alt :: String, t
 
 type ProductsVM = { | Chrome ( products :: Array ProductCard ) }
 
--- One item of an admin-edited section (server/copy.js): title is plain text,
--- html is already rendered and sanitized.
+-- A section of page copy that admins edit in place (server/copy.js): html for
+-- a prose section, items for an itemized one, laid out by view. Both are
+-- rendered and sanitized by the server; item titles are plain text. editable
+-- adds the Edit button, which swaps in copyEditor with HTMX.
+type Block =
+  { key :: String
+  , label :: String
+  , view :: String -- "prose" | "features" | "specs" | "guarantees" | "faq"
+  , title :: String
+  , html :: String
+  , items :: Array Item
+  , editable :: Boolean
+  }
+
 type Item = { title :: String, html :: String }
+
+-- canSave is false when the text couldn't be loaded: only Cancel is offered.
+type CopyEditorVM = { key :: String, label :: String, itemized :: Boolean, body :: String, saved :: String, error :: String, canSave :: Boolean }
 
 type ProductVM =
   { | Chrome
@@ -81,10 +97,10 @@ type ProductVM =
           , thumbs :: Array Thumb -- empty unless there are photos to choose between
           , open :: Boolean
           , reason :: String -- "open" | "sold-out" | "unavailable"
-          , features :: Array Item -- the detail sections; empty for products without them
-          , specs :: Array Item
-          , guarantees :: Array Item
-          , faq :: Array Item
+          , features :: Block
+          , specs :: Block
+          , guarantees :: Block
+          , faq :: Block
           , inCart :: Int -- this product's quantity in the cart
           , remaining :: Int -- how many are left when that's few, else -1
           , priceEach :: String
@@ -113,10 +129,9 @@ type Slot = { id :: Int, location :: String, details :: String, time :: String, 
 
 type DeliverySlot = { id :: Int, time :: String, selected :: Boolean }
 
--- intro is admin-edited copy, already rendered and sanitized (server/copy.js).
 type DeliveryVM =
   { | Chrome
-      ( intro :: String
+      ( intro :: Block
       , quantity :: Int
       , productName :: String
       , total :: String
@@ -167,14 +182,14 @@ type NotifyVM = { | NotifyFields () }
 
 -- ---------------------------------------------------------------- home
 
--- The copy is edited at /admin/site; the image is fixed.
+-- Admins edit the copy in place; the image is fixed.
 homePage :: HomeVM -> String
 homePage vm = layoutWithHero vm hero empty
   where
   hero =
     el "section" [ cls "hero", A "aria-label" "Welcome" ]
       [ el "div" [ cls "hero-inner" ]
-          [ el "div" [ cls "hero-copy prose" ] [ raw vm.welcome ]
+          [ block vm.welcome
           , el "figure" [ cls "hero-figure" ]
               [ elVoid "img" [ cls "hero-image", A "src" "/hero-birdhaus.jpg", A "width" "1400", A "height" "1180", A "alt" "A Birdhaus bluebird house held up in a backyard" ] ]
           ]
@@ -328,10 +343,10 @@ productPage vm =
               , if vm.open then purchase vm else unavailable vm
               ]
           ]
-      , featureSection vm.features
-      , specSection vm.specs
-      , trustStrip vm.guarantees
-      , faqSection vm.faq
+      , block vm.features
+      , block vm.specs
+      , block vm.guarantees
+      , block vm.faq
       ]
 
 productMedia :: ProductVM -> Html
@@ -404,13 +419,12 @@ unavailable vm =
 toNotify :: ProductVM -> NotifyVM
 toNotify vm = { slug: vm.slug, notifyState: vm.notifyState, notifyEmail: vm.notifyEmail, loginHref: vm.loginHref }
 
-featureSection :: Array Item -> Html
-featureSection items =
-  whenH (not (null items)) $
-    el "section" [ cls "info", A "aria-label" "Features" ]
-      [ sectionTitle "Built for bluebirds"
-      , el "ul" [ cls "feature-list" ] (map feature items)
-      ]
+featureSection :: Block -> Html
+featureSection b =
+  el "section" [ cls "info", A "aria-label" "Features" ]
+    [ sectionTitle b.title
+    , if null b.items then nothingYet else el "ul" [ cls "feature-list" ] (map feature b.items)
+    ]
 
 feature :: Item -> Html
 feature item =
@@ -422,21 +436,20 @@ feature item =
         ]
     ]
 
-specSection :: Array Item -> Html
-specSection items =
-  whenH (not (null items)) $
-    el "section" [ cls "info", A "aria-label" "Specifications" ]
-      [ sectionTitle "Specifications"
-      , el "dl" [ cls "spec-list" ] (items >>= specRow)
-      ]
+specSection :: Block -> Html
+specSection b =
+  el "section" [ cls "info", A "aria-label" "Specifications" ]
+    [ sectionTitle b.title
+    , if null b.items then nothingYet else el "dl" [ cls "spec-list" ] (b.items >>= specRow)
+    ]
 
 specRow :: Item -> Array Html
 specRow item = [ el "dt" [] [ text item.title ], el "dd" [] [ raw item.html ] ]
 
-trustStrip :: Array Item -> Html
-trustStrip items =
-  whenH (not (null items)) $
-    el "section" [ cls "trust-strip", A "aria-label" "What to expect" ] (map trustItem items)
+trustStrip :: Block -> Html
+trustStrip b =
+  el "section" [ cls "trust-strip", A "aria-label" "What to expect" ]
+    (if null b.items then [ nothingYet ] else map trustItem b.items)
 
 trustItem :: Item -> Html
 trustItem item =
@@ -445,13 +458,12 @@ trustItem item =
     , el "div" [ cls "trust-desc" ] [ raw item.html ]
     ]
 
-faqSection :: Array Item -> Html
-faqSection items =
-  whenH (not (null items)) $
-    el "section" [ cls "info", A "aria-label" "Questions" ]
-      [ sectionTitle "Questions"
-      , el "div" [ cls "faq-list ui-disclosure-group" ] (map faqItem items)
-      ]
+faqSection :: Block -> Html
+faqSection b =
+  el "section" [ cls "info", A "aria-label" "Questions" ]
+    [ sectionTitle b.title
+    , if null b.items then nothingYet else el "div" [ cls "faq-list ui-disclosure-group" ] (map faqItem b.items)
+    ]
 
 faqItem :: Item -> Html
 faqItem item =
@@ -460,8 +472,76 @@ faqItem item =
     , el "div" [ cls "faq-answer" ] [ raw item.html ]
     ]
 
+-- Only admins see an empty section, so they can fill it in.
+nothingYet :: Html
+nothingYet = el "p" [ cls "description" ] [ text "Nothing here yet." ]
+
 sectionTitle :: String -> Html
 sectionTitle t = el "h2" [ cls "section-title" ] [ text t ]
+
+-- ---------------------------------------------------------------- page copy
+
+block :: Block -> Html
+block b
+  | b.html == "" && null b.items && not b.editable = empty
+  | otherwise =
+      el "div" [ cls "copy-block", A "id" (blockId b.key) ]
+        [ content
+        , whenH b.editable $
+            el "button"
+              [ cls "copy-edit ui-button ui-button--link", A "type" "button", A "aria-label" ("Edit " <> b.label)
+              , A "hx-get" ("/admin/copy/" <> b.key <> "/edit"), A "hx-target" ("#" <> blockId b.key), A "hx-swap" "outerHTML"
+              ]
+              [ text "Edit" ]
+        ]
+  where
+  content = case b.view of
+    "features" -> featureSection b
+    "specs" -> specSection b
+    "guarantees" -> trustStrip b
+    "faq" -> faqSection b
+    _ -> el "div" [ cls "prose" ] [ raw b.html ]
+
+blockId :: String -> String
+blockId key = "copy-" <> key
+
+-- The section again, after Save or Cancel.
+copyBlock :: Block -> String
+copyBlock = render <<< block
+
+-- Takes the section's place on the page until Save or Cancel swaps it back.
+copyEditor :: CopyEditorVM -> String
+copyEditor vm =
+  render $
+    el "form"
+      [ cls "copy-block copy-editor admin-form", A "id" (blockId vm.key)
+      , A "hx-post" ("/admin/copy/" <> vm.key), A "hx-target" "this", A "hx-swap" "outerHTML"
+      ]
+      [ whenH (vm.error /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text vm.error ])
+      , whenH vm.canSave $
+          el "div" []
+            [ el "label" [ A "for" textId ] [ text ("Edit " <> vm.label) ]
+            , el "p" [ cls "fine-print", A "id" hintId ]
+                [ text
+                    ( (if vm.itemized then "Start each item with a line \"## Title\"; the text under it, up to the next, is what it says. " else "")
+                        <> "Write in Markdown or HTML; scripts and styles are removed. Save it empty to go back to the built-in text."
+                    )
+                ]
+            , el "textarea" [ A "id" textId, A "name" "body", A "rows" "14", A "maxlength" "20000", A "aria-describedby" hintId, B "autofocus" ] [ text vm.body ]
+            , whenH (vm.saved /= "") (el "p" [ cls "fine-print" ] [ text vm.saved ])
+            ]
+      , el "div" [ cls "copy-actions" ]
+          [ whenH vm.canSave (el "button" [ cls "ui-button", A "type" "submit" ] [ text "Save" ])
+          , el "button"
+              [ cls "ui-button ui-button--link", A "type" "button"
+              , A "hx-get" ("/admin/copy/" <> vm.key), A "hx-target" "closest form", A "hx-swap" "outerHTML"
+              ]
+              [ text "Cancel" ]
+          ]
+      ]
+  where
+  textId = "copy-text-" <> vm.key
+  hintId = "copy-hint-" <> vm.key
 
 -- ---------------------------------------------------------------- cart
 
@@ -534,7 +614,7 @@ deliveryPage vm =
   layout vm $
     el "section" [ cls "checkout", A "aria-labelledby" "delivery-title" ]
       [ el "h1" [ cls "page-title", A "id" "delivery-title" ] [ text "How can we get your birdhouse to you?" ]
-      , el "div" [ cls "delivery-intro prose" ] [ raw vm.intro ]
+      , block vm.intro
       , el "p" [ cls "checkout-total" ] [ text (show vm.quantity <> " × " <> vm.productName <> " · " <> vm.total) ]
       , el "form" [ cls "delivery-form", A "method" "post", A "action" "/checkout/delivery" ]
           ( [ whenH (vm.error /= "") (el "p" [ cls "waitlist-error ui-status ui-status--danger", A "role" "alert" ] [ text vm.error ])

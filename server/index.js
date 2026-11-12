@@ -80,6 +80,8 @@ function localCommit() {
 }
 
 // The shared header/head/analytics fields every full page needs.
+const isAdmin = (request) => Boolean(auth.accountOf(request)?.admin);
+
 function chrome(request, reason = "open") {
   const account = auth.accountOf(request);
   const { css, js } = assets();
@@ -89,7 +91,7 @@ function chrome(request, reason = "open") {
     accountId: account?.sub ?? "",
     accountLabel: account ? account.name || account.email : "",
     signedIn: Boolean(account),
-    isAdmin: Boolean(account?.admin),
+    isAdmin: isAdmin(request),
     cartQty: cartLine(request).qty,
     reason,
     version: appVersion,
@@ -503,8 +505,8 @@ app.use(express.static(dist, {
 }));
 
 app.get("/", async (request, response) => {
-  const text = await copy.html(["home-welcome"]);
-  response.set("Cache-Control", "no-cache").type("html").send(views.homePage({ ...chrome(request), welcome: text["home-welcome"] }));
+  const blocks = await copy.blocks(["home-welcome"], isAdmin(request));
+  response.set("Cache-Control", "no-cache").type("html").send(views.homePage({ ...chrome(request), welcome: blocks["home-welcome"] }));
 });
 
 // The store's own sign-in (docs/design/login-page.md): log in or create an
@@ -653,9 +655,8 @@ app.get("/products/:slug", async (request, response) => {
   // ?photo= picks the photo shown, so the thumbnails work as plain links too.
   const photos = product.photos.map((photo) => photoView(product, photo));
   const shown = photos.find((photo) => photo.name === request.query.photo) ?? photos[0];
-  // The feature, spec, guarantee and FAQ sections, admin-edited (server/copy.js).
-  const detailKeys = ["features", "specs", "guarantees", "faq"].map((part) => `${product.slug}-${part}`);
-  const details = product.details ? await copy.html(detailKeys) : {};
+  const [features, specs, guarantees, faq] = copy.productKeys(product);
+  const blocks = await copy.blocks([features, specs, guarantees, faq], isAdmin(request));
   const vm = {
     ...chrome(request, status.reason),
     slug: product.slug,
@@ -669,10 +670,10 @@ app.get("/products/:slug", async (request, response) => {
       : [],
     open: status.open,
     reason: status.reason,
-    features: details[detailKeys[0]] ?? [],
-    specs: details[detailKeys[1]] ?? [],
-    guarantees: details[detailKeys[2]] ?? [],
-    faq: details[detailKeys[3]] ?? [],
+    features: blocks[features],
+    specs: blocks[specs],
+    guarantees: blocks[guarantees],
+    faq: blocks[faq],
     inCart,
     // Said beside the quantity only when few are left.
     remaining: status.remaining !== null && status.remaining <= inventory.LOW ? status.remaining : -1,
@@ -747,10 +748,10 @@ async function deliveryPage(request, response, error = "") {
     }
   }
   const chosen = (method, id) => cart.method === method && cart.slot === id;
-  const text = await copy.html(["checkout-delivery"]);
+  const blocks = await copy.blocks(["checkout-delivery"], isAdmin(request));
   const vm = {
     ...chrome(request),
-    intro: text["checkout-delivery"],
+    intro: blocks["checkout-delivery"],
     quantity: qty,
     productName: product.name,
     total: formatUsd(qty * (await unitPrice(product))),
@@ -903,9 +904,6 @@ const ADMIN_ERRORS = {
   "location-name": "Give the location a name.",
   "slot-fields": "Choose a location, a date, and start and end times.",
   "slot-times": "The end time must be after the start time (check AM/PM).",
-  "copy-section": "That section doesn't exist.",
-  "copy-length": `Page copy can be at most ${copy.MAX_LENGTH} characters.`,
-  "copy-items": "Start that section with a \"## \" line, and start each item with one.",
   "inventory-product": "That product isn't tracked.",
   "inventory-value": "Enter a whole number of 0 or more.",
   "inventory-changed": "The count changed while you were editing, probably from an order. The page now shows the current number; check it and save again.",
@@ -1042,31 +1040,50 @@ app.post("/admin/delivery/slots/:id/active", auth.requireAdmin, (request, respon
   adminWrite(response, () => delivery.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"), "/admin/delivery")
 );
 
-// Page copy (docs/design/site-copy.md): one form per section, Markdown or HTML.
+// Page copy (docs/design/site-copy.md), edited in place: the Edit button swaps
+// a section for its editor, and Save or Cancel swaps the section back. These
+// return fragments for HTMX, so failures are shown in the editor with a 200.
 const savedAt = new Intl.DateTimeFormat("en-US", { timeZone: pickup.ZONE, dateStyle: "medium", timeStyle: "short" });
 
-app.get("/admin/site", auth.requireAdmin, async (request, response) => {
-  const vm = await adminData(request, async () => ({
-    sections: (await copy.list()).map((s) => ({
-      key: s.key,
-      label: s.label,
-      page: s.page,
-      itemized: Boolean(s.itemized),
-      body: s.row?.body ?? s.fallback,
-      saved: s.row ? `Last saved ${savedAt.format(s.row.updated_at)}${s.row.updated_by ? ` by ${s.row.updated_by}` : ""}.` : "Showing the built-in text."
-    }))
-  }));
-  response.type("html").send(views.adminCopyPage({ sections: [], ...vm, error: adminNotice(request) || vm.error }));
+const copySection = (request, response, next) => (copy.section(request.params.key) ? next() : response.status(404).type("text").send("Not found"));
+
+// Without loaded text (canSave false) the editor offers only Cancel, so a
+// failed load can't be saved over what's there.
+function sendEditor(response, s, { body = "", saved = "", error = "", canSave = true }) {
+  response.type("html").send(views.copyEditor({ key: s.key, label: s.label, itemized: Boolean(s.itemized), body, saved, error, canSave }));
+}
+
+const savedLine = (saved) => (saved ? `Last saved ${savedAt.format(saved.at)}${saved.by ? ` by ${saved.by}` : ""}.` : "Showing the built-in text.");
+
+app.get("/admin/copy/:key", auth.requireAdmin, copySection, async (request, response) => {
+  const blocks = await copy.blocks([request.params.key], true);
+  response.type("html").send(views.copyBlock(blocks[request.params.key]));
 });
 
-app.post("/admin/site/:key", auth.requireAdmin, (request, response) => {
+app.get("/admin/copy/:key/edit", auth.requireAdmin, copySection, async (request, response) => {
+  const s = copy.section(request.params.key);
+  if (!db.isConfigured()) return sendEditor(response, s, { error: "The database is not configured.", canSave: false });
+  try {
+    const { body, saved } = await copy.source(s.key);
+    sendEditor(response, s, { body, saved: savedLine(saved) });
+  } catch (error) {
+    console.error("Could not load page copy for editing:", error.message);
+    sendEditor(response, s, { error: "The database is unavailable. Try again shortly.", canSave: false });
+  }
+});
+
+app.post("/admin/copy/:key", auth.requireAdmin, copySection, async (request, response) => {
+  const s = copy.section(request.params.key);
   const body = String(request.body?.body ?? "").replace(/\r\n/g, "\n");
-  return adminWrite(response, async () => {
-    if (!copy.section(request.params.key)) return "copy-section";
-    if (body.length > copy.MAX_LENGTH) return "copy-length";
-    if (copy.section(request.params.key).itemized && body.trim() && !copy.items(body)) return "copy-items";
-    await copy.save(request.params.key, body, auth.accountOf(request).email || null);
-  }, "/admin/site");
+  const problem = db.isConfigured() ? copy.problem(s, body) : "The database is not configured.";
+  if (problem) return sendEditor(response, s, { body, error: problem });
+  try {
+    await copy.save(s.key, body, auth.accountOf(request).email || null);
+  } catch (error) {
+    console.error("Could not save page copy:", error.message);
+    return sendEditor(response, s, { body, error: "Couldn't save. Try again shortly." });
+  }
+  response.type("html").send(views.copyBlock(copy.savedBlock(s.key, body)));
 });
 
 // Inventory (docs/design/inventory.md): one form per tracked product. The

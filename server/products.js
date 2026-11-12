@@ -7,10 +7,11 @@ import { ADMIN_GROUP } from "./auth.js";
 // accounts in one of those Rauthy groups see, add or buy it. inventory products
 // sell only what /admin/inventory says is available, and none while the
 // database is down; the rest are unlimited. batched products' orders are
-// recorded under the current batch (others as "unbatched"); details shows the
-// feature, spec, guarantee and FAQ sections admins edit (server/copy.js).
-// photos are listed in display order, the first being the default; their files
-// come from scripts/product-photos.hs. A product without photos shows its image.
+// recorded under the current batch (others as "unbatched"). Each product's
+// feature, spec, guarantee and FAQ sections are text admins edit on its page
+// (server/copy.js); featuresTitle heads the first. photos are listed in display
+// order, the first being the default; their files come from
+// scripts/product-photos.hs. A product without photos shows its image.
 export const products = [
   {
     slug: "bluebird-house",
@@ -26,7 +27,7 @@ export const products = [
     visibility: "public",
     inventory: true,
     batched: true,
-    details: true
+    featuresTitle: "Built for bluebirds"
   },
   // For testing checkout end to end with a real card at Stripe's minimum.
   {
@@ -38,8 +39,7 @@ export const products = [
     photos: [],
     visibility: { groups: [ADMIN_GROUP] },
     inventory: false,
-    batched: false,
-    details: false
+    batched: false
   }
 ];
 
