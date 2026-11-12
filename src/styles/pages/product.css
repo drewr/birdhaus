@@ -68,7 +68,7 @@
   line-height: var(--font-lineheight-00);
 }
 .feature-title { margin: 0 0 var(--size-1); font-size: var(--font-size-0); font-weight: var(--font-weight-6); }
-.feature-desc { margin: 0; color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+.feature-desc { color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
 .trust-strip {
   margin-top: var(--size-9);
   padding: var(--size-6) 0;
@@ -81,5 +81,12 @@
 }
 .trust-item {
   & h3 { margin: 0 0 var(--size-2); font-size: var(--font-size-0); font-weight: var(--font-weight-6); letter-spacing: var(--font-letterspacing-3); text-transform: uppercase; }
-  & p { margin: 0; color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+}
+.trust-desc { color: var(--ui-muted-foreground); font-size: var(--font-size-0); line-height: var(--font-lineheight-3); }
+/* Their text is admin-edited Markdown (server/copy.js), so blocks are spaced
+   here rather than by class. */
+:is(.feature-desc, .trust-desc, .faq-answer, .spec-list dd) > * {
+  margin: 0 0 var(--size-2);
+
+  &:last-child { margin-bottom: 0; }
 }

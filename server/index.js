@@ -653,6 +653,9 @@ app.get("/products/:slug", async (request, response) => {
   // ?photo= picks the photo shown, so the thumbnails work as plain links too.
   const photos = product.photos.map((photo) => photoView(product, photo));
   const shown = photos.find((photo) => photo.name === request.query.photo) ?? photos[0];
+  // The feature, spec, guarantee and FAQ sections, admin-edited (server/copy.js).
+  const detailKeys = ["features", "specs", "guarantees", "faq"].map((part) => `${product.slug}-${part}`);
+  const details = product.details ? await copy.html(detailKeys) : {};
   const vm = {
     ...chrome(request, status.reason),
     slug: product.slug,
@@ -666,7 +669,10 @@ app.get("/products/:slug", async (request, response) => {
       : [],
     open: status.open,
     reason: status.reason,
-    details: product.details,
+    features: details[detailKeys[0]] ?? [],
+    specs: details[detailKeys[1]] ?? [],
+    guarantees: details[detailKeys[2]] ?? [],
+    faq: details[detailKeys[3]] ?? [],
     inCart,
     // Said beside the quantity only when few are left.
     remaining: status.remaining !== null && status.remaining <= inventory.LOW ? status.remaining : -1,
@@ -899,6 +905,7 @@ const ADMIN_ERRORS = {
   "slot-times": "The end time must be after the start time (check AM/PM).",
   "copy-section": "That section doesn't exist.",
   "copy-length": `Page copy can be at most ${copy.MAX_LENGTH} characters.`,
+  "copy-items": "Start that section with a \"## \" line, and start each item with one.",
   "inventory-product": "That product isn't tracked.",
   "inventory-value": "Enter a whole number of 0 or more.",
   "inventory-changed": "The count changed while you were editing, probably from an order. The page now shows the current number; check it and save again.",
@@ -1044,6 +1051,7 @@ app.get("/admin/site", auth.requireAdmin, async (request, response) => {
       key: s.key,
       label: s.label,
       page: s.page,
+      itemized: Boolean(s.itemized),
       body: s.row?.body ?? s.fallback,
       saved: s.row ? `Last saved ${savedAt.format(s.row.updated_at)}${s.row.updated_by ? ` by ${s.row.updated_by}` : ""}.` : "Showing the built-in text."
     }))
@@ -1056,6 +1064,7 @@ app.post("/admin/site/:key", auth.requireAdmin, (request, response) => {
   return adminWrite(response, async () => {
     if (!copy.section(request.params.key)) return "copy-section";
     if (body.length > copy.MAX_LENGTH) return "copy-length";
+    if (copy.section(request.params.key).itemized && body.trim() && !copy.items(body)) return "copy-items";
     await copy.save(request.params.key, body, auth.accountOf(request).email || null);
   }, "/admin/site");
 });

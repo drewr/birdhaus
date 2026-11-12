@@ -53,7 +53,8 @@ type DeliveryVM =
   }
 
 -- body is the section's source (saved or built-in); saved says which.
-type CopySection = { key :: String, label :: String, page :: String, body :: String, saved :: String }
+-- An itemized section is a list of "## Title" items (server/copy.js).
+type CopySection = { key :: String, label :: String, page :: String, itemized :: Boolean, body :: String, saved :: String }
 
 type CopyVM = { | Chrome ( error :: String, sections :: Array CopySection ) }
 
@@ -371,6 +372,12 @@ copyForm s =
     [ el "h3" [] [ text s.label ]
     , el "p" [ cls "fine-print" ] [ text (s.saved <> " "), el "a" [ cls "text-link", A "href" s.page ] [ text "View page" ] ]
     , el "label" [ A "for" ("copy-" <> s.key) ] [ text "Text" ]
-    , el "textarea" [ A "id" ("copy-" <> s.key), A "name" "body", A "rows" "14", A "maxlength" "20000" ] [ text s.body ]
+    , whenH s.itemized $
+        el "p" [ cls "fine-print", A "id" ("copy-hint-" <> s.key) ] [ text "Start each item with a line \"## Title\"; the text under it, up to the next, is what it says. Items show in this order." ]
+    , el "textarea"
+        ( [ A "id" ("copy-" <> s.key), A "name" "body", A "rows" "14", A "maxlength" "20000" ]
+            <> (if s.itemized then [ A "aria-describedby" ("copy-hint-" <> s.key) ] else [])
+        )
+        [ text s.body ]
     , el "button" [ cls "buy-button ui-button ui-button--block", A "type" "submit" ] [ text "Save" ]
     ]

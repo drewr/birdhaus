@@ -66,6 +66,10 @@ type Thumb = { href :: String, src :: String, srcset :: String, alt :: String, t
 
 type ProductsVM = { | Chrome ( products :: Array ProductCard ) }
 
+-- One item of an admin-edited section (server/copy.js): title is plain text,
+-- html is already rendered and sanitized.
+type Item = { title :: String, html :: String }
+
 type ProductVM =
   { | Chrome
       ( NotifyFields
@@ -77,7 +81,10 @@ type ProductVM =
           , thumbs :: Array Thumb -- empty unless there are photos to choose between
           , open :: Boolean
           , reason :: String -- "open" | "sold-out" | "unavailable"
-          , details :: Boolean -- the Bluebird House's feature, spec and FAQ sections
+          , features :: Array Item -- the detail sections; empty for products without them
+          , specs :: Array Item
+          , guarantees :: Array Item
+          , faq :: Array Item
           , inCart :: Int -- this product's quantity in the cart
           , remaining :: Int -- how many are left when that's few, else -1
           , priceEach :: String
@@ -321,7 +328,10 @@ productPage vm =
               , if vm.open then purchase vm else unavailable vm
               ]
           ]
-      , whenH vm.details (featureSection <> specSection <> trustStrip <> faqSection)
+      , featureSection vm.features
+      , specSection vm.specs
+      , trustStrip vm.guarantees
+      , faqSection vm.faq
       ]
 
 productMedia :: ProductVM -> Html
@@ -394,84 +404,60 @@ unavailable vm =
 toNotify :: ProductVM -> NotifyVM
 toNotify vm = { slug: vm.slug, notifyState: vm.notifyState, notifyEmail: vm.notifyEmail, loginHref: vm.loginHref }
 
-featureSection :: Html
-featureSection =
-  el "section" [ cls "info", A "aria-label" "Features" ]
-    [ sectionTitle "Built for bluebirds"
-    , el "ul" [ cls "feature-list" ]
-        [ feature false "1½-inch entrance hole" "Sized to the North American Bluebird Society standard: the right fit for bluebirds, too small for starlings. No perch, which predators would use."
-        , feature true "Ventilation" "[Describe the vents that keep the box cool in summer.]"
-        , feature true "Drainage" "[Describe the floor drainage that keeps the nest dry.]"
-        , feature true "Easy cleanout" "[Describe the hinged or sliding panel for seasonal cleaning.]"
-        , feature true "Simple mounting" "[Describe how it mounts — pole, post or screws — and the recommended height.]"
-        , feature true "Built to last" "[Describe the wood and hardware — e.g. rot-resistant cedar, rust-resistant screws, no nails.]"
-        ]
-    ]
+featureSection :: Array Item -> Html
+featureSection items =
+  whenH (not (null items)) $
+    el "section" [ cls "info", A "aria-label" "Features" ]
+      [ sectionTitle "Built for bluebirds"
+      , el "ul" [ cls "feature-list" ] (map feature items)
+      ]
 
-feature :: Boolean -> String -> String -> Html
-feature pending title desc =
+feature :: Item -> Html
+feature item =
   el "li" [ cls "feature" ]
     [ el "span" [ cls "feature-check", A "aria-hidden" "true" ] [ text "✓" ]
     , el "div" []
-        [ el "p" [ cls "feature-title" ] [ text title ]
-        , el "p" [ cls (if pending then "feature-desc spec-todo" else "feature-desc") ] [ text desc ]
+        [ el "p" [ cls "feature-title" ] [ text item.title ]
+        , el "div" [ cls "feature-desc" ] [ raw item.html ]
         ]
     ]
 
-specSection :: Html
-specSection =
-  el "section" [ cls "info", A "aria-label" "Specifications" ]
-    [ sectionTitle "Specifications"
-    , el "dl" [ cls "spec-list" ]
-        ( specRow true "Material" "[Wood species and grade — e.g. kiln-dried red cedar]"
-            <> specRow true "Dimensions" "[Height × width × depth]"
-            <> specRow true "Weight" "[Shipping weight]"
-            <> specRow false "Entrance hole" "1½ in, about 6 in above the floor"
-            <> specRow true "Base footprint" "[Interior floor, width × depth]"
-            <> specRow true "Hardware" "[e.g. rust-resistant screws, no nails]"
-            <> specRow true "Made in" "[Origin]"
-        )
-    ]
+specSection :: Array Item -> Html
+specSection items =
+  whenH (not (null items)) $
+    el "section" [ cls "info", A "aria-label" "Specifications" ]
+      [ sectionTitle "Specifications"
+      , el "dl" [ cls "spec-list" ] (items >>= specRow)
+      ]
 
-specRow :: Boolean -> String -> String -> Array Html
-specRow pending label value =
-  [ el "dt" [] [ text label ]
-  , el "dd" (if pending then [ cls "spec-todo" ] else []) [ text value ]
-  ]
+specRow :: Item -> Array Html
+specRow item = [ el "dt" [] [ text item.title ], el "dd" [] [ raw item.html ] ]
 
-trustStrip :: Html
-trustStrip =
-  el "section" [ cls "trust-strip", A "aria-label" "What to expect" ]
-    [ trustItem true "Satisfaction guarantee" "[Your returns or guarantee policy.]"
-    , trustItem true "Pick-up and delivery" "[Where pick-up is, and the local delivery area and fee.]"
-    , trustItem false "Secure checkout" "Payments are processed by Stripe."
-    ]
+trustStrip :: Array Item -> Html
+trustStrip items =
+  whenH (not (null items)) $
+    el "section" [ cls "trust-strip", A "aria-label" "What to expect" ] (map trustItem items)
 
-trustItem :: Boolean -> String -> String -> Html
-trustItem pending title desc =
+trustItem :: Item -> Html
+trustItem item =
   el "div" [ cls "trust-item" ]
-    [ el "h3" [] [ text title ]
-    , el "p" (if pending then [ cls "spec-todo" ] else []) [ text desc ]
+    [ el "h3" [] [ text item.title ]
+    , el "div" [ cls "trust-desc" ] [ raw item.html ]
     ]
 
-faqSection :: Html
-faqSection =
-  el "section" [ cls "info", A "aria-label" "Questions" ]
-    [ sectionTitle "Questions"
-    , el "div" [ cls "faq-list ui-disclosure-group" ]
-        [ faqItem "How do I mount it, and how high?" "[Your mounting guidance. Bluebird houses usually sit 5–6 feet up, in the open, away from heavy foot traffic.]"
-        , faqItem "How do I keep sparrows and predators out?" "[The 1½-inch hole already blocks starlings. Add any guidance on house sparrows, baffles or predator guards.]"
-        , faqItem "How do I clean it?" "[Your cleaning instructions, and how the box opens for it.]"
-        , faqItem "Does it come assembled?" "[Assembled or flat-pack, and what's in the box.]"
-        , faqItem "When can I get it?" "[How soon after ordering it's ready for pick-up or local delivery.]"
-        ]
-    ]
+faqSection :: Array Item -> Html
+faqSection items =
+  whenH (not (null items)) $
+    el "section" [ cls "info", A "aria-label" "Questions" ]
+      [ sectionTitle "Questions"
+      , el "div" [ cls "faq-list ui-disclosure-group" ] (map faqItem items)
+      ]
 
-faqItem :: String -> String -> Html
-faqItem question answer =
+faqItem :: Item -> Html
+faqItem item =
   el "details" [ cls "faq-item ui-disclosure" ]
-    [ el "summary" [] [ text question ]
-    , el "p" [ cls "faq-answer spec-todo" ] [ text answer ]
+    [ el "summary" [] [ text item.title ]
+    , el "div" [ cls "faq-answer" ] [ raw item.html ]
     ]
 
 sectionTitle :: String -> Html

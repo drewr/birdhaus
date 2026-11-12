@@ -28,8 +28,6 @@
 
   & dt { padding: var(--size-3) 0; border-top: var(--ui-rule); color: var(--ui-muted-foreground); }
   & dd { margin: 0; padding: var(--size-3) 0 var(--size-3) var(--gutter); border-top: var(--ui-rule); font-weight: var(--font-weight-6); }
-  & dd.spec-todo { font-weight: var(--font-weight-4); }
 }
-.spec-todo { color: var(--ui-muted-foreground); font-style: italic; }
 
 .admin-table { margin: 0 0 var(--gutter); }

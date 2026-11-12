@@ -8,9 +8,9 @@ import { ADMIN_GROUP } from "./auth.js";
 // sell only what /admin/inventory says is available, and none while the
 // database is down; the rest are unlimited. batched products' orders are
 // recorded under the current batch (others as "unbatched"); details shows the
-// Bluebird House's feature, spec and FAQ sections. photos are listed in display
-// order, the first being the default; their files come from
-// scripts/product-photos.hs. A product without photos shows its image.
+// feature, spec, guarantee and FAQ sections admins edit (server/copy.js).
+// photos are listed in display order, the first being the default; their files
+// come from scripts/product-photos.hs. A product without photos shows its image.
 export const products = [
   {
     slug: "bluebird-house",

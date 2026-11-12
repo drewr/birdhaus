@@ -3,8 +3,10 @@
 ## Context
 
 Changing a sentence on the site meant a commit and a deploy. Admins now edit
-sections of page text at `/admin/site`: the front page's welcome and the
-introduction on the checkout's delivery step.
+sections of page text at `/admin/site`: the front page's welcome, the
+introduction on the checkout's delivery step, and the Bluebird House page's
+features, specifications, guarantees ("what to expect") and questions, which
+started as bracketed placeholders.
 
 ## Design
 
@@ -12,6 +14,14 @@ introduction on the checkout's delivery step.
   the editor, the page it appears on, and the built-in text. A page asks for its
   sections by key and renders the HTML in its view with `raw`. Adding a section
   is a code change: an entry there, plus a `raw` slot in the page's view.
+- **Itemized sections** (`itemized: true`) are lists the page lays out item by
+  item, like the product page's feature grid, spec table and FAQ. Their text is
+  one Markdown document in which each item starts with a `## Title` line and
+  runs to the next; the title is plain text and the rest is rendered like any
+  section. Saving text with no `## ` line, or with text before the first, is
+  refused. Admins add, remove and reorder items by editing the text. Products
+  with `details: true` (`server/products.js`) show the sections keyed
+  `<slug>-features`, `-specs`, `-guarantees` and `-faq`.
 - **Storage:** `site_copy` (migration 009) holds one row per edited section:
   the source text, when it was saved and by whom. A section without a row shows
   its built-in text, and so does every section while Postgres is down, so pages
