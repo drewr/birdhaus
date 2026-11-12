@@ -129,3 +129,4 @@ Visitor analytics are self-hosted Umami at https://stats.birdhaus.store; see [`u
 - [Inventory](docs/design/inventory.md) (built): stock per product set in the admin portal, low-stock and sold-out behaviour, and restock emails.
 - [Rollouts without downtime](docs/design/rollouts.md) (built): draining on `SIGTERM`, the edge's passive health check, and what dev measurements showed.
 - [Accounts and sign-in with Google and email](docs/design/accounts.md) (built): a self-hosted Rauthy identity service in the `birdhaus` Network, wired into the store and Umami analytics.
+- [Replace Rauthy with Zitadel](docs/design/zitadel.md) (planned): import every account under its existing ID, and set Zitadel up from scripts instead of by hand.
