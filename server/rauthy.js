@@ -42,10 +42,17 @@ export async function listUsers() {
   }));
 }
 
-// Emails of the accounts in a group, for notices to admins.
+// Emails of the enabled accounts in a group, for notices to admins. The list
+// endpoint doesn't carry groups, so each account is read in turn, a few at a
+// time; the store is small and this runs only when a slot is sent.
 export async function listGroupEmails(group) {
-  const users = await call("GET", "/users?page_size=65535");
-  return (users ?? []).filter((user) => user.enabled && (user.groups ?? []).includes(group)).map((user) => user.email.toLowerCase());
+  const users = (await call("GET", "/users?page_size=65535")) ?? [];
+  const emails = [];
+  for (let i = 0; i < users.length; i += 8) {
+    const accounts = await Promise.all(users.slice(i, i + 8).map((user) => findById(user.id)));
+    for (const account of accounts) if (account?.enabled && account.groups.includes(group)) emails.push(account.email);
+  }
+  return emails;
 }
 
 export async function findById(id) {

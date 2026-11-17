@@ -911,6 +911,8 @@ const ADMIN_ERRORS = {
   "price-product": "That product doesn't exist.",
   "price-value": `Enter a price from ${formatUsd(price.MIN_CENTS)} to ${formatUsd(price.MAX_CENTS)}, like 40 or 39.50.`,
   "notify-empty": "Raise the count above 0 before emailing the people waiting.",
+  "invite-no-slots": "There are no active slots that haven't ended, so no invites were sent.",
+  "invite-no-admins": `Nobody is in the ${auth.ADMIN_GROUP} group in Rauthy, so no invites were sent.`,
   "mail-off": "Email isn't configured, so nobody was emailed.",
   "no-database": "The database is not configured.",
   "save-failed": "That change couldn't be saved. Try again shortly."
@@ -934,8 +936,7 @@ async function adminWrite(response, write, back = "/admin/pickup") {
 // Emails every admin a calendar invite for each slot and counts what went out.
 // Resending is safe: an invite's UID is per slot, so calendars update the
 // existing event.
-async function sendInvites(kind, slots) {
-  const emails = await rauthy.listGroupEmails(auth.ADMIN_GROUP);
+async function sendInvites(kind, slots, emails) {
   let sent = 0;
   let failed = 0;
   for (const slot of slots) {
@@ -950,7 +951,7 @@ async function sendInvites(kind, slots) {
 // For a new slot: best effort and not awaited, since the slot is saved either way.
 function inviteAdmins(kind, slot) {
   if (!mail.isConfigured() || !rauthy.isConfigured()) return;
-  sendInvites(kind, [slot]).catch((error) => console.error("Could not list admins for slot invite:", error.message));
+  rauthy.listGroupEmails(auth.ADMIN_GROUP).then((emails) => sendInvites(kind, [slot], emails)).catch((error) => console.error("Could not list admins for slot invite:", error.message));
 }
 
 // For slots that existed before invites, or admins added since: every active
@@ -961,7 +962,11 @@ async function resendInvites(request, response, kind, list, back) {
   if (!mail.isConfigured() || !rauthy.isConfigured()) return go("error=mail-off");
   try {
     const now = new Date();
-    const { sent, failed } = await sendInvites(kind, (await list()).filter((slot) => slot.active && slot.ends_at > now));
+    const slots = (await list()).filter((slot) => slot.active && slot.ends_at > now);
+    if (!slots.length) return go("error=invite-no-slots");
+    const emails = await rauthy.listGroupEmails(auth.ADMIN_GROUP);
+    if (!emails.length) return go("error=invite-no-admins");
+    const { sent, failed } = await sendInvites(kind, slots, emails);
     go(`sent=${sent}&failed=${failed}`);
   } catch (error) {
     console.error("Could not send slot invites:", error.message);
