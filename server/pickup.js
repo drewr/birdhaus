@@ -67,11 +67,15 @@ export async function listSlots() {
 
 // date is YYYY-MM-DD and start/end are HH:MM, all in the store's zone.
 export async function createSlot(locationId, date, start, end) {
-  await query(
-    `insert into pickup_slots (location_id, starts_at, ends_at)
-     values ($1, ($2::date + $3::time) at time zone '${ZONE}', ($2::date + $4::time) at time zone '${ZONE}')`,
+  const { rows } = await query(
+    `with s as (
+       insert into pickup_slots (location_id, starts_at, ends_at)
+       values ($1, ($2::date + $3::time) at time zone '${ZONE}', ($2::date + $4::time) at time zone '${ZONE}')
+       returning id, location_id, starts_at, ends_at
+     ) select s.id, s.starts_at, s.ends_at, l.name, l.details from s join pickup_locations l on l.id = s.location_id`,
     [locationId, date, start, end]
   );
+  return rows[0];
 }
 
 export async function setSlotActive(id, active) {

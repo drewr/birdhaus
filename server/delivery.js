@@ -100,11 +100,13 @@ export async function listSlots() {
 
 // date is YYYY-MM-DD and start/end are HH:MM, all in the store's zone.
 export async function createSlot(date, start, end) {
-  await query(
+  const { rows } = await query(
     `insert into delivery_slots (starts_at, ends_at)
-     values (($1::date + $2::time) at time zone '${ZONE}', ($1::date + $3::time) at time zone '${ZONE}')`,
+     values (($1::date + $2::time) at time zone '${ZONE}', ($1::date + $3::time) at time zone '${ZONE}')
+     returning id, starts_at, ends_at`,
     [date, start, end]
   );
+  return rows[0];
 }
 
 export async function setSlotActive(id, active) {

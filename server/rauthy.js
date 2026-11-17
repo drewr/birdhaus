@@ -42,6 +42,12 @@ export async function listUsers() {
   }));
 }
 
+// Emails of the accounts in a group, for notices to admins.
+export async function listGroupEmails(group) {
+  const users = await call("GET", "/users?page_size=65535");
+  return (users ?? []).filter((user) => user.enabled && (user.groups ?? []).includes(group)).map((user) => user.email.toLowerCase());
+}
+
 export async function findById(id) {
   const user = await call("GET", `/users/${encodeURIComponent(id)}`);
   return user && account(user);

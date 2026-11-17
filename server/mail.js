@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { slotTime } from "./pickup.js";
 
 // Sign-in codes, restock notices and stock alerts go out through SES SMTP with
 // the birdhaus-ses settings Rauthy also uses. MAIL_LOG=1 prints them instead,
@@ -81,6 +82,47 @@ export function stockAlertEmail(product, available) {
       ? "Shoppers now see it as sold out and can ask to be notified. Raise the count when you have more, then email the people waiting."
       : "Shoppers see how many are left. Raise the count if you have more on hand."
   ], { label: "Open the inventory", href: `${SITE}/admin/inventory` });
+}
+
+// RFC 5545 text: escaped, and folded at 75 octets (continuation lines start
+// with a space).
+const ics = (value) => value.replace(/[\\;,]/g, "\\$&").replace(/\r?\n/g, "\\n");
+const fold = (line) => line.match(/.{1,70}/gu).join("\r\n ");
+const icsTime = (date) => date.toISOString().replace(/[-:]|\.\d{3}/g, "");
+
+// A Google Calendar (and any iCalendar client) invite for a pick-up or delivery
+// slot, to one admin. The UID is stable per slot so a later update can replace
+// the event.
+export function slotInviteEmail(kind, slot, to) {
+  const from = (process.env.SMTP_FROM || "").match(/<([^>]+)>/)?.[1] ?? process.env.SMTP_FROM ?? "";
+  const title = kind === "pickup" ? `Birdhaus pick-up: ${slot.name}` : "Birdhaus local delivery";
+  const where = kind === "pickup" ? [slot.name, slot.details].filter(Boolean).join(", ") : "";
+  const when = slotTime(slot.starts_at, slot.ends_at);
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Birdhaus//Slots//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:REQUEST",
+    "BEGIN:VEVENT",
+    `UID:${kind}-slot-${slot.id}@${new URL(SITE).host}`,
+    `DTSTAMP:${icsTime(new Date())}`,
+    `DTSTART:${icsTime(slot.starts_at)}`,
+    `DTEND:${icsTime(slot.ends_at)}`,
+    "SEQUENCE:0",
+    `SUMMARY:${ics(title)}`,
+    ...(where ? [`LOCATION:${ics(where)}`] : []),
+    `DESCRIPTION:${ics(`Orders for this slot: ${SITE}/admin/${kind}`)}`,
+    `ORGANIZER;CN=Birdhaus:mailto:${from}`,
+    `ATTENDEE;CN=${to};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:${to}`,
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ];
+  const message = noteEmail(`Invitation: ${title} @ ${when}`, [
+    `A ${kind === "pickup" ? "pick-up" : "delivery"} slot was added: ${when}.`,
+    "The invite puts it on your calendar."
+  ], { label: "Open the schedule", href: `${SITE}/admin/${kind}` });
+  return { ...message, icalEvent: { method: "REQUEST", content: lines.map(fold).join("\r\n") + "\r\n" } };
 }
 
 export async function send(to, message) {

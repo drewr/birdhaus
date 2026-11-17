@@ -69,6 +69,10 @@ Shipping columns (`shipping_amount`, `quoted_zip`) come later with the USPS chan
 
 **`server/db.js`**: `recordOrder` stores `fulfillment`, `pickup_slot_id` and `pickup_label` from intent metadata, and stays idempotent on the PaymentIntent id. Orders with no `fulfillment` in metadata default to `ship`.
 
+### Calendar invites
+
+Creating a pick-up or delivery slot emails every enabled member of the admin group (`rauthy.listGroupEmails`) an iCalendar `METHOD:REQUEST` invite, which Gmail shows as a Google Calendar invite. The UID is `<kind>-slot-<id>@<host>`. Sending is best effort and not awaited: failures are logged and never block saving the slot. Deactivating a slot does not cancel the event yet.
+
 ## Views (PureScript)
 
 - `src/Server/Render.purs`:

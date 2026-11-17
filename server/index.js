@@ -20,6 +20,7 @@ import * as copy from "./copy.js";
 import * as inventory from "./inventory.js";
 import * as users from "./users.js";
 import * as mail from "./mail.js";
+import * as rauthy from "./rauthy.js";
 import { lastGeocodeFailure } from "./geocode.js";
 
 const app = express();
@@ -930,6 +931,15 @@ async function adminWrite(response, write, back = "/admin/pickup") {
   response.redirect(303, code ? `${back}?error=${code}` : back);
 }
 
+// Emails every admin a calendar invite for a new slot. Best effort and not
+// awaited: the slot is saved either way, and failures are only logged.
+function inviteAdmins(kind, slot) {
+  if (!mail.isConfigured() || !rauthy.isConfigured()) return;
+  rauthy.listGroupEmails(auth.ADMIN_GROUP)
+    .then((emails) => Promise.all(emails.map((to) => mail.send(to, mail.slotInviteEmail(kind, slot, to)).catch((error) => console.error("Slot invite failed:", error.message)))))
+    .catch((error) => console.error("Could not list admins for slot invite:", error.message));
+}
+
 // Slot form fields: a date and HH:MM times in the store's zone, end after start.
 function slotProblem(date, start, end) {
   if (!DATE.test(date) || !TIME.test(start) || !TIME.test(end)) return "slot-fields";
@@ -957,7 +967,7 @@ app.post("/admin/pickup/slots", auth.requireAdmin, (request, response) => {
   return adminWrite(response, async () => {
     const problem = Number.isInteger(locationId) ? slotProblem(date, start, end) : "slot-fields";
     if (problem) return problem;
-    await pickup.createSlot(locationId, date, start, end);
+    inviteAdmins("pickup", await pickup.createSlot(locationId, date, start, end));
   });
 });
 
@@ -1032,7 +1042,7 @@ app.post("/admin/delivery/slots", auth.requireAdmin, (request, response) => {
   return adminWrite(response, async () => {
     const problem = slotProblem(date, start, end);
     if (problem) return problem;
-    await delivery.createSlot(date, start, end);
+    inviteAdmins("delivery", await delivery.createSlot(date, start, end));
   }, "/admin/delivery");
 });
 
