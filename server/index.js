@@ -895,7 +895,7 @@ app.get("/admin/pickup", auth.requireAdmin, async (request, response) => {
       schedule: schedule.map((o) => ({ slot: o.pickup_label ?? "", email: o.email ?? "", product: productName(o.product), quantity: o.quantity, number: o.id.slice(-8).toUpperCase() }))
     };
   });
-  response.type("html").send(views.adminPickupPage({ locations: [], slots: [], schedule: [], ...vm, error: adminNotice(request) || vm.error }));
+  response.type("html").send(views.adminPickupPage({ locations: [], slots: [], schedule: [], ...vm, error: adminNotice(request) || vm.error, notice: inviteNotice(request) }));
 });
 
 // Runs an admin write, logging failures; every form redirects back regardless.
@@ -931,13 +931,50 @@ async function adminWrite(response, write, back = "/admin/pickup") {
   response.redirect(303, code ? `${back}?error=${code}` : back);
 }
 
-// Emails every admin a calendar invite for a new slot. Best effort and not
-// awaited: the slot is saved either way, and failures are only logged.
+// Emails every admin a calendar invite for each slot and counts what went out.
+// Resending is safe: an invite's UID is per slot, so calendars update the
+// existing event.
+async function sendInvites(kind, slots) {
+  const emails = await rauthy.listGroupEmails(auth.ADMIN_GROUP);
+  let sent = 0;
+  let failed = 0;
+  for (const slot of slots) {
+    await Promise.all(emails.map((to) => mail.send(to, mail.slotInviteEmail(kind, slot, to)).then(() => sent++, (error) => {
+      failed++;
+      console.error("Slot invite failed:", error.message);
+    })));
+  }
+  return { sent, failed };
+}
+
+// For a new slot: best effort and not awaited, since the slot is saved either way.
 function inviteAdmins(kind, slot) {
   if (!mail.isConfigured() || !rauthy.isConfigured()) return;
-  rauthy.listGroupEmails(auth.ADMIN_GROUP)
-    .then((emails) => Promise.all(emails.map((to) => mail.send(to, mail.slotInviteEmail(kind, slot, to)).catch((error) => console.error("Slot invite failed:", error.message)))))
-    .catch((error) => console.error("Could not list admins for slot invite:", error.message));
+  sendInvites(kind, [slot]).catch((error) => console.error("Could not list admins for slot invite:", error.message));
+}
+
+// For slots that existed before invites, or admins added since: every active
+// slot that hasn't ended.
+async function resendInvites(request, response, kind, list, back) {
+  const go = (query) => response.redirect(303, `${back}?${query}`);
+  if (!db.isConfigured()) return go("error=no-database");
+  if (!mail.isConfigured() || !rauthy.isConfigured()) return go("error=mail-off");
+  try {
+    const now = new Date();
+    const { sent, failed } = await sendInvites(kind, (await list()).filter((slot) => slot.active && slot.ends_at > now));
+    go(`sent=${sent}&failed=${failed}`);
+  } catch (error) {
+    console.error("Could not send slot invites:", error.message);
+    go("error=save-failed");
+  }
+}
+
+// "Sent 6 invites." after a resend redirects back with the counts.
+function inviteNotice(request) {
+  const sent = Number.parseInt(request.query.sent, 10);
+  const failed = Number.parseInt(request.query.failed, 10);
+  if (!Number.isInteger(sent)) return "";
+  return `Sent ${sent} ${sent === 1 ? "invite" : "invites"}.${failed > 0 ? ` ${failed} couldn't be sent; try again.` : ""}`;
 }
 
 // Slot form fields: a date and HH:MM times in the store's zone, end after start.
@@ -970,6 +1007,10 @@ app.post("/admin/pickup/slots", auth.requireAdmin, (request, response) => {
     inviteAdmins("pickup", await pickup.createSlot(locationId, date, start, end));
   });
 });
+
+app.post("/admin/pickup/slots/invite", auth.requireAdmin, (request, response) =>
+  resendInvites(request, response, "pickup", pickup.listSlots, "/admin/pickup")
+);
 
 app.post("/admin/pickup/slots/:id/active", auth.requireAdmin, (request, response) =>
   adminWrite(response, () => pickup.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"))
@@ -1008,7 +1049,7 @@ async function adminDeliveryPage(request, response, notice = "") {
     };
   });
   const empty = { enabled: false, fee: "0.00", radius: "", baseAddress: "", baseFound: "", slots: [], schedule: [] };
-  response.type("html").send(views.adminDeliveryPage({ ...empty, ...vm, error: notice || vm.error }));
+  response.type("html").send(views.adminDeliveryPage({ ...empty, ...vm, error: notice || vm.error, notice: inviteNotice(request) }));
 }
 
 app.get("/admin/delivery", auth.requireAdmin, (request, response) => adminDeliveryPage(request, response, adminNotice(request)));
@@ -1045,6 +1086,10 @@ app.post("/admin/delivery/slots", auth.requireAdmin, (request, response) => {
     inviteAdmins("delivery", await delivery.createSlot(date, start, end));
   }, "/admin/delivery");
 });
+
+app.post("/admin/delivery/slots/invite", auth.requireAdmin, (request, response) =>
+  resendInvites(request, response, "delivery", delivery.listSlots, "/admin/delivery")
+);
 
 app.post("/admin/delivery/slots/:id/active", auth.requireAdmin, (request, response) =>
   adminWrite(response, () => delivery.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"), "/admin/delivery")

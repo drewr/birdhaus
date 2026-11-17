@@ -47,6 +47,7 @@ type DeliveryVM =
       , radius :: String
       , baseAddress :: String
       , baseFound :: String
+      , notice :: String
       , slots :: Array DeliverySlot
       , schedule :: Array Delivery
       )
@@ -65,7 +66,7 @@ type Stock =
 type InventoryVM = { | Chrome ( error :: String, notice :: String, products :: Array Stock ) }
 
 type PickupVM =
-  { | Chrome ( error :: String, locations :: Array Location, slots :: Array Slot, schedule :: Array Pickup ) }
+  { | Chrome ( error :: String, notice :: String, locations :: Array Location, slots :: Array Slot, schedule :: Array Pickup ) }
 
 adminNav :: String -> Html
 adminNav current =
@@ -93,6 +94,17 @@ table headings rows =
     ]
 
 -- A one-button form flipping an active flag.
+-- Resends the calendar invites for every upcoming slot to all admins.
+inviteButton :: String -> Html
+inviteButton action =
+  el "form" [ cls "admin-inline", A "method" "post", A "action" action ]
+    [ el "button" [ cls "ui-button ui-button--outline", A "type" "submit" ] [ text "Email calendar invites for upcoming slots" ]
+    , el "p" [ cls "fine-print" ] [ text "Sends every admin an invite for each active slot that hasn't ended. Resending updates the same calendar event." ]
+    ]
+
+noticeLine :: String -> Html
+noticeLine message = whenH (message /= "") (el "p" [ cls "admin-notice ui-alert ui-alert--success", A "role" "status" ] [ text message ])
+
 toggle :: String -> Boolean -> Html
 toggle action active =
   el "form" [ cls "admin-inline", A "method" "post", A "action" action ]
@@ -210,6 +222,7 @@ adminPickupPage vm =
       [ el "h1" [ cls "page-title" ] [ text "Admin" ]
       , adminNav "/admin/pickup"
       , errorLine vm.error
+      , noticeLine vm.notice
       , el "h2" [ cls "section-title" ] [ text "Pick-up schedule" ]
       , if null vm.schedule then el "p" [ cls "description" ] [ text "No paid pick-up orders yet." ]
         else table [ "Slot", "Order", "Email", "Product", "Qty" ] (map (\p -> [ text p.slot, text p.number, text p.email, text p.product, text (show p.quantity) ]) vm.schedule)
@@ -227,6 +240,7 @@ adminPickupPage vm =
                 )
                 vm.slots
             )
+      , inviteButton "/admin/pickup/slots/invite"
       , newSlotForm (filter _.active vm.locations)
       , el "h2" [ cls "section-title" ] [ text "Locations" ]
       , if null vm.locations then el "p" [ cls "description" ] [ text "No locations yet." ]
@@ -273,6 +287,7 @@ adminDeliveryPage vm =
       [ el "h1" [ cls "page-title" ] [ text "Admin" ]
       , adminNav "/admin/delivery"
       , errorLine vm.error
+      , noticeLine vm.notice
       , el "h2" [ cls "section-title" ] [ text "Delivery schedule" ]
       , if null vm.schedule then el "p" [ cls "description" ] [ text "No paid delivery orders yet." ]
         else
@@ -291,6 +306,7 @@ adminDeliveryPage vm =
                 (\d -> [ text d.time, text (if d.past then "Past" else status d.active), toggle ("/admin/delivery/slots/" <> show d.id <> "/active") d.active ])
                 vm.slots
             )
+      , inviteButton "/admin/delivery/slots/invite"
       , newDeliverySlotForm
       ]
 
