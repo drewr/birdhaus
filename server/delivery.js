@@ -109,8 +109,10 @@ export async function createSlot(date, start, end) {
   return rows[0];
 }
 
+// Returns the slot, or undefined when there is none with that id.
 export async function setSlotActive(id, active) {
-  await query("update delivery_slots set active = $2 where id = $1", [id, active]);
+  const { rows } = await query("update delivery_slots set active = $2 where id = $1 returning id, starts_at, ends_at", [id, active]);
+  return rows[0];
 }
 
 // Paid delivery orders for slots that haven't ended long ago, by slot time.

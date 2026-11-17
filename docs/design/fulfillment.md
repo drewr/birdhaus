@@ -71,7 +71,7 @@ Shipping columns (`shipping_amount`, `quoted_zip`) come later with the USPS chan
 
 ### Calendar invites
 
-Creating a pick-up or delivery slot emails every enabled member of the admin group (`rauthy.listGroupEmails`) an iCalendar `METHOD:REQUEST` invite, which Gmail shows as a Google Calendar invite. The UID is `<kind>-slot-<id>@<host>`. Sending is best effort and not awaited: failures are logged and never block saving the slot. Deactivating a slot does not cancel the event yet.
+Creating a pick-up or delivery slot emails every enabled member of the admin group (`rauthy.listGroupEmails`) an iCalendar `METHOD:REQUEST` invite, which Gmail shows as a Google Calendar invite. The UID is `<kind>-slot-<id>@<host>`. Sending is best effort and not awaited: failures are logged and never block saving the slot. Disabling a slot sends a `METHOD:CANCEL` for the same UID and enabling it sends the invite again; `SEQUENCE` is the time in seconds so the latest message wins. Slots that have ended are skipped. The button on each slots page resends invites for every active, upcoming slot.
 
 ## Views (PureScript)
 

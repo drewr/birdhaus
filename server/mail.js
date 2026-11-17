@@ -93,7 +93,9 @@ const icsTime = (date) => date.toISOString().replace(/[-:]|\.\d{3}/g, "");
 // A Google Calendar (and any iCalendar client) invite for a pick-up or delivery
 // slot, to one admin. The UID is stable per slot so a later update can replace
 // the event.
-export function slotInviteEmail(kind, slot, to) {
+// With cancel, the same event is withdrawn. SEQUENCE is the time in seconds, so
+// a later invite or cancellation always supersedes an earlier one.
+export function slotInviteEmail(kind, slot, to, cancel = false) {
   const from = (process.env.SMTP_FROM || "").match(/<([^>]+)>/)?.[1] ?? process.env.SMTP_FROM ?? "";
   const title = kind === "pickup" ? `Birdhaus pick-up: ${slot.name}` : "Birdhaus local delivery";
   const where = kind === "pickup" ? [slot.name, slot.details].filter(Boolean).join(", ") : "";
@@ -103,13 +105,14 @@ export function slotInviteEmail(kind, slot, to) {
     "VERSION:2.0",
     "PRODID:-//Birdhaus//Slots//EN",
     "CALSCALE:GREGORIAN",
-    "METHOD:REQUEST",
+    `METHOD:${cancel ? "CANCEL" : "REQUEST"}`,
     "BEGIN:VEVENT",
     `UID:${kind}-slot-${slot.id}@${new URL(SITE).host}`,
     `DTSTAMP:${icsTime(new Date())}`,
     `DTSTART:${icsTime(slot.starts_at)}`,
     `DTEND:${icsTime(slot.ends_at)}`,
-    "SEQUENCE:0",
+    `SEQUENCE:${Math.floor(Date.now() / 1000)}`,
+    ...(cancel ? ["STATUS:CANCELLED"] : []),
     `SUMMARY:${ics(title)}`,
     ...(where ? [`LOCATION:${ics(where)}`] : []),
     `DESCRIPTION:${ics(`Orders for this slot: ${SITE}/admin/${kind}`)}`,
@@ -118,11 +121,12 @@ export function slotInviteEmail(kind, slot, to) {
     "END:VEVENT",
     "END:VCALENDAR"
   ];
-  const message = noteEmail(`Invitation: ${title} @ ${when}`, [
-    `A ${kind === "pickup" ? "pick-up" : "delivery"} slot was added: ${when}.`,
-    "The invite puts it on your calendar."
+  const noun = kind === "pickup" ? "pick-up" : "delivery";
+  const message = noteEmail(`${cancel ? "Canceled" : "Invitation"}: ${title} @ ${when}`, [
+    `A ${noun} slot was ${cancel ? "disabled" : "added"}: ${when}.`,
+    cancel ? "This removes it from your calendar." : "The invite puts it on your calendar."
   ], { label: "Open the schedule", href: `${SITE}/admin/${kind}` });
-  return { ...message, icalEvent: { method: "REQUEST", content: lines.map(fold).join("\r\n") + "\r\n" } };
+  return { ...message, icalEvent: { method: cancel ? "CANCEL" : "REQUEST", content: lines.map(fold).join("\r\n") + "\r\n" } };
 }
 
 export async function send(to, message) {

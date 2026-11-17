@@ -936,11 +936,11 @@ async function adminWrite(response, write, back = "/admin/pickup") {
 // Emails every admin a calendar invite for each slot and counts what went out.
 // Resending is safe: an invite's UID is per slot, so calendars update the
 // existing event.
-async function sendInvites(kind, slots, emails) {
+async function sendInvites(kind, slots, emails, cancel = false) {
   let sent = 0;
   let failed = 0;
   for (const slot of slots) {
-    await Promise.all(emails.map((to) => mail.send(to, mail.slotInviteEmail(kind, slot, to)).then(() => sent++, (error) => {
+    await Promise.all(emails.map((to) => mail.send(to, mail.slotInviteEmail(kind, slot, to, cancel)).then(() => sent++, (error) => {
       failed++;
       console.error("Slot invite failed:", error.message);
     })));
@@ -948,10 +948,10 @@ async function sendInvites(kind, slots, emails) {
   return { sent, failed };
 }
 
-// For a new slot: best effort and not awaited, since the slot is saved either way.
-function inviteAdmins(kind, slot) {
-  if (!mail.isConfigured() || !rauthy.isConfigured()) return;
-  rauthy.listGroupEmails(auth.ADMIN_GROUP).then((emails) => sendInvites(kind, [slot], emails)).catch((error) => console.error("Could not list admins for slot invite:", error.message));
+// For a new, disabled or re-enabled slot (disabling cancels the event): best effort and not awaited, since the slot is saved either way.
+function inviteAdmins(kind, slot, cancel = false) {
+  if (!slot || slot.ends_at < new Date() || !mail.isConfigured() || !rauthy.isConfigured()) return;
+  rauthy.listGroupEmails(auth.ADMIN_GROUP).then((emails) => sendInvites(kind, [slot], emails, cancel)).catch((error) => console.error("Could not list admins for slot invite:", error.message));
 }
 
 // For slots that existed before invites, or admins added since: every active
@@ -1018,7 +1018,10 @@ app.post("/admin/pickup/slots/invite", auth.requireAdmin, (request, response) =>
 );
 
 app.post("/admin/pickup/slots/:id/active", auth.requireAdmin, (request, response) =>
-  adminWrite(response, () => pickup.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"))
+  adminWrite(response, async () => {
+    const active = request.body?.active === "true";
+    inviteAdmins("pickup", await pickup.setSlotActive(Number.parseInt(request.params.id, 10), active), !active);
+  })
 );
 
 // Local delivery settings, slots and schedule. Saving geocodes a changed base
@@ -1097,7 +1100,10 @@ app.post("/admin/delivery/slots/invite", auth.requireAdmin, (request, response) 
 );
 
 app.post("/admin/delivery/slots/:id/active", auth.requireAdmin, (request, response) =>
-  adminWrite(response, () => delivery.setSlotActive(Number.parseInt(request.params.id, 10), request.body?.active === "true"), "/admin/delivery")
+  adminWrite(response, async () => {
+    const active = request.body?.active === "true";
+    inviteAdmins("delivery", await delivery.setSlotActive(Number.parseInt(request.params.id, 10), active), !active);
+  }, "/admin/delivery")
 );
 
 // Page copy (docs/design/site-copy.md), edited in place: the Edit button swaps

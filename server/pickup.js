@@ -78,8 +78,14 @@ export async function createSlot(locationId, date, start, end) {
   return rows[0];
 }
 
+// Returns the slot, or undefined when there is none with that id.
 export async function setSlotActive(id, active) {
-  await query("update pickup_slots set active = $2 where id = $1", [id, active]);
+  const { rows } = await query(
+    `with s as (update pickup_slots set active = $2 where id = $1 returning id, location_id, starts_at, ends_at)
+     select s.id, s.starts_at, s.ends_at, l.name, l.details from s join pickup_locations l on l.id = s.location_id`,
+    [id, active]
+  );
+  return rows[0];
 }
 
 // Paid pick-up orders for slots that haven't ended long ago, by slot time.
