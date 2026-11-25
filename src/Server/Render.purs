@@ -57,7 +57,8 @@ type LoginVM =
 type CodeVM = { | Chrome ( email :: String, signingUp :: Boolean, error :: String, notice :: String ) }
 
 -- One listing card; price and availability are formatted by the server.
--- srcset is empty when the image is an illustration rather than a photo.
+-- srcset is empty when the image is an illustration rather than a photo. summary
+-- is already-escaped text (the description with its markup dropped).
 type ProductCard =
   { href :: String, name :: String, summary :: String, image :: String, imageAlt :: String, srcset :: String, price :: String, availability :: String }
 
@@ -90,7 +91,7 @@ type ProductVM =
   { | Chrome
       ( NotifyFields
           ( name :: String
-          , summary :: String
+          , description :: Block
           , image :: String -- the photo shown, or the illustration
           , imageAlt :: String
           , srcset :: String -- empty for an illustration
@@ -322,7 +323,7 @@ productsPage vm =
                   )
               ]
           , el "span" [ cls "product-card-name" ] [ text p.name ]
-          , el "span" [ cls "product-card-summary" ] [ text p.summary ]
+          , el "span" [ cls "product-card-summary" ] [ raw p.summary ]
           , el "span" [ cls "product-card-price" ] [ text p.price ]
           , el "span" [ cls "product-card-availability" ] [ text p.availability ]
           ]
@@ -339,7 +340,7 @@ productPage vm =
           , el "div" [ cls "product-details" ]
               [ el "h1" [ cls "page-title", A "id" "product-title" ] [ text vm.name ]
               , el "p" [ cls "price" ] [ text (vm.priceEach <> " each") ]
-              , el "p" [ cls "description" ] [ text vm.summary ]
+              , block vm.description
               , if vm.open then purchase vm else unavailable vm
               ]
           ]

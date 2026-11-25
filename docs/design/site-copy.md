@@ -5,7 +5,7 @@
 Changing a sentence on the site meant a commit and a deploy. Admins now edit
 sections of page text where they appear: the front page's welcome, the
 introduction on the checkout's delivery step, and each product's features,
-specifications, guarantees ("what to expect") and questions. An earlier version
+specifications, guarantees ("what to expect") and questions, plus the description under its price. An earlier version
 edited them all on one admin page, `/admin/site`, which put product text far
 from its product and needed code for each new product's sections.
 
@@ -15,7 +15,8 @@ from its product and needed code for each new product's sections.
   view (how the page lays it out), and the built-in text. Page sections are
   listed by hand; adding one is an entry there plus a `block` in the page's
   view (`src/Server/Render.purs`). Every product in `server/products.js` gets
-  four itemized sections, keyed `<slug>-features`, `-specs`, `-guarantees` and
+  a `<slug>-description` section (plain Markdown; its built-in text is the
+  product's `summary`, which the listing card also shows, as plain text) and four itemized sections, keyed `<slug>-features`, `-specs`, `-guarantees` and
   `-faq`, with no code per product; the Bluebird House's have built-in text,
   and others start empty.
 - **Itemized sections** (`itemized: true`) are lists the page lays out item by

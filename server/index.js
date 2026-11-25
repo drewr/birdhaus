@@ -626,7 +626,7 @@ function availabilityLine(status) {
 app.get("/products", async (request, response) => {
   const account = auth.accountOf(request);
   const visible = products.filter((product) => visibleTo(product, account));
-  const [statuses, prices] = await Promise.all([Promise.all(visible.map(availability)), Promise.all(visible.map(unitPrice))]);
+  const [statuses, prices, summaries] = await Promise.all([Promise.all(visible.map(availability)), Promise.all(visible.map(unitPrice)), copy.summaries(visible)]);
   const vm = {
     ...chrome(request),
     products: visible.map((product, i) => {
@@ -634,7 +634,7 @@ app.get("/products", async (request, response) => {
       return {
         href: `/products/${product.slug}`,
         name: product.name,
-        summary: product.summary,
+        summary: summaries[i],
         image: photo ? photo.src : product.image,
         imageAlt: photo ? photo.alt : product.imageAlt,
         srcset: photo ? photo.srcset : "",
@@ -657,12 +657,13 @@ app.get("/products/:slug", async (request, response) => {
   const photos = product.photos.map((photo) => photoView(product, photo));
   const shown = photos.find((photo) => photo.name === request.query.photo) ?? photos[0];
   const [features, specs, guarantees, faq] = copy.productKeys(product);
-  const blocks = await copy.blocks([features, specs, guarantees, faq], isAdmin(request));
+  const description = copy.descriptionKey(product);
+  const blocks = await copy.blocks([description, features, specs, guarantees, faq], isAdmin(request));
   const vm = {
     ...chrome(request, status.reason),
     slug: product.slug,
     name: product.name,
-    summary: product.summary,
+    description: blocks[description],
     image: shown ? shown.src : product.image,
     imageAlt: shown ? shown.alt : product.imageAlt,
     srcset: shown ? shown.srcset : "",

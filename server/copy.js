@@ -108,9 +108,17 @@ Payments are processed by Stripe.
 };
 
 export const productKeys = (product) => PARTS.map(({ part }) => `${product.slug}-${part}`);
+export const descriptionKey = (product) => `${product.slug}-description`;
 
 const SECTIONS = [
   ...PAGE_SECTIONS,
+  // The paragraph under the product's price; the built-in text is its summary.
+  ...products.map((product) => ({
+    key: descriptionKey(product),
+    label: `${product.name} description`,
+    view: "prose",
+    fallback: product.summary
+  })),
   ...products.flatMap((product) =>
     PARTS.map(({ part, label, title }) => ({
       key: `${product.slug}-${part}`,
@@ -166,19 +174,35 @@ function block(s, body, editable) {
   };
 }
 
+// Saved text by key; empty when there is none or the database is down, so
+// callers fall back to the built-in text.
+async function saved(keys) {
+  if (!db.isConfigured()) return new Map();
+  try {
+    const result = await db.query("select key, body from site_copy where key = any($1)", [keys]);
+    return new Map(result.rows.map((row) => [row.key, row.body]));
+  } catch (error) {
+    console.error("Could not load page copy; showing the built-in text:", error.message);
+    return new Map();
+  }
+}
+
 // Sections by key for a page, from the saved text or, when there's none or the
 // database is down, the built-in text.
 export async function blocks(keys, editable) {
-  let rows = new Map();
-  if (db.isConfigured()) {
-    try {
-      const result = await db.query("select key, body from site_copy where key = any($1)", [keys]);
-      rows = new Map(result.rows.map((row) => [row.key, row.body]));
-    } catch (error) {
-      console.error("Could not load page copy; showing the built-in text:", error.message);
-    }
-  }
+  const rows = await saved(keys);
   return Object.fromEntries(keys.map((key) => [key, block(section(key), rows.get(key) ?? section(key).fallback, editable)]));
+}
+
+// Each product's description as one line of escaped text (HTML tags dropped,
+// paragraphs joined by a space), for the listing card.
+export async function summaries(list) {
+  const keys = list.map(descriptionKey);
+  const rows = await saved(keys);
+  return keys.map((key) => {
+    const html = render(rows.get(key) ?? section(key).fallback).replace(/<\/(p|li|h\d)>/g, "$& ");
+    return sanitizeHtml(html, { allowedTags: [] }).trim();
+  });
 }
 
 // A section as just saved, to swap back into the page.
