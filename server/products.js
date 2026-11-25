@@ -8,8 +8,8 @@ import { ADMIN_GROUP } from "./auth.js";
 // sell only what /admin/inventory says is available, and none while the
 // database is down; the rest are unlimited. batched products' orders are
 // recorded under the current batch (others as "unbatched"). Each product's
-// feature, spec, guarantee and FAQ sections are text admins edit on its page
-// (server/copy.js); featuresTitle heads the first. photos are listed in display
+// feature, spec, guarantee and FAQ sections, including their headings, are text
+// admins edit on its page (server/copy.js). photos are listed in display
 // order, the first being the default; their files come from
 // scripts/product-photos.hs. A product without photos shows its image.
 export const products = [
@@ -26,8 +26,7 @@ export const products = [
     ],
     visibility: "public",
     inventory: true,
-    batched: true,
-    featuresTitle: "Built for bluebirds"
+    batched: true
   },
   // For testing checkout end to end with a real card at Stripe's minimum.
   {

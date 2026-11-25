@@ -18,15 +18,19 @@ from its product and needed code for each new product's sections.
   a `<slug>-description` section (plain Markdown; its built-in text is the
   product's `summary`, which the listing card also shows, as plain text) and four itemized sections, keyed `<slug>-features`, `-specs`, `-guarantees` and
   `-faq`, with no code per product; the Bluebird House's have built-in text,
-  and others start empty.
+  and others start with just their section's heading.
 - **Itemized sections** (`itemized: true`) are lists the page lays out item by
   item, like the product page's feature grid, spec table and FAQ. Their text is
-  one Markdown document in which each item starts with a `## Title` line and
-  runs to the next; the title is plain text and the rest is rendered like any
-  section. Saving text with no `## ` line, or with text before the first, is
-  refused. Admins add, remove and reorder items by editing the text. A section
-  with no items is left off the page, except for admins, who see "Nothing here
-  yet." with its Edit button.
+  one Markdown document, opened by an optional `# Section title` line: each
+  item then starts with a `## Title` line and runs to the next. Both titles are
+  plain text and the rest is rendered like any section, so an admin edits the
+  section's heading ("Built for bluebirds", "Specifications", "Questions")
+  along with its items. Saving text with no `## ` line, or with text before the
+  first heading, is refused. Admins add, remove and reorder items by editing
+  the text. A section with no items is left off the page, except for admins,
+  who see "Nothing here yet." with its Edit button. Text saved before titles
+  were part of the text opens with the built-in heading it renders with, so
+  saving it adds the title.
 - **Storage:** `site_copy` (migration 009) holds one row per edited section:
   the source text, when it was saved and by whom. A section without a row shows
   its built-in text, and so does every section while Postgres is down, so pages

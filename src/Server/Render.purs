@@ -76,7 +76,7 @@ type Block =
   { key :: String
   , label :: String
   , view :: String -- "prose" | "features" | "specs" | "guarantees" | "faq"
-  , title :: String
+  , title :: String -- the section's "# " line, empty when it has none
   , html :: String
   , items :: Array Item
   , editable :: Boolean
@@ -524,7 +524,7 @@ copyEditor vm =
             [ el "label" [ A "for" textId ] [ text ("Edit " <> vm.label) ]
             , el "p" [ cls "fine-print", A "id" hintId ]
                 [ text
-                    ( (if vm.itemized then "Start each item with a line \"## Title\"; the text under it, up to the next, is what it says. " else "")
+                    ( (if vm.itemized then "A first line \"# Title\" sets the section's heading; start each item with a line \"## Title\"; the text under it, up to the next, is what it says. " else "")
                         <> "Write in Markdown or HTML; scripts and styles are removed. Save it empty to go back to the built-in text."
                     )
                 ]

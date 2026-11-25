@@ -31,18 +31,23 @@ It's very *easy*:
 ];
 
 // Every product has these itemized sections, keyed <slug>-<part>: a list of
-// items, each a "## Title" line followed by its text. One with no text is left
-// off the page, except for admins, who see it empty with its Edit button.
+// items, each a "## Title" line followed by its text, under an optional
+// "# Section title" line. One with no text is left off the page, except for
+// admins, who see it empty with its Edit button. A product without built-in
+// text still gets its section's default heading.
 const PARTS = [
-  { part: "features", label: "features", title: (product) => product.featuresTitle ?? "Features" },
-  { part: "specs", label: "specifications", title: () => "Specifications" },
-  { part: "guarantees", label: "what to expect", title: () => "" },
-  { part: "faq", label: "questions", title: () => "Questions" }
+  { part: "features", label: "features" },
+  { part: "specs", label: "specifications" },
+  { part: "guarantees", label: "what to expect" },
+  { part: "faq", label: "questions" }
 ];
 
-// Built-in text for product sections, by key; the rest start empty.
+// Built-in text for product sections, by key; the rest start with just their
+// default heading. The heading is the first "# " line, so admins edit it with
+// the rest of the text.
 const PRODUCT_FALLBACKS = {
-  "bluebird-house-features": `## 1½-inch entrance hole
+  "bluebird-house-features": `# Built for bluebirds
+## 1½-inch entrance hole
 Sized to the North American Bluebird Society standard: the right fit for bluebirds, too small for starlings. No perch, which predators would use.
 
 ## Ventilation
@@ -60,7 +65,8 @@ Sized to the North American Bluebird Society standard: the right fit for bluebir
 ## Built to last
 [Describe the wood and hardware — e.g. rot-resistant cedar, rust-resistant screws, no nails.]
 `,
-  "bluebird-house-specs": `## Material
+  "bluebird-house-specs": `# Specifications
+## Material
 [Wood species and grade — e.g. kiln-dried red cedar]
 
 ## Dimensions
@@ -90,7 +96,8 @@ Sized to the North American Bluebird Society standard: the right fit for bluebir
 ## Secure checkout
 Payments are processed by Stripe.
 `,
-  "bluebird-house-faq": `## How do I mount it, and how high?
+  "bluebird-house-faq": `# Questions
+## How do I mount it, and how high?
 [Your mounting guidance. Bluebird houses usually sit 5–6 feet up, in the open, away from heavy foot traffic.]
 
 ## How do I keep sparrows and predators out?
@@ -110,6 +117,15 @@ Payments are processed by Stripe.
 export const productKeys = (product) => PARTS.map(({ part }) => `${product.slug}-${part}`);
 export const descriptionKey = (product) => `${product.slug}-description`;
 
+// Headings an itemized section shows before an admin writes anything.
+const DEFAULT_TITLES = { features: "Features", specs: "Specifications", guarantees: "", faq: "Questions" };
+
+const builtIn = (product, part) => {
+  const key = `${product.slug}-${part}`;
+  if (PRODUCT_FALLBACKS[key] !== undefined) return PRODUCT_FALLBACKS[key];
+  return DEFAULT_TITLES[part] ? `# ${DEFAULT_TITLES[part]}\n` : "";
+};
+
 const SECTIONS = [
   ...PAGE_SECTIONS,
   // The paragraph under the product's price; the built-in text is its summary.
@@ -120,13 +136,12 @@ const SECTIONS = [
     fallback: product.summary
   })),
   ...products.flatMap((product) =>
-    PARTS.map(({ part, label, title }) => ({
+    PARTS.map(({ part, label }) => ({
       key: `${product.slug}-${part}`,
       label: `${product.name} ${label}`,
       view: part,
-      title: title(product),
       itemized: true,
-      fallback: PRODUCT_FALLBACKS[`${product.slug}-${part}`] ?? ""
+      fallback: builtIn(product, part)
     }))
   )
 ];
@@ -145,31 +160,47 @@ const allowed = {
 
 export const render = (body) => sanitizeHtml(markdown.render(body), allowed);
 
-// An itemized section's items as { title, body }, or null when the text isn't
-// one: no "## " heading, or text before the first.
-function items(body) {
-  const out = [];
+// An itemized section as { title, items }: its optional leading "# " line,
+// then items as { title, body } from each "## " line. Null when the text isn't
+// one: text before the first heading, or a "# " line after it.
+function parse(body) {
+  const items = [];
+  let title = "";
   for (const line of body.split("\n")) {
-    const heading = line.match(/^##\s+(.*\S)\s*$/);
-    if (heading) out.push({ title: heading[1], body: "" });
-    else if (out.length) out[out.length - 1].body += `${line}\n`;
+    const item = line.match(/^##\s+(.*\S)\s*$/);
+    if (item) {
+      items.push({ title: item[1], body: "" });
+      continue;
+    }
+    const heading = line.match(/^#\s+(.*\S)\s*$/);
+    if (heading) {
+      if (title || items.length) return null;
+      title = heading[1];
+      continue;
+    }
+    if (items.length) items[items.length - 1].body += `${line}\n`;
     else if (line.trim()) return null;
   }
-  return out.length ? out : null;
+  return { title, items };
 }
 
-// What a view needs to show a section: html for a plain one, items (titles left
-// as text for the view to escape) for an itemized one. editable shows the Edit
-// button, for admins.
+const emptyDoc = { title: "", items: [] };
+
+// What a view needs to show a section: html for a plain one, title and items
+// (titles left as text for the view to escape) for an itemized one. Text saved
+// before titles were part of the text keeps the built-in title it renders
+// with. editable shows the Edit button, for admins.
 function block(s, body, editable) {
-  const parsed = s.itemized ? (items(body) ?? items(s.fallback) ?? []) : [];
+  const doc = (s.itemized && parse(body)) || emptyDoc;
+  const fallback = (s.itemized && parse(s.fallback)) || emptyDoc;
+  const items = doc.items.length ? doc.items : fallback.items;
   return {
     key: s.key,
     label: s.label,
     view: s.view,
-    title: s.title ?? "",
+    title: s.itemized ? doc.title || fallback.title : "",
     html: s.itemized ? "" : render(body),
-    items: parsed.map((item) => ({ title: item.title, html: render(item.body) })),
+    items: items.map((item) => ({ title: item.title, html: render(item.body) })),
     editable
   };
 }
@@ -214,13 +245,22 @@ export const savedBlock = (key, body) => block(section(key), body.trim() ? body 
 export async function source(key) {
   const s = section(key);
   const { rows: [row] } = await db.query("select body, updated_at, updated_by from site_copy where key = $1", [key]);
-  return { section: s, body: row?.body ?? s.fallback, saved: row ? { at: row.updated_at, by: row.updated_by } : null };
+  return { section: s, body: titled(s, row?.body ?? s.fallback), saved: row ? { at: row.updated_at, by: row.updated_by } : null };
+}
+
+// Saved text from before section titles were in the text gets the built-in
+// title, so editing it shows the heading it renders with.
+function titled(s, body) {
+  if (!s.itemized || parse(body)?.title) return body;
+  const title = parse(s.fallback)?.title;
+  return title ? `# ${title}\n${body}` : body;
 }
 
 // Why this text can't be saved, or "".
 export function problem(s, body) {
   if (body.length > MAX_LENGTH) return `The text can be at most ${MAX_LENGTH} characters.`;
-  if (s.itemized && body.trim() && !items(body)) return "Start the text with a \"## \" line, and start each item with one.";
+  const doc = s.itemized ? parse(body) : null;
+  if (s.itemized && body.trim() && !doc?.items.length) return "Start with a \"# \" title line, then start each item with a \"## \" line.";
   return "";
 }
 
